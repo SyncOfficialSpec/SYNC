@@ -26,6 +26,16 @@ function Desktop.start()
                     Util.save("DockAlwaysShow", v and "true" or "false")
                     dock.setAlwaysShow(v)
                 end,
+                mag = dock.getMagFrac(),
+                onMag = function(f)
+                    dock.setMagnification(f)
+                    Util.save("DockMagFrac", tostring(f))
+                end,
+                dockSize = dock.getDockFrac(),
+                onDockSize = function(f)
+                    dock.setDockSize(f)
+                    Util.save("DockSizeFrac", tostring(f))
+                end,
             })
         end
     end)

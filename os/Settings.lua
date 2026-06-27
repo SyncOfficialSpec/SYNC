@@ -9,6 +9,7 @@ local Theme  = SYNC.import("core/Theme")
 local Util   = SYNC.import("core/Util")
 local Icons  = SYNC.import("core/Icons")
 local Switch = SYNC.import("ui/Switch")
+local Slider = SYNC.import("ui/Slider")
 
 local Settings = {}
 
@@ -25,7 +26,7 @@ function Settings.open(opts)
     opts = opts or {}
     if Settings._gui then return end
 
-    local cardW, cardH = 420, 168
+    local cardW, cardH = 440, 232
     local TB = 40 -- title bar height
 
     local gui = Instance.new("ScreenGui")
@@ -131,9 +132,10 @@ function Settings.open(opts)
     section.ZIndex = 3
     section.Parent = win
 
-    -- Grouped row
+    -- Grouped list (three rows with hairline separators)
+    local rowH = 46
     local group = Instance.new("Frame")
-    group.Size = UDim2.fromOffset(cardW - 32, 60)
+    group.Size = UDim2.fromOffset(cardW - 32, rowH * 3)
     group.Position = UDim2.fromOffset(16, TB + 34)
     group.BackgroundColor3 = GROUP
     group.BorderSizePixel = 0
@@ -142,60 +144,79 @@ function Settings.open(opts)
     Util.corner(group, 10)
     Util.stroke(group, WHITE, 1, 0.9)
 
-    local tile = Instance.new("Frame")
-    tile.Size = UDim2.fromOffset(30, 30)
-    tile.Position = UDim2.fromOffset(12, 15)
-    tile.BackgroundColor3 = Color3.fromRGB(40, 130, 240)
-    tile.BorderSizePixel = 0
-    tile.ZIndex = 4
-    tile.Parent = group
-    Util.corner(tile, 8)
-    local tg = Instance.new("UIGradient")
-    tg.Color = ColorSequence.new(Color3.fromRGB(70, 160, 255), Color3.fromRGB(20, 110, 230))
-    tg.Rotation = 90
-    tg.Parent = tile
-    local tglyph = Instance.new("ImageLabel")
-    tglyph.Size = UDim2.fromOffset(18, 18)
-    tglyph.AnchorPoint = Vector2.new(0.5, 0.5)
-    tglyph.Position = UDim2.fromScale(0.5, 0.5)
-    tglyph.BackgroundTransparency = 1
-    tglyph.ZIndex = 5
-    tglyph.Parent = tile
-    Icons.apply(tglyph, "monitor", WHITE)
+    local function divider(y)
+        local d = Instance.new("Frame")
+        d.Size = UDim2.new(1, -16, 0, 1)
+        d.Position = UDim2.fromOffset(16, y)
+        d.BackgroundColor3 = HAIR
+        d.BackgroundTransparency = 0.78
+        d.BorderSizePixel = 0
+        d.ZIndex = 4
+        d.Parent = group
+    end
 
-    local rowTitle = Instance.new("TextLabel")
-    rowTitle.Text = "Always show Dock"
-    rowTitle.Size = UDim2.fromOffset(240, 20)
-    rowTitle.Position = UDim2.fromOffset(54, 11)
-    rowTitle.BackgroundTransparency = 1
-    rowTitle.Font = Theme.fonts.body
-    rowTitle.TextSize = 15
-    rowTitle.TextColor3 = WHITE
-    rowTitle.TextXAlignment = Enum.TextXAlignment.Left
-    rowTitle.ZIndex = 4
-    rowTitle.Parent = group
+    local function row(y, titleText)
+        local r = Instance.new("Frame")
+        r.Size = UDim2.new(1, 0, 0, rowH)
+        r.Position = UDim2.fromOffset(0, y)
+        r.BackgroundTransparency = 1
+        r.ZIndex = 3
+        r.Parent = group
+        local t = Instance.new("TextLabel")
+        t.Text = titleText
+        t.Size = UDim2.fromOffset(180, 20)
+        t.Position = UDim2.fromOffset(16, (rowH - 20) / 2)
+        t.BackgroundTransparency = 1
+        t.Font = Theme.fonts.body
+        t.TextSize = 15
+        t.TextColor3 = WHITE
+        t.TextXAlignment = Enum.TextXAlignment.Left
+        t.ZIndex = 4
+        t.Parent = r
+        return r
+    end
 
-    local rowDesc = Instance.new("TextLabel")
-    rowDesc.Text = "Hidden until you touch the bottom edge"
-    rowDesc.Size = UDim2.fromOffset(300, 16)
-    rowDesc.Position = UDim2.fromOffset(54, 31)
-    rowDesc.BackgroundTransparency = 1
-    rowDesc.Font = Theme.fonts.caption
-    rowDesc.TextSize = 12
-    rowDesc.TextColor3 = SUB
-    rowDesc.TextXAlignment = Enum.TextXAlignment.Left
-    rowDesc.ZIndex = 4
-    rowDesc.Parent = group
-
+    -- Row 1: Always show Dock (toggle)
+    local r1 = row(0, "Always show Dock")
     local switchHolder = Instance.new("Frame")
     switchHolder.Size = UDim2.fromOffset(54, 26)
     switchHolder.AnchorPoint = Vector2.new(1, 0.5)
     switchHolder.Position = UDim2.new(1, -14, 0.5, 0)
     switchHolder.BackgroundTransparency = 1
     switchHolder.ZIndex = 4
-    switchHolder.Parent = group
+    switchHolder.Parent = r1
     Switch.create(switchHolder, opts.alwaysShow, function(v)
         if opts.onAlwaysShow then opts.onAlwaysShow(v) end
+    end)
+
+    divider(rowH)
+
+    -- Row 2: Magnification (slider)
+    local r2 = row(rowH, "Magnification")
+    local magHolder = Instance.new("Frame")
+    magHolder.Size = UDim2.fromOffset(170, rowH)
+    magHolder.AnchorPoint = Vector2.new(1, 0.5)
+    magHolder.Position = UDim2.new(1, -16, 0.5, 0)
+    magHolder.BackgroundTransparency = 1
+    magHolder.ZIndex = 4
+    magHolder.Parent = r2
+    Slider.create(magHolder, opts.mag or 0.55, function(f)
+        if opts.onMag then opts.onMag(f) end
+    end)
+
+    divider(rowH * 2)
+
+    -- Row 3: Dock Size (slider)
+    local r3 = row(rowH * 2, "Dock Size")
+    local sizeHolder = Instance.new("Frame")
+    sizeHolder.Size = UDim2.fromOffset(170, rowH)
+    sizeHolder.AnchorPoint = Vector2.new(1, 0.5)
+    sizeHolder.Position = UDim2.new(1, -16, 0.5, 0)
+    sizeHolder.BackgroundTransparency = 1
+    sizeHolder.ZIndex = 4
+    sizeHolder.Parent = r3
+    Slider.create(sizeHolder, opts.dockSize or 0.4, function(f)
+        if opts.onDockSize then opts.onDockSize(f) end
     end)
 
     return { close = close }

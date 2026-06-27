@@ -370,6 +370,110 @@ end
 return Util
 end)
 
+SYNC.define("ui/Slider", function()
+-- SYNC / ui / Slider
+-- macOS-style slider: thin track, filled portion, round draggable knob.
+-- Slider.create(parent, initial, onChange) -> { set, get }. Fills parent's width.
+
+local UserInputService = game:GetService("UserInputService")
+
+local Util = SYNC.import("core/Util")
+
+local Slider = {}
+
+local WHITE = Color3.fromRGB(255, 255, 255)
+
+local function clamp01(x) return math.clamp(x, 0, 1) end
+
+function Slider.create(parent, initial, onChange)
+    local value = clamp01(initial or 0)
+    local baseZ = (parent.ZIndex or 1) + 1
+
+    local track = Instance.new("Frame")
+    track.AnchorPoint = Vector2.new(0, 0.5)
+    track.Position = UDim2.new(0, 0, 0.5, 0)
+    track.Size = UDim2.new(1, 0, 0, 4)
+    track.BackgroundColor3 = Color3.fromRGB(86, 86, 92)
+    track.BorderSizePixel = 0
+    track.ZIndex = baseZ
+    track.Parent = parent
+    Util.corner(track, 2)
+
+    local fill = Instance.new("Frame")
+    fill.Size = UDim2.new(value, 0, 1, 0)
+    fill.BackgroundColor3 = Color3.fromRGB(225, 225, 230)
+    fill.BorderSizePixel = 0
+    fill.ZIndex = baseZ
+    fill.Parent = track
+    Util.corner(fill, 2)
+
+    local knob = Instance.new("Frame")
+    knob.Size = UDim2.fromOffset(16, 16)
+    knob.AnchorPoint = Vector2.new(0.5, 0.5)
+    knob.Position = UDim2.new(value, 0, 0.5, 0)
+    knob.BackgroundColor3 = WHITE
+    knob.BorderSizePixel = 0
+    knob.ZIndex = baseZ + 1
+    knob.Parent = track
+    Util.corner(knob, 8)
+    Util.shadow(knob, { blur = 6, transparency = 0.6, offset = UDim2.fromOffset(0, 1) })
+
+    -- Transparent hit area for press + drag
+    local hit = Instance.new("TextButton")
+    hit.Text = ""
+    hit.AutoButtonColor = false
+    hit.BackgroundTransparency = 1
+    hit.Size = UDim2.new(1, 0, 1, 0)
+    hit.Position = UDim2.fromScale(0.5, 0.5)
+    hit.AnchorPoint = Vector2.new(0.5, 0.5)
+    hit.ZIndex = baseZ + 2
+    hit.Parent = parent
+
+    local function apply()
+        fill.Size = UDim2.new(value, 0, 1, 0)
+        knob.Position = UDim2.new(value, 0, 0.5, 0)
+    end
+
+    local function setFromX(px)
+        local w = track.AbsoluteSize.X
+        if w <= 0 then return end
+        value = clamp01((px - track.AbsolutePosition.X) / w)
+        apply()
+        if onChange then onChange(value) end
+    end
+
+    local dragging = false
+    local conns = {}
+    hit.MouseButton1Down:Connect(function()
+        dragging = true
+        setFromX(UserInputService:GetMouseLocation().X)
+    end)
+    conns[#conns + 1] = UserInputService.InputChanged:Connect(function(input)
+        if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement
+            or input.UserInputType == Enum.UserInputType.Touch) then
+            setFromX(input.Position.X)
+        end
+    end)
+    conns[#conns + 1] = UserInputService.InputEnded:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1
+            or input.UserInputType == Enum.UserInputType.Touch then
+            dragging = false
+        end
+    end)
+    -- Clean up global input connections when the slider is removed
+    track.AncestryChanged:Connect(function(_, p)
+        if not p then for _, c in ipairs(conns) do c:Disconnect() end end
+    end)
+
+    return {
+        get = function() return value end,
+        set = function(v) value = clamp01(v); apply() end,
+    }
+end
+
+return Slider
+end)
+
 SYNC.define("ui/Switch", function()
 -- SYNC / ui / Switch
 -- macOS-style toggle: neutral grey track, light/white rounded-rectangle knob
@@ -571,6 +675,16 @@ function Desktop.start()
                 onAlwaysShow = function(v)
                     Util.save("DockAlwaysShow", v and "true" or "false")
                     dock.setAlwaysShow(v)
+                end,
+                mag = dock.getMagFrac(),
+                onMag = function(f)
+                    dock.setMagnification(f)
+                    Util.save("DockMagFrac", tostring(f))
+                end,
+                dockSize = dock.getDockFrac(),
+                onDockSize = function(f)
+                    dock.setDockSize(f)
+                    Util.save("DockSizeFrac", tostring(f))
                 end,
             })
         end
@@ -1178,11 +1292,30 @@ function Dock.create(parent, onAppClick)
         end)
     end
 
+    -- Adjustable dock size + magnification (persisted, live-editable via Settings)
+    local function clamp01(x) return math.clamp(x, 0, 1) end
+    local baseSize = math.floor(40 + clamp01(tonumber(Util.load("DockSizeFrac")) or 0.4) * 32 + 0.5)
+    local magScale = 1.0 + clamp01(tonumber(Util.load("DockMagFrac")) or 0.55) * 1.4
+
     local conn
     conn = RunService.RenderStepped:Connect(function(dt)
         local m = UserInputService:GetMouseLocation()
         local mouseX, mouseY = m.X, m.Y
         local alpha = 1 - math.exp(-dt * 16) -- frame-rate independent smoothing
+
+        -- Derived sizing (recomputed each frame so size/magnification update live)
+        local BASE = baseSize
+        local MAX = baseSize * magScale
+        local stripHeight = MAX + 60
+        local baselineY = stripHeight - BOTTOM_MARGIN - PADY
+        local barLocalY = stripHeight - BOTTOM_MARGIN
+        hideOffset = stripHeight
+        strip.Size = UDim2.fromOffset(vp.X, stripHeight)
+        local restingW = #icons * BASE + (#icons - 1) * GAP
+        local restLeft = cx - restingW / 2
+        for i, ic in ipairs(icons) do
+            ic.restCenter = restLeft + (i - 1) * (BASE + GAP) + BASE / 2
+        end
 
         -- Reveal/hide state. If "always show" is on, the dock is always out.
         -- Otherwise: reveal only at the very bottom edge, hide once the cursor
@@ -1271,6 +1404,10 @@ function Dock.create(parent, onAppClick)
 
     return {
         setAlwaysShow = function(v) alwaysShow = v and true or false end,
+        setDockSize = function(f) baseSize = math.floor(40 + clamp01(f) * 32 + 0.5) end,
+        setMagnification = function(f) magScale = 1.0 + clamp01(f) * 1.4 end,
+        getDockFrac = function() return (baseSize - 40) / 32 end,
+        getMagFrac = function() return (magScale - 1.0) / 1.4 end,
         destroy = function()
             if conn then conn:Disconnect() end
             strip:Destroy() -- bar + icons are children, go with it
@@ -1478,6 +1615,7 @@ local Theme  = SYNC.import("core/Theme")
 local Util   = SYNC.import("core/Util")
 local Icons  = SYNC.import("core/Icons")
 local Switch = SYNC.import("ui/Switch")
+local Slider = SYNC.import("ui/Slider")
 
 local Settings = {}
 
@@ -1494,7 +1632,7 @@ function Settings.open(opts)
     opts = opts or {}
     if Settings._gui then return end
 
-    local cardW, cardH = 420, 168
+    local cardW, cardH = 440, 232
     local TB = 40 -- title bar height
 
     local gui = Instance.new("ScreenGui")
@@ -1600,9 +1738,10 @@ function Settings.open(opts)
     section.ZIndex = 3
     section.Parent = win
 
-    -- Grouped row
+    -- Grouped list (three rows with hairline separators)
+    local rowH = 46
     local group = Instance.new("Frame")
-    group.Size = UDim2.fromOffset(cardW - 32, 60)
+    group.Size = UDim2.fromOffset(cardW - 32, rowH * 3)
     group.Position = UDim2.fromOffset(16, TB + 34)
     group.BackgroundColor3 = GROUP
     group.BorderSizePixel = 0
@@ -1611,60 +1750,79 @@ function Settings.open(opts)
     Util.corner(group, 10)
     Util.stroke(group, WHITE, 1, 0.9)
 
-    local tile = Instance.new("Frame")
-    tile.Size = UDim2.fromOffset(30, 30)
-    tile.Position = UDim2.fromOffset(12, 15)
-    tile.BackgroundColor3 = Color3.fromRGB(40, 130, 240)
-    tile.BorderSizePixel = 0
-    tile.ZIndex = 4
-    tile.Parent = group
-    Util.corner(tile, 8)
-    local tg = Instance.new("UIGradient")
-    tg.Color = ColorSequence.new(Color3.fromRGB(70, 160, 255), Color3.fromRGB(20, 110, 230))
-    tg.Rotation = 90
-    tg.Parent = tile
-    local tglyph = Instance.new("ImageLabel")
-    tglyph.Size = UDim2.fromOffset(18, 18)
-    tglyph.AnchorPoint = Vector2.new(0.5, 0.5)
-    tglyph.Position = UDim2.fromScale(0.5, 0.5)
-    tglyph.BackgroundTransparency = 1
-    tglyph.ZIndex = 5
-    tglyph.Parent = tile
-    Icons.apply(tglyph, "monitor", WHITE)
+    local function divider(y)
+        local d = Instance.new("Frame")
+        d.Size = UDim2.new(1, -16, 0, 1)
+        d.Position = UDim2.fromOffset(16, y)
+        d.BackgroundColor3 = HAIR
+        d.BackgroundTransparency = 0.78
+        d.BorderSizePixel = 0
+        d.ZIndex = 4
+        d.Parent = group
+    end
 
-    local rowTitle = Instance.new("TextLabel")
-    rowTitle.Text = "Always show Dock"
-    rowTitle.Size = UDim2.fromOffset(240, 20)
-    rowTitle.Position = UDim2.fromOffset(54, 11)
-    rowTitle.BackgroundTransparency = 1
-    rowTitle.Font = Theme.fonts.body
-    rowTitle.TextSize = 15
-    rowTitle.TextColor3 = WHITE
-    rowTitle.TextXAlignment = Enum.TextXAlignment.Left
-    rowTitle.ZIndex = 4
-    rowTitle.Parent = group
+    local function row(y, titleText)
+        local r = Instance.new("Frame")
+        r.Size = UDim2.new(1, 0, 0, rowH)
+        r.Position = UDim2.fromOffset(0, y)
+        r.BackgroundTransparency = 1
+        r.ZIndex = 3
+        r.Parent = group
+        local t = Instance.new("TextLabel")
+        t.Text = titleText
+        t.Size = UDim2.fromOffset(180, 20)
+        t.Position = UDim2.fromOffset(16, (rowH - 20) / 2)
+        t.BackgroundTransparency = 1
+        t.Font = Theme.fonts.body
+        t.TextSize = 15
+        t.TextColor3 = WHITE
+        t.TextXAlignment = Enum.TextXAlignment.Left
+        t.ZIndex = 4
+        t.Parent = r
+        return r
+    end
 
-    local rowDesc = Instance.new("TextLabel")
-    rowDesc.Text = "Hidden until you touch the bottom edge"
-    rowDesc.Size = UDim2.fromOffset(300, 16)
-    rowDesc.Position = UDim2.fromOffset(54, 31)
-    rowDesc.BackgroundTransparency = 1
-    rowDesc.Font = Theme.fonts.caption
-    rowDesc.TextSize = 12
-    rowDesc.TextColor3 = SUB
-    rowDesc.TextXAlignment = Enum.TextXAlignment.Left
-    rowDesc.ZIndex = 4
-    rowDesc.Parent = group
-
+    -- Row 1: Always show Dock (toggle)
+    local r1 = row(0, "Always show Dock")
     local switchHolder = Instance.new("Frame")
     switchHolder.Size = UDim2.fromOffset(54, 26)
     switchHolder.AnchorPoint = Vector2.new(1, 0.5)
     switchHolder.Position = UDim2.new(1, -14, 0.5, 0)
     switchHolder.BackgroundTransparency = 1
     switchHolder.ZIndex = 4
-    switchHolder.Parent = group
+    switchHolder.Parent = r1
     Switch.create(switchHolder, opts.alwaysShow, function(v)
         if opts.onAlwaysShow then opts.onAlwaysShow(v) end
+    end)
+
+    divider(rowH)
+
+    -- Row 2: Magnification (slider)
+    local r2 = row(rowH, "Magnification")
+    local magHolder = Instance.new("Frame")
+    magHolder.Size = UDim2.fromOffset(170, rowH)
+    magHolder.AnchorPoint = Vector2.new(1, 0.5)
+    magHolder.Position = UDim2.new(1, -16, 0.5, 0)
+    magHolder.BackgroundTransparency = 1
+    magHolder.ZIndex = 4
+    magHolder.Parent = r2
+    Slider.create(magHolder, opts.mag or 0.55, function(f)
+        if opts.onMag then opts.onMag(f) end
+    end)
+
+    divider(rowH * 2)
+
+    -- Row 3: Dock Size (slider)
+    local r3 = row(rowH * 2, "Dock Size")
+    local sizeHolder = Instance.new("Frame")
+    sizeHolder.Size = UDim2.fromOffset(170, rowH)
+    sizeHolder.AnchorPoint = Vector2.new(1, 0.5)
+    sizeHolder.Position = UDim2.new(1, -16, 0.5, 0)
+    sizeHolder.BackgroundTransparency = 1
+    sizeHolder.ZIndex = 4
+    sizeHolder.Parent = r3
+    Slider.create(sizeHolder, opts.dockSize or 0.4, function(f)
+        if opts.onDockSize then opts.onDockSize(f) end
     end)
 
     return { close = close }

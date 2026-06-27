@@ -179,11 +179,30 @@ function Dock.create(parent, onAppClick)
         end)
     end
 
+    -- Adjustable dock size + magnification (persisted, live-editable via Settings)
+    local function clamp01(x) return math.clamp(x, 0, 1) end
+    local baseSize = math.floor(40 + clamp01(tonumber(Util.load("DockSizeFrac")) or 0.4) * 32 + 0.5)
+    local magScale = 1.0 + clamp01(tonumber(Util.load("DockMagFrac")) or 0.55) * 1.4
+
     local conn
     conn = RunService.RenderStepped:Connect(function(dt)
         local m = UserInputService:GetMouseLocation()
         local mouseX, mouseY = m.X, m.Y
         local alpha = 1 - math.exp(-dt * 16) -- frame-rate independent smoothing
+
+        -- Derived sizing (recomputed each frame so size/magnification update live)
+        local BASE = baseSize
+        local MAX = baseSize * magScale
+        local stripHeight = MAX + 60
+        local baselineY = stripHeight - BOTTOM_MARGIN - PADY
+        local barLocalY = stripHeight - BOTTOM_MARGIN
+        hideOffset = stripHeight
+        strip.Size = UDim2.fromOffset(vp.X, stripHeight)
+        local restingW = #icons * BASE + (#icons - 1) * GAP
+        local restLeft = cx - restingW / 2
+        for i, ic in ipairs(icons) do
+            ic.restCenter = restLeft + (i - 1) * (BASE + GAP) + BASE / 2
+        end
 
         -- Reveal/hide state. If "always show" is on, the dock is always out.
         -- Otherwise: reveal only at the very bottom edge, hide once the cursor
@@ -272,6 +291,10 @@ function Dock.create(parent, onAppClick)
 
     return {
         setAlwaysShow = function(v) alwaysShow = v and true or false end,
+        setDockSize = function(f) baseSize = math.floor(40 + clamp01(f) * 32 + 0.5) end,
+        setMagnification = function(f) magScale = 1.0 + clamp01(f) * 1.4 end,
+        getDockFrac = function() return (baseSize - 40) / 32 end,
+        getMagFrac = function() return (magScale - 1.0) / 1.4 end,
         destroy = function()
             if conn then conn:Disconnect() end
             strip:Destroy() -- bar + icons are children, go with it
