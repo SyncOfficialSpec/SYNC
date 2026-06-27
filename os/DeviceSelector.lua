@@ -158,42 +158,27 @@ function DeviceSelector.run(onChoose)
     -- Card: center-anchored so it expands open from height 0 (Rayfield-style).
     -- Plain Frame so the native UIShadow renders fully; content in an inner
     -- CanvasGroup that clips + fades as one unit.
-    local centerX, centerY = vp.X / 2, vp.Y / 2
     local card = Instance.new("Frame")
-    card.AnchorPoint = Vector2.new(0.5, 0.5)
-    card.Size = UDim2.fromOffset(cardW, 0) -- starts collapsed
-    card.Position = UDim2.fromOffset(centerX, centerY)
+    card.Size = UDim2.fromOffset(cardW, cardH)
+    card.Position = UDim2.fromOffset(cardX, cardY)
     card.BackgroundColor3 = S.cardColor
-    card.BackgroundTransparency = 1
+    card.BackgroundTransparency = S.cardTransp
     card.BorderSizePixel = 0
-    card.ClipsDescendants = true
     card.ZIndex = 2
     card.Parent = gui
     Util.corner(card, 26)
-    local cardStroke = Util.stroke(card, S.cardStroke, 1, 1)
+    local cardStroke = Util.stroke(card, S.cardStroke, 1, S.cardStrokeTransp)
 
     -- Native shadow, follows the rounded corners, soft and minimal
-    local shadow = Util.shadow(card, { blur = 40, spread = -2, transparency = 1, offset = UDim2.fromOffset(0, 12) })
+    local shadow = Util.shadow(card, { blur = 40, spread = -2, transparency = 0.5, offset = UDim2.fromOffset(0, 12) })
 
     local content = Instance.new("CanvasGroup")
-    content.Size = UDim2.fromOffset(cardW, cardH) -- fixed, so it doesn't squish as card expands
-    content.Position = UDim2.fromScale(0.5, 0.5)
-    content.AnchorPoint = Vector2.new(0.5, 0.5)
+    content.Size = UDim2.fromScale(1, 1)
     content.BackgroundTransparency = 1
     content.BorderSizePixel = 0
-    content.GroupTransparency = 1
+    content.GroupTransparency = 0
     content.ZIndex = 2
     content.Parent = card
-
-    -- Rayfield-style entrance: expand height 0 -> full with Exponential easing,
-    -- fading the content/card in slightly behind it.
-    local EXP = { 0.5, Enum.EasingStyle.Exponential, Enum.EasingDirection.Out }
-    local FADE = { 0.4, Enum.EasingStyle.Exponential, Enum.EasingDirection.Out }
-    Util.tween(card, { Size = UDim2.fromOffset(cardW, cardH) }, EXP[1], EXP[2], EXP[3])
-    Util.tween(card, { BackgroundTransparency = S.cardTransp }, FADE[1], FADE[2], FADE[3])
-    Util.tween(cardStroke, { Transparency = S.cardStrokeTransp }, FADE[1], FADE[2], FADE[3])
-    Util.tween(content, { GroupTransparency = 0 }, FADE[1], FADE[2], FADE[3])
-    if shadow then Util.tween(shadow, { Transparency = 0.5 }, FADE[1], FADE[2], FADE[3]) end
 
     -- Close (thin Lucide X)
     local closeBtn = Instance.new("ImageButton")
@@ -314,17 +299,9 @@ function DeviceSelector.run(onChoose)
         closing = true
         -- macOS-style exit: reverse of the entrance. Slides down, scales, fades out
         -- as one unit (content CanvasGroup + card bg/stroke/shadow).
-        -- Rayfield-style exit: collapse height to 0 (Exponential), fade out first.
-        local EXP = { 0.45, Enum.EasingStyle.Exponential, Enum.EasingDirection.InOut }
-        local OF = { 0.25, Enum.EasingStyle.Exponential, Enum.EasingDirection.Out }
-        Util.tween(content, { GroupTransparency = 1 }, OF[1], OF[2], OF[3])
-        Util.tween(card, { Size = UDim2.fromOffset(cardW, 0), BackgroundTransparency = 1 }, EXP[1], EXP[2], EXP[3])
-        Util.tween(cardStroke, { Transparency = 1 }, OF[1], OF[2], OF[3])
-        if shadow then Util.tween(shadow, { Transparency = 1 }, OF[1], OF[2], OF[3]) end
-        task.delay(EXP[1] + 0.05, function()
-            gui:Destroy()
-            if onChoose then onChoose(chosen) end
-        end)
+        -- No animation: just close.
+        gui:Destroy()
+        if onChoose then onChoose(chosen) end
     end
 
     for i, device in ipairs(DEVICES) do
