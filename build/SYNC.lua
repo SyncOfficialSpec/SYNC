@@ -1047,9 +1047,12 @@ function Dock.create(parent)
         ic.restCenter = restLeft + (i - 1) * (BASE + GAP) + BASE / 2
     end
 
-    local magnify = false
-    strip.MouseEnter:Connect(function() magnify = true end)
-    strip.MouseLeave:Connect(function() magnify = false end)
+    -- Auto-hide: the dock stays hidden off the bottom edge and only reveals when
+    -- the cursor presses against the very bottom of the screen (like macOS).
+    local REVEAL_PX = 4                       -- must touch within this of the bottom
+    local hideOffset = stripH                 -- how far down to tuck it away
+    local shown = false
+    local curOff = hideOffset                 -- current slide offset (starts hidden)
 
     -- Hover labels + click bounce
     for _, ic in ipairs(icons) do
@@ -1064,21 +1067,26 @@ function Dock.create(parent)
         ic.holder.MouseButton1Click:Connect(function() ic.bounceStart = tick() end)
     end
 
-    -- Slide-up intro (offset added to everything, eased to 0)
-    local intro = Instance.new("NumberValue")
-    intro.Value = MAX + 80
-    intro.Parent = bar
-    Util.tween(intro, { Value = 0 }, 0.6, Enum.EasingStyle.Quint, Enum.EasingDirection.Out)
-
     local conn
     conn = RunService.RenderStepped:Connect(function(dt)
-        local mouseX = UserInputService:GetMouseLocation().X
+        local m = UserInputService:GetMouseLocation()
+        local mouseX, mouseY = m.X, m.Y
         local alpha = 1 - math.exp(-dt * 16) -- frame-rate independent smoothing
 
-        -- Target sizes from cursor proximity
+        -- Reveal/hide state (hysteresis: reveal only at the very bottom edge,
+        -- hide once the cursor moves well above the dock).
+        if not shown then
+            if mouseY >= vp.Y - REVEAL_PX then shown = true end
+        else
+            if mouseY < vp.Y - (MAX + 40) then shown = false end
+        end
+        local targetOff = shown and 0 or hideOffset
+        curOff = curOff + (targetOff - curOff) * (1 - math.exp(-dt * 12))
+
+        -- Target sizes from cursor proximity (only while shown)
         for _, ic in ipairs(icons) do
             local target = BASE
-            if magnify then
+            if shown then
                 local d = math.abs(mouseX - ic.restCenter)
                 if d < INFLUENCE then
                     local f = math.cos((d / INFLUENCE) * (math.pi / 2)) -- 1 at cursor -> 0 at edge
@@ -1092,7 +1100,7 @@ function Dock.create(parent)
         local W = GAP * (#icons - 1)
         for _, ic in ipairs(icons) do W += ic.size end
         local accX = cx - W / 2
-        local off = intro.Value
+        local off = curOff
         for _, ic in ipairs(icons) do
             local center = accX + ic.size / 2
             local bounce = 0
