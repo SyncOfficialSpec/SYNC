@@ -156,14 +156,14 @@ function DeviceSelector.run(onChoose)
     -- whole panel can still fade uniformly on close.
     local card = Instance.new("Frame")
     card.Size = UDim2.fromOffset(cardW, cardH)
-    card.Position = UDim2.fromOffset(cardX, cardY)
+    card.Position = UDim2.fromOffset(cardX, cardY + 60) -- starts lower, slides up
     card.BackgroundColor3 = S.cardColor
-    card.BackgroundTransparency = S.cardTransp
+    card.BackgroundTransparency = 1
     card.BorderSizePixel = 0
     card.ZIndex = 2
     card.Parent = gui
     Util.corner(card, 26)
-    local cardStroke = Util.stroke(card, S.cardStroke, 1, S.cardStrokeTransp)
+    local cardStroke = Util.stroke(card, S.cardStroke, 1, 1)
 
     -- Native shadow, follows the rounded corners, soft and minimal
     local shadow = Util.shadow(card, { blur = 40, spread = -2, transparency = 1, offset = UDim2.fromOffset(0, 12) })
@@ -172,15 +172,21 @@ function DeviceSelector.run(onChoose)
     content.Size = UDim2.fromScale(1, 1)
     content.BackgroundTransparency = 1
     content.BorderSizePixel = 0
-    content.GroupTransparency = 0
+    content.GroupTransparency = 1
     content.ZIndex = 2
     content.Parent = card
 
     local cardScale = Instance.new("UIScale")
-    cardScale.Scale = 0.92
+    cardScale.Scale = 0.9
     cardScale.Parent = card
-    tw(cardScale, { Scale = 1 }, SPRING)
-    if shadow then Util.tween(shadow, { Transparency = 0.5 }, 0.5) end
+
+    -- macOS-style entrance: slide up from below, scale up, fade in (smooth Quint)
+    local IN = { 0.42, Enum.EasingStyle.Quint, Enum.EasingDirection.Out }
+    Util.tween(card, { Position = UDim2.fromOffset(cardX, cardY), BackgroundTransparency = S.cardTransp }, IN[1], IN[2], IN[3])
+    Util.tween(cardStroke, { Transparency = S.cardStrokeTransp }, IN[1], IN[2], IN[3])
+    Util.tween(content, { GroupTransparency = 0 }, IN[1], IN[2], IN[3])
+    Util.tween(cardScale, { Scale = 1 }, IN[1], IN[2], IN[3])
+    if shadow then Util.tween(shadow, { Transparency = 0.5 }, IN[1], IN[2], IN[3]) end
 
     -- Close (thin Lucide X)
     local closeBtn = Instance.new("ImageButton")
@@ -299,19 +305,15 @@ function DeviceSelector.run(onChoose)
     local function closeMenu(chosen)
         if closing then return end
         closing = true
-        -- Explicitly clear row outlines/checks so nothing lingers behind the fade
-        for _, opt in ipairs(options) do
-            tw(opt.stroke, { Transparency = 1 }, QUICK)
-            opt.check.hide()
-        end
-        -- Content (CanvasGroup) fades as one unit; card bg/stroke/shadow fade with
-        -- it and the whole thing shrinks slightly. Fast and clean, nothing lingers.
-        Util.tween(content, { GroupTransparency = 1 }, 0.2, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
-        Util.tween(card, { BackgroundTransparency = 1 }, 0.2)
-        Util.tween(cardStroke, { Transparency = 1 }, 0.2)
-        Util.tween(cardScale, { Scale = 0.95 }, 0.22, Enum.EasingStyle.Quad, Enum.EasingDirection.In)
-        if shadow then Util.tween(shadow, { Transparency = 1 }, 0.2) end
-        task.delay(0.26, function()
+        -- macOS-style exit: reverse of the entrance. Slides down, scales, fades out
+        -- as one unit (content CanvasGroup + card bg/stroke/shadow).
+        local OUT = { 0.3, Enum.EasingStyle.Quint, Enum.EasingDirection.In }
+        Util.tween(card, { Position = UDim2.fromOffset(cardX, cardY + 60), BackgroundTransparency = 1 }, OUT[1], OUT[2], OUT[3])
+        Util.tween(cardStroke, { Transparency = 1 }, OUT[1], OUT[2], OUT[3])
+        Util.tween(content, { GroupTransparency = 1 }, OUT[1], OUT[2], OUT[3])
+        Util.tween(cardScale, { Scale = 0.9 }, OUT[1], OUT[2], OUT[3])
+        if shadow then Util.tween(shadow, { Transparency = 1 }, OUT[1], OUT[2], OUT[3]) end
+        task.delay(OUT[1] + 0.05, function()
             gui:Destroy()
             if onChoose then onChoose(chosen) end
         end)
