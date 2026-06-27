@@ -5,14 +5,17 @@
 local Util     = SYNC.import("core/Util")
 local Dock     = SYNC.import("os/Dock")
 local Settings = SYNC.import("os/Settings")
+local MenuBar  = SYNC.import("os/MenuBar")
 
 local Desktop = {}
 
 function Desktop.start()
-    -- No wallpaper: the dock floats over the actual game screen.
+    -- No wallpaper: the menu bar + dock float over the actual game screen.
     local gui = Instance.new("ScreenGui")
     gui.Name = "SYNC_Desktop"
     Util.mount(gui)
+
+    local menubar = MenuBar.create(gui)
 
     local dock
     dock = Dock.create(gui, function(appName)
@@ -31,6 +34,7 @@ function Desktop.start()
         gui = gui,
         destroy = function()
             if dock then dock.destroy() end
+            if menubar then menubar.destroy() end
             gui:Destroy()
         end,
     }

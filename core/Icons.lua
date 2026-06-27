@@ -1,9 +1,7 @@
 -- SYNC / core / Icons
 -- Lucide icon set (https://lucide.dev) via the lucide-roblox spritesheet,
--- the same source Rayfield uses. Icons.get(name) returns props ready to apply
--- to an ImageLabel/ImageButton: { Image, ImageRectSize, ImageRectOffset }.
--- Icons.apply(imageInstance, name, color) sets them in one call.
--- Curated subset; add more names from lucide-roblox as needed.
+-- the same source Rayfield uses. Icons.get(name) -> { Image, ImageRectSize, ImageRectOffset }.
+-- Icons.apply(image, name, color) sets them in one call. Curated subset.
 
 local Icons = {}
 
@@ -59,6 +57,10 @@ local DATA = {
     ["headphones"] = { 16898613509, 306, 869 },
     ["book-open"] = { 16898612819, 820, 355 },
     ["github"] = { 16898613509, 0, 820 },
+    ["sliders-horizontal"] = { 16898613777, 820, 355 },
+    ["battery-full"] = { 16898612629, 967, 808 },
+    ["battery-medium"] = { 16898612629, 869, 906 },
+    ["panel-top"] = { 16898613613, 869, 857 },
 }
 
 local RECT = Vector2.new(48, 48)
