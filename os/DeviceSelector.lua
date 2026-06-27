@@ -138,6 +138,7 @@ function DeviceSelector.run(onChoose)
     local btnH = 46
     local cardH = btnY + btnH + 22
     local cardX, cardY = (vp.X - cardW) / 2, (vp.Y - cardH) / 2
+    local fromY = vp.Y + 20 -- starts just below the screen, glides up to center
 
     local gui = Instance.new("ScreenGui")
     gui.Name = "SYNC_DeviceSelector"
@@ -156,7 +157,7 @@ function DeviceSelector.run(onChoose)
     -- whole panel can still fade uniformly on close.
     local card = Instance.new("Frame")
     card.Size = UDim2.fromOffset(cardW, cardH)
-    card.Position = UDim2.fromOffset(cardX, cardY + 60) -- starts lower, slides up
+    card.Position = UDim2.fromOffset(cardX, fromY) -- starts below screen, slides up
     card.BackgroundColor3 = S.cardColor
     card.BackgroundTransparency = 1
     card.BorderSizePixel = 0
@@ -181,7 +182,7 @@ function DeviceSelector.run(onChoose)
     cardScale.Parent = card
 
     -- macOS-style entrance: slide up from below, scale up, fade in (smooth Quint)
-    local IN = { 0.42, Enum.EasingStyle.Quint, Enum.EasingDirection.Out }
+    local IN = { 0.55, Enum.EasingStyle.Quint, Enum.EasingDirection.Out }
     Util.tween(card, { Position = UDim2.fromOffset(cardX, cardY), BackgroundTransparency = S.cardTransp }, IN[1], IN[2], IN[3])
     Util.tween(cardStroke, { Transparency = S.cardStrokeTransp }, IN[1], IN[2], IN[3])
     Util.tween(content, { GroupTransparency = 0 }, IN[1], IN[2], IN[3])
@@ -307,8 +308,8 @@ function DeviceSelector.run(onChoose)
         closing = true
         -- macOS-style exit: reverse of the entrance. Slides down, scales, fades out
         -- as one unit (content CanvasGroup + card bg/stroke/shadow).
-        local OUT = { 0.3, Enum.EasingStyle.Quint, Enum.EasingDirection.In }
-        Util.tween(card, { Position = UDim2.fromOffset(cardX, cardY + 60), BackgroundTransparency = 1 }, OUT[1], OUT[2], OUT[3])
+        local OUT = { 0.45, Enum.EasingStyle.Quint, Enum.EasingDirection.In }
+        Util.tween(card, { Position = UDim2.fromOffset(cardX, fromY), BackgroundTransparency = 1 }, OUT[1], OUT[2], OUT[3])
         Util.tween(cardStroke, { Transparency = 1 }, OUT[1], OUT[2], OUT[3])
         Util.tween(content, { GroupTransparency = 1 }, OUT[1], OUT[2], OUT[3])
         Util.tween(cardScale, { Scale = 0.9 }, OUT[1], OUT[2], OUT[3])
