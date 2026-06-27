@@ -6,12 +6,15 @@ local Util = SYNC.import("core/Util")
 
 local Switch = {}
 
-local W, H   = 50, 30
-local KNOB   = 26
-local INSET  = 2
-local GREEN  = Color3.fromRGB(52, 199, 89)   -- systemGreen
-local OFF    = Color3.fromRGB(74, 74, 80)     -- dark off-track
-local WHITE  = Color3.fromRGB(255, 255, 255)
+local W, H    = 50, 30
+local KNOB    = 26
+local INSET   = 2
+local KRADIUS = 9                              -- squircle knob (not a full circle)
+local GREEN   = Color3.fromRGB(52, 199, 89)    -- systemGreen (on)
+local OFF     = Color3.fromRGB(58, 58, 62)     -- recessed dark off-track
+local KNOB_ON  = Color3.fromRGB(255, 255, 255) -- white knob when on
+local KNOB_OFF = Color3.fromRGB(222, 222, 226) -- light-gray knob when off
+local WHITE   = Color3.fromRGB(255, 255, 255)
 
 local function knobX(on) return on and (W - KNOB - INSET) or INSET end
 
@@ -31,14 +34,14 @@ function Switch.create(parent, initial, onChange)
     knob.Size = UDim2.fromOffset(KNOB, KNOB)
     knob.AnchorPoint = Vector2.new(0, 0.5)
     knob.Position = UDim2.new(0, knobX(value), 0.5, 0)
-    knob.BackgroundColor3 = WHITE
+    knob.BackgroundColor3 = value and KNOB_ON or KNOB_OFF
     knob.BorderSizePixel = 0
     knob.Parent = track
-    Util.corner(knob, KNOB / 2)
+    Util.corner(knob, KRADIUS)
     Util.shadow(knob, { blur = 6, transparency = 0.65, offset = UDim2.fromOffset(0, 1) })
 
     local function render(animate)
-        local kp = { Position = UDim2.new(0, knobX(value), 0.5, 0) }
+        local kp = { Position = UDim2.new(0, knobX(value), 0.5, 0), BackgroundColor3 = value and KNOB_ON or KNOB_OFF }
         local tp = { BackgroundColor3 = value and GREEN or OFF }
         if animate then
             Util.tween(knob, kp, 0.2, Enum.EasingStyle.Back, Enum.EasingDirection.Out)
