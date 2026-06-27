@@ -4,9 +4,9 @@
 
 local Util = SYNC.import("core/Util")
 
-local W, H     = 56, 32
-local KW, KH   = 30, 26       -- big rounded-rectangle knob, fills most of the track
-local KRADIUS  = 11           -- generous corner (rounded rect, not a circle)
+local W, H     = 54, 26       -- slim, elongated track
+local KW, KH   = 26, 20       -- rounded-rectangle knob
+local KRADIUS  = 8            -- rounded corner (not a circle)
 local INSET_X  = 3
 local TRACK_OFF = Color3.fromRGB(78, 78, 84)    -- grey off-track
 local TRACK_ON  = Color3.fromRGB(128, 128, 134) -- lighter grey when on

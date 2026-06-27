@@ -377,9 +377,9 @@ SYNC.define("ui/Switch", function()
 
 local Util = SYNC.import("core/Util")
 
-local W, H     = 56, 32
-local KW, KH   = 30, 26       -- big rounded-rectangle knob, fills most of the track
-local KRADIUS  = 11           -- generous corner (rounded rect, not a circle)
+local W, H     = 54, 26       -- slim, elongated track
+local KW, KH   = 26, 20       -- rounded-rectangle knob
+local KRADIUS  = 8            -- rounded corner (not a circle)
 local INSET_X  = 3
 local TRACK_OFF = Color3.fromRGB(78, 78, 84)    -- grey off-track
 local TRACK_ON  = Color3.fromRGB(128, 128, 134) -- lighter grey when on
@@ -1029,9 +1029,9 @@ local BOUNCE_DUR    = 0.5
 -- App roster: name, Lucide glyph, squircle gradient. A few real-ish macOS apps
 -- plus some "Test" tiles, as requested.
 local APPS = {
-    { name = "Finder",    icon = "folder",         top = Color3.fromRGB(70, 170, 255),  bot = Color3.fromRGB(20, 110, 230), running = true },
-    { name = "Safari",    icon = "compass",        top = Color3.fromRGB(90, 200, 255),  bot = Color3.fromRGB(20, 120, 235), running = true },
-    { name = "Messages",  icon = "message-circle", top = Color3.fromRGB(90, 220, 110),  bot = Color3.fromRGB(40, 180, 70), running = true },
+    { name = "Finder",    icon = "folder",         top = Color3.fromRGB(70, 170, 255),  bot = Color3.fromRGB(20, 110, 230) },
+    { name = "Safari",    icon = "compass",        top = Color3.fromRGB(90, 200, 255),  bot = Color3.fromRGB(20, 120, 235) },
+    { name = "Messages",  icon = "message-circle", top = Color3.fromRGB(90, 220, 110),  bot = Color3.fromRGB(40, 180, 70) },
     { name = "Mail",      icon = "mail",           top = Color3.fromRGB(80, 180, 255),  bot = Color3.fromRGB(30, 120, 240) },
     { name = "Maps",      icon = "map",            top = Color3.fromRGB(120, 215, 130), bot = Color3.fromRGB(70, 175, 90) },
     { name = "Photos",    icon = "image",          top = Color3.fromRGB(255, 120, 160), bot = Color3.fromRGB(255, 175, 70) },
@@ -1657,7 +1657,7 @@ function Settings.open(opts)
     rowDesc.Parent = group
 
     local switchHolder = Instance.new("Frame")
-    switchHolder.Size = UDim2.fromOffset(56, 32)
+    switchHolder.Size = UDim2.fromOffset(54, 26)
     switchHolder.AnchorPoint = Vector2.new(1, 0.5)
     switchHolder.Position = UDim2.new(1, -14, 0.5, 0)
     switchHolder.BackgroundTransparency = 1

@@ -188,7 +188,7 @@ function Settings.open(opts)
     rowDesc.Parent = group
 
     local switchHolder = Instance.new("Frame")
-    switchHolder.Size = UDim2.fromOffset(56, 32)
+    switchHolder.Size = UDim2.fromOffset(54, 26)
     switchHolder.AnchorPoint = Vector2.new(1, 0.5)
     switchHolder.Position = UDim2.new(1, -14, 0.5, 0)
     switchHolder.BackgroundTransparency = 1
