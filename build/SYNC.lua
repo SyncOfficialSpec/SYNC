@@ -231,19 +231,20 @@ function Util.padding(parent, all)
     return p
 end
 
--- Subtle Rayfield-style drop shadow for minimal Apple-like depth. Created as a
--- SIBLING behind `target` (children always render above their parent, so a child
--- can't sit behind it). Call AFTER target.Position/Size are set. Returns the ImageLabel.
+-- Subtle, soft drop shadow for minimal Apple-like depth. Uses a feathered asset
+-- with a TRANSPARENT center (so it never paints a solid block behind the card).
+-- Created as a SIBLING behind `target` (children always render above their parent).
+-- Call AFTER target.Position/Size are set. Returns the ImageLabel.
 function Util.shadow(target, spread, transparency)
-    spread = spread or 18
+    spread = spread or 26
     local sh = Instance.new("ImageLabel")
     sh.Name = "Shadow"
     sh.BackgroundTransparency = 1
-    sh.Image = "rbxassetid://5028857084"            -- Rayfield soft shadow
+    sh.Image = "rbxassetid://6014261993"            -- soft feathered shadow, clear center
     sh.ImageColor3 = Color3.fromRGB(0, 0, 0)
-    sh.ImageTransparency = transparency or 0.6
+    sh.ImageTransparency = transparency or 0.65
     sh.ScaleType = Enum.ScaleType.Slice
-    sh.SliceCenter = Rect.new(24, 24, 276, 276)
+    sh.SliceCenter = Rect.new(49, 49, 450, 450)
     sh.AnchorPoint = target.AnchorPoint
     sh.Size = UDim2.new(
         target.Size.X.Scale, target.Size.X.Offset + spread * 2,
@@ -374,11 +375,9 @@ end)
 SYNC.define("os/DeviceSelector", function()
 -- SYNC / os / DeviceSelector
 -- First-run Apple-style device picker (Mobile / Tablet / Desktop).
--- Two visual styles, switchable for A/B testing:
---   "A" = iOS Settings light card
---   "B" = macOS frosted dark panel (blur faked with translucency)
--- Colored icon tiles with filled white glyphs + selected checkmark, macOS-tuned springs.
--- DeviceSelector.run(onChoose, style) ; onChoose(id) on pick, onChoose(saved) on dismiss.
+-- macOS frosted dark panel (blur faked with translucency), colored icon tiles
+-- with filled white glyphs + selected checkmark, macOS-tuned spring animations.
+-- DeviceSelector.run(onChoose): onChoose(id) on pick, onChoose(saved) on dismiss.
 
 local Theme = SYNC.import("core/Theme")
 local Util  = SYNC.import("core/Util")
@@ -398,33 +397,19 @@ local DEVICES = {
       top = Color3.fromRGB(94, 92, 230),  bot = Color3.fromRGB(75, 63, 214) },
 }
 
-local STYLES = {
-    A = {
-        cardColor = WHITE, cardTransp = 0,
-        cardStroke = Color3.fromRGB(214, 214, 219), cardStrokeTransp = 0.4,
-        titleColor = Color3.fromRGB(0, 0, 0), subColor = Color3.fromRGB(142, 142, 147),
-        descColor = Color3.fromRGB(142, 142, 147),
-        rowColor = Color3.fromRGB(245, 245, 247), rowTransp = 0,
-        hoverColor = Color3.fromRGB(237, 237, 242), hoverTransp = 0,
-        selColor = Color3.fromRGB(234, 243, 255), selTransp = 0,
-        selStroke = ACCENT,
-        closeColor = Color3.fromRGB(233, 233, 238), closeTransp = 0,
-        closeHover = Color3.fromRGB(214, 214, 219), closeIcon = Color3.fromRGB(142, 142, 147),
-        backdropA = 0.45, fake = false,
-    },
-    B = {
-        cardColor = Color3.fromRGB(40, 40, 48), cardTransp = 0.16,
-        cardStroke = WHITE, cardStrokeTransp = 0.86,
-        titleColor = Color3.fromRGB(245, 245, 247), subColor = Color3.fromRGB(160, 160, 168),
-        descColor = Color3.fromRGB(152, 152, 159),
-        rowColor = WHITE, rowTransp = 0.93,
-        hoverColor = WHITE, hoverTransp = 0.88,
-        selColor = ACCENT, selTransp = 0.8,
-        selStroke = ACCENT,
-        closeColor = WHITE, closeTransp = 0.86, closeHover = WHITE, closeHoverTransp = 0.78,
-        closeIcon = Color3.fromRGB(210, 210, 217),
-        backdropA = 0.6, fake = true,
-    },
+-- macOS frosted dark style (blur faked with translucency)
+local S = {
+    cardColor = Color3.fromRGB(40, 40, 48), cardTransp = 0.16,
+    cardStroke = WHITE, cardStrokeTransp = 0.86,
+    titleColor = Color3.fromRGB(245, 245, 247), subColor = Color3.fromRGB(160, 160, 168),
+    descColor = Color3.fromRGB(152, 152, 159),
+    rowColor = WHITE, rowTransp = 0.93,
+    hoverColor = WHITE, hoverTransp = 0.88,
+    selColor = ACCENT, selTransp = 0.8,
+    selStroke = ACCENT,
+    closeColor = WHITE, closeTransp = 0.86, closeHover = WHITE, closeHoverTransp = 0.78,
+    closeIcon = Color3.fromRGB(210, 210, 217),
+    backdropA = 0.6,
 }
 
 -- macOS-flavored easing presets
@@ -559,8 +544,7 @@ local function buildCheck(parent)
     }
 end
 
-function DeviceSelector.run(onChoose, style)
-    local S = STYLES[style] or STYLES.A
+function DeviceSelector.run(onChoose)
     local saved = Util.load("DevicePref")
     local vp = Util.viewport()
 
@@ -585,20 +569,21 @@ function DeviceSelector.run(onChoose, style)
     backdrop.Parent = gui
     Util.tween(backdrop, { BackgroundTransparency = 1 - S.backdropA }, 0.45)
 
-    -- Card
-    local card = Instance.new("Frame")
+    -- Card (CanvasGroup so the whole panel can fade uniformly on close)
+    local card = Instance.new("CanvasGroup")
     card.Size = UDim2.fromOffset(cardW, cardH)
     card.Position = UDim2.fromOffset(cardX, cardY)
     card.BackgroundColor3 = S.cardColor
     card.BackgroundTransparency = S.cardTransp
     card.BorderSizePixel = 0
+    card.GroupTransparency = 0
     card.ZIndex = 2
     card.Parent = gui
     Util.corner(card, 26)
     local cardStroke = Util.stroke(card, S.cardStroke, 1, S.cardStrokeTransp)
 
-    local shadow = Util.shadow(card, 20, 1)
-    Util.tween(shadow, { ImageTransparency = 0.55 }, 0.5)
+    local shadow = Util.shadow(card, 26, 1)
+    Util.tween(shadow, { ImageTransparency = 0.65 }, 0.5)
 
     local cardScale = Instance.new("UIScale")
     cardScale.Scale = 0.92
@@ -691,28 +676,13 @@ function DeviceSelector.run(onChoose, style)
     local function closeMenu(chosen)
         if closing then return end
         closing = true
-        for i, opt in ipairs(options) do
-            task.delay(0.035 * (i - 1), function()
-                tw(opt.bg, { BackgroundTransparency = 1 }, QUICK)
-                tw(opt.label, { TextTransparency = 1 }, QUICK)
-                tw(opt.desc, { TextTransparency = 1 }, QUICK)
-                tw(opt.stroke, { Transparency = 1 }, QUICK)
-                tw(opt.tile, { BackgroundTransparency = 1 }, QUICK)
-            end)
-        end
-        task.delay(0.18, function()
-            tw(title, { TextTransparency = 1 }, QUICK)
-            tw(subtitle, { TextTransparency = 1 }, QUICK)
-            tw(closeBtn, { BackgroundTransparency = 1, ImageTransparency = 1 }, QUICK)
-        end)
-        task.delay(0.32, function()
-            Util.tween(cardScale, { Scale = 0.94 }, 0.3, Enum.EasingStyle.Quad, Enum.EasingDirection.In)
-            tw(card, { BackgroundTransparency = 1 }, SMOOTH)
-            tw(cardStroke, { Transparency = 1 }, SMOOTH)
-            tw(shadow, { ImageTransparency = 1 }, SMOOTH)
-        end)
-        task.delay(0.5, function() Util.tween(backdrop, { BackgroundTransparency = 1 }, 0.35) end)
-        task.delay(0.95, function()
+        -- The whole card fades and shrinks as one unit (CanvasGroup), so nothing
+        -- lingers. Backdrop and shadow fade alongside it. Fast and clean.
+        Util.tween(card, { GroupTransparency = 1 }, 0.2, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
+        Util.tween(cardScale, { Scale = 0.95 }, 0.22, Enum.EasingStyle.Quad, Enum.EasingDirection.In)
+        Util.tween(shadow, { ImageTransparency = 1 }, 0.2)
+        Util.tween(backdrop, { BackgroundTransparency = 1 }, 0.24)
+        task.delay(0.26, function()
             gui:Destroy()
             if onChoose then onChoose(chosen) end
         end)
@@ -813,7 +783,7 @@ Boot.run(function()
     DeviceSelector.run(function(device)
         -- device is "mobile" | "tablet" | "desktop" | nil (dismissed)
         -- TODO: launch Desktop.start(device) here once built.
-    end, "B")
+    end)
 end)
 end)
 

@@ -130,19 +130,20 @@ function Util.padding(parent, all)
     return p
 end
 
--- Subtle Rayfield-style drop shadow for minimal Apple-like depth. Created as a
--- SIBLING behind `target` (children always render above their parent, so a child
--- can't sit behind it). Call AFTER target.Position/Size are set. Returns the ImageLabel.
+-- Subtle, soft drop shadow for minimal Apple-like depth. Uses a feathered asset
+-- with a TRANSPARENT center (so it never paints a solid block behind the card).
+-- Created as a SIBLING behind `target` (children always render above their parent).
+-- Call AFTER target.Position/Size are set. Returns the ImageLabel.
 function Util.shadow(target, spread, transparency)
-    spread = spread or 18
+    spread = spread or 26
     local sh = Instance.new("ImageLabel")
     sh.Name = "Shadow"
     sh.BackgroundTransparency = 1
-    sh.Image = "rbxassetid://5028857084"            -- Rayfield soft shadow
+    sh.Image = "rbxassetid://6014261993"            -- soft feathered shadow, clear center
     sh.ImageColor3 = Color3.fromRGB(0, 0, 0)
-    sh.ImageTransparency = transparency or 0.6
+    sh.ImageTransparency = transparency or 0.65
     sh.ScaleType = Enum.ScaleType.Slice
-    sh.SliceCenter = Rect.new(24, 24, 276, 276)
+    sh.SliceCenter = Rect.new(49, 49, 450, 450)
     sh.AnchorPoint = target.AnchorPoint
     sh.Size = UDim2.new(
         target.Size.X.Scale, target.Size.X.Offset + spread * 2,

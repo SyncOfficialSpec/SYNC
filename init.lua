@@ -8,5 +8,5 @@ Boot.run(function()
     DeviceSelector.run(function(device)
         -- device is "mobile" | "tablet" | "desktop" | nil (dismissed)
         -- TODO: launch Desktop.start(device) here once built.
-    end, "B")
+    end)
 end)
