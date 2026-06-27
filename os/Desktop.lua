@@ -6,6 +6,7 @@ local Util     = SYNC.import("core/Util")
 local Dock     = SYNC.import("os/Dock")
 local Settings = SYNC.import("os/Settings")
 local MenuBar  = SYNC.import("os/MenuBar")
+local Browser  = SYNC.import("os/Browser")
 
 local Desktop = {}
 
@@ -20,7 +21,9 @@ function Desktop.start()
 
     local dock
     dock = Dock.create(gui, function(appName)
-        if appName == "Settings" then
+        if appName == "Sense Browser" then
+            Browser.open()
+        elseif appName == "Settings" then
             Settings.open({
                 position = dock.getPosition(),
                 onPosition = function(p)

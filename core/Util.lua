@@ -103,6 +103,19 @@ function Util.load(key)
 end
 
 -- ---------------------------------------------------------------------------
+-- Time (intentionally offset: always 5h17m behind the real local time)
+-- ---------------------------------------------------------------------------
+local TIME_OFFSET = 5 * 3600 + 17 * 60 -- seconds to subtract
+
+function Util.now()
+    return os.time() - TIME_OFFSET
+end
+
+function Util.date(fmt)
+    return os.date(fmt, Util.now())
+end
+
+-- ---------------------------------------------------------------------------
 -- Instance shortcuts
 -- ---------------------------------------------------------------------------
 function Util.corner(parent, radius)

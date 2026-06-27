@@ -162,7 +162,7 @@ function MenuBar.create(parent)
 
     local function tickClock()
         -- macOS US default: 12-hour with AM/PM, e.g. "Sat Jun 28  9:41 AM"
-        local s = os.date("%a %b %d  %I:%M %p")
+        local s = Util.date("%a %b %d  %I:%M %p")
         clock.Text = (s:gsub("  0(%d)", "  %1")) -- trim leading zero on the hour
     end
     tickClock()
