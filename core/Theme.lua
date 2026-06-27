@@ -8,7 +8,7 @@ Theme.fonts = {
     title   = Enum.Font.GothamSemibold,
     body    = Enum.Font.GothamMedium,
     caption = Enum.Font.Gotham,
-    light   = Enum.Font.GothamLight,
+    light   = Enum.Font.Gotham,
 }
 
 -- Shared accent + system colors (consistent across modes)
