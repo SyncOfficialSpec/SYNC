@@ -304,6 +304,45 @@ function Util.date(fmt)
 end
 
 -- ---------------------------------------------------------------------------
+-- HTTP request (prefer executor request with a real UA; fall back to HttpGet)
+-- ---------------------------------------------------------------------------
+local _req = (syn and syn.request) or (http and http.request) or http_request or request
+local UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36"
+
+function Util.httpGet(url)
+    if _req then
+        local ok, res = pcall(_req, { Url = url, Method = "GET", Headers = { ["User-Agent"] = UA } })
+        if ok and res and res.Body and res.Body ~= "" then return res.Body end
+    end
+    local ok, res = pcall(function() return game:HttpGet(url, true) end)
+    if ok and type(res) == "string" and res ~= "" then return res end
+    return nil
+end
+
+-- ---------------------------------------------------------------------------
+-- Remote image: download once and expose via getcustomasset (so we can use
+-- images that aren't uploaded to Roblox). Returns a content id, or nil.
+-- ---------------------------------------------------------------------------
+function Util.remoteImage(url, filename)
+    local getasset = (typeof(getcustomasset) == "function" and getcustomasset)
+        or (typeof(getsynasset) == "function" and getsynasset)
+    if not getasset or typeof(writefile) ~= "function" then return nil end
+    local path = "SYNC/" .. filename
+    pcall(function()
+        if typeof(makefolder) == "function" and typeof(isfolder) == "function" and not isfolder("SYNC") then
+            makefolder("SYNC")
+        end
+        if not (typeof(isfile) == "function" and isfile(path)) then
+            local data = game:HttpGet(url, true)
+            if data and data ~= "" then writefile(path, data) end
+        end
+    end)
+    local id
+    pcall(function() id = getasset(path) end)
+    return id
+end
+
+-- ---------------------------------------------------------------------------
 -- Instance shortcuts
 -- ---------------------------------------------------------------------------
 function Util.corner(parent, radius)
@@ -901,11 +940,8 @@ local function stripTags(html)
     return (html:gsub("^%s+", ""))
 end
 
-local function httpGet(url)
-    local ok, res = pcall(function() return game:HttpGet(url, true) end)
-    if ok and type(res) == "string" then return res end
-    return nil
-end
+local httpGet = Util.httpGet
+local LOGO_URL = "https://raw.githubusercontent.com/SyncOfficialSpec/SYNC/main/assets/sense-logo.png"
 
 -- Parse DuckDuckGo HTML results into { {title, url, snippet}, ... }
 local function parseDDG(html)
@@ -1084,6 +1120,15 @@ function Browser.open()
     content.ClipsDescendants = true
     content.ZIndex = 3
     content.Parent = win
+    do
+        local c = Instance.new("UICorner")
+        local ok = pcall(function()
+            c.TopLeftRadius = UDim.new(0, 0); c.TopRightRadius = UDim.new(0, 0)
+            c.BottomLeftRadius = UDim.new(0, 12); c.BottomRightRadius = UDim.new(0, 12)
+        end)
+        if not ok then c.CornerRadius = UDim.new(0, 12) end
+        c.Parent = content
+    end
 
     local function clearContent()
         for _, ch in ipairs(content:GetChildren()) do ch:Destroy() end
@@ -1116,13 +1161,23 @@ function Browser.open()
         clockConn = RunService.Heartbeat:Connect(function(dt) acc += dt; if acc >= 5 then acc = 0; tick() end end)
 
         local logoWrap = Instance.new("Frame")
-        logoWrap.Size = UDim2.fromOffset(70, 70)
+        logoWrap.Size = UDim2.fromOffset(96, 96)
         logoWrap.AnchorPoint = Vector2.new(0.5, 0.5)
         logoWrap.Position = UDim2.fromScale(0.5, 0.32)
         logoWrap.BackgroundTransparency = 1
         logoWrap.ZIndex = 4
         logoWrap.Parent = content
-        drawSaturn(logoWrap, 64, WHITE)
+        local logoId = Util.remoteImage(LOGO_URL, "sense-logo.png")
+        if logoId then
+            local img = Instance.new("ImageLabel")
+            img.Size = UDim2.fromScale(1, 1)
+            img.BackgroundTransparency = 1
+            img.Image = logoId
+            img.ZIndex = 4
+            img.Parent = logoWrap
+        else
+            drawSaturn(logoWrap, 64, WHITE)
+        end
 
         local searchWrap = Instance.new("Frame")
         searchWrap.Size = UDim2.fromOffset(460, 52)

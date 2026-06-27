@@ -116,6 +116,45 @@ function Util.date(fmt)
 end
 
 -- ---------------------------------------------------------------------------
+-- HTTP request (prefer executor request with a real UA; fall back to HttpGet)
+-- ---------------------------------------------------------------------------
+local _req = (syn and syn.request) or (http and http.request) or http_request or request
+local UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36"
+
+function Util.httpGet(url)
+    if _req then
+        local ok, res = pcall(_req, { Url = url, Method = "GET", Headers = { ["User-Agent"] = UA } })
+        if ok and res and res.Body and res.Body ~= "" then return res.Body end
+    end
+    local ok, res = pcall(function() return game:HttpGet(url, true) end)
+    if ok and type(res) == "string" and res ~= "" then return res end
+    return nil
+end
+
+-- ---------------------------------------------------------------------------
+-- Remote image: download once and expose via getcustomasset (so we can use
+-- images that aren't uploaded to Roblox). Returns a content id, or nil.
+-- ---------------------------------------------------------------------------
+function Util.remoteImage(url, filename)
+    local getasset = (typeof(getcustomasset) == "function" and getcustomasset)
+        or (typeof(getsynasset) == "function" and getsynasset)
+    if not getasset or typeof(writefile) ~= "function" then return nil end
+    local path = "SYNC/" .. filename
+    pcall(function()
+        if typeof(makefolder) == "function" and typeof(isfolder) == "function" and not isfolder("SYNC") then
+            makefolder("SYNC")
+        end
+        if not (typeof(isfile) == "function" and isfile(path)) then
+            local data = game:HttpGet(url, true)
+            if data and data ~= "" then writefile(path, data) end
+        end
+    end)
+    local id
+    pcall(function() id = getasset(path) end)
+    return id
+end
+
+-- ---------------------------------------------------------------------------
 -- Instance shortcuts
 -- ---------------------------------------------------------------------------
 function Util.corner(parent, radius)
