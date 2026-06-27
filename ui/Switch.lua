@@ -31,6 +31,13 @@ function Switch.create(parent, initial, onChange)
     track.ZIndex = baseZ
     track.Parent = parent
     Util.corner(track, H / 2)
+    -- Recessed depth: darken the top of the track (multiplied over its colour),
+    -- plus a faint inner edge.
+    local tgrad = Instance.new("UIGradient")
+    tgrad.Color = ColorSequence.new(Color3.fromRGB(196, 196, 196), Color3.fromRGB(255, 255, 255))
+    tgrad.Rotation = 90
+    tgrad.Parent = track
+    Util.stroke(track, Color3.fromRGB(0, 0, 0), 1, 0.72)
 
     local knob = Instance.new("Frame")
     knob.Size = UDim2.fromOffset(KW, KH)
@@ -41,7 +48,13 @@ function Switch.create(parent, initial, onChange)
     knob.ZIndex = baseZ + 1
     knob.Parent = track
     Util.corner(knob, KRADIUS) -- rounded rectangle, not a circle
-    Util.shadow(knob, { blur = 6, transparency = 0.6, offset = UDim2.fromOffset(0, 1) })
+    -- Convex shading (lighter top, slightly darker bottom)
+    local kgrad = Instance.new("UIGradient")
+    kgrad.Color = ColorSequence.new(Color3.fromRGB(255, 255, 255), Color3.fromRGB(234, 234, 238))
+    kgrad.Rotation = 90
+    kgrad.Parent = knob
+    Util.shadow(knob, { blur = 7, transparency = 0.55, offset = UDim2.fromOffset(0, 1) }) -- drop shadow
+    Util.shadow(knob, { blur = 12, transparency = 0.6, offset = UDim2.fromOffset(0, 0), color = Color3.fromRGB(255, 255, 255) }) -- soft glow
 
     local function render(animate)
         local kp = { Position = UDim2.new(0, knobX(value), 0.5, 0), BackgroundColor3 = value and KNOB_ON or KNOB_OFF }
