@@ -130,19 +130,19 @@ function Util.padding(parent, all)
     return p
 end
 
--- Soft drop shadow for macOS-style modal depth. Created as a SIBLING behind
--- `target` (children always render above their parent, so a child can't sit
--- behind it). Call AFTER target.Position/Size are set. Returns the ImageLabel.
+-- Subtle Rayfield-style drop shadow for minimal Apple-like depth. Created as a
+-- SIBLING behind `target` (children always render above their parent, so a child
+-- can't sit behind it). Call AFTER target.Position/Size are set. Returns the ImageLabel.
 function Util.shadow(target, spread, transparency)
-    spread = spread or 40
+    spread = spread or 18
     local sh = Instance.new("ImageLabel")
     sh.Name = "Shadow"
     sh.BackgroundTransparency = 1
-    sh.Image = "rbxassetid://6015897843"            -- soft 9-slice glow
+    sh.Image = "rbxassetid://5028857084"            -- Rayfield soft shadow
     sh.ImageColor3 = Color3.fromRGB(0, 0, 0)
-    sh.ImageTransparency = transparency or 0.5
+    sh.ImageTransparency = transparency or 0.6
     sh.ScaleType = Enum.ScaleType.Slice
-    sh.SliceCenter = Rect.new(49, 49, 450, 450)
+    sh.SliceCenter = Rect.new(24, 24, 276, 276)
     sh.AnchorPoint = target.AnchorPoint
     sh.Size = UDim2.new(
         target.Size.X.Scale, target.Size.X.Offset + spread * 2,
@@ -150,7 +150,7 @@ function Util.shadow(target, spread, transparency)
     )
     sh.Position = UDim2.new(
         target.Position.X.Scale, target.Position.X.Offset - spread,
-        target.Position.Y.Scale, target.Position.Y.Offset - spread + 8  -- cast downward
+        target.Position.Y.Scale, target.Position.Y.Offset - spread + 4  -- slight downward cast
     )
     sh.ZIndex = math.max((target.ZIndex or 1) - 1, 1)
     sh.Parent = target.Parent

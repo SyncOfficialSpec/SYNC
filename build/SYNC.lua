@@ -231,19 +231,19 @@ function Util.padding(parent, all)
     return p
 end
 
--- Soft drop shadow for macOS-style modal depth. Created as a SIBLING behind
--- `target` (children always render above their parent, so a child can't sit
--- behind it). Call AFTER target.Position/Size are set. Returns the ImageLabel.
+-- Subtle Rayfield-style drop shadow for minimal Apple-like depth. Created as a
+-- SIBLING behind `target` (children always render above their parent, so a child
+-- can't sit behind it). Call AFTER target.Position/Size are set. Returns the ImageLabel.
 function Util.shadow(target, spread, transparency)
-    spread = spread or 40
+    spread = spread or 18
     local sh = Instance.new("ImageLabel")
     sh.Name = "Shadow"
     sh.BackgroundTransparency = 1
-    sh.Image = "rbxassetid://6015897843"            -- soft 9-slice glow
+    sh.Image = "rbxassetid://5028857084"            -- Rayfield soft shadow
     sh.ImageColor3 = Color3.fromRGB(0, 0, 0)
-    sh.ImageTransparency = transparency or 0.5
+    sh.ImageTransparency = transparency or 0.6
     sh.ScaleType = Enum.ScaleType.Slice
-    sh.SliceCenter = Rect.new(49, 49, 450, 450)
+    sh.SliceCenter = Rect.new(24, 24, 276, 276)
     sh.AnchorPoint = target.AnchorPoint
     sh.Size = UDim2.new(
         target.Size.X.Scale, target.Size.X.Offset + spread * 2,
@@ -251,7 +251,7 @@ function Util.shadow(target, spread, transparency)
     )
     sh.Position = UDim2.new(
         target.Position.X.Scale, target.Position.X.Offset - spread,
-        target.Position.Y.Scale, target.Position.Y.Offset - spread + 8  -- cast downward
+        target.Position.Y.Scale, target.Position.Y.Offset - spread + 4  -- slight downward cast
     )
     sh.ZIndex = math.max((target.ZIndex or 1) - 1, 1)
     sh.Parent = target.Parent
@@ -597,8 +597,8 @@ function DeviceSelector.run(onChoose, style)
     Util.corner(card, 26)
     local cardStroke = Util.stroke(card, S.cardStroke, 1, S.cardStrokeTransp)
 
-    local shadow = Util.shadow(card, 46, 1)
-    Util.tween(shadow, { ImageTransparency = S.fake and 0.35 or 0.5 }, 0.5)
+    local shadow = Util.shadow(card, 20, 1)
+    Util.tween(shadow, { ImageTransparency = 0.55 }, 0.5)
 
     local cardScale = Instance.new("UIScale")
     cardScale.Scale = 0.92
@@ -804,68 +804,17 @@ end)
 
 SYNC.define("init", function()
 -- SYNC / init
--- TEMPORARY A/B test harness: boot, then show a small switcher so you can flip
--- between device-picker style A (iOS light) and B (macOS frosted dark) live.
--- Once a style is chosen we'll replace this with the real desktop handoff.
+-- Entry module. Boot sequence -> device selector (style B) -> (desktop, coming next).
 
 local Boot           = SYNC.import("os/Boot")
 local DeviceSelector = SYNC.import("os/DeviceSelector")
-local Util           = SYNC.import("core/Util")
 
-local function showSwitcher()
-    local gui = Instance.new("ScreenGui")
-    gui.Name = "SYNC_StyleSwitcher"
-    Util.mount(gui)
-
-    local bar = Instance.new("Frame")
-    bar.Size = UDim2.fromOffset(220, 48)
-    bar.Position = UDim2.new(0.5, 0, 0, 16)
-    bar.AnchorPoint = Vector2.new(0.5, 0)
-    bar.BackgroundColor3 = Color3.fromRGB(28, 28, 32)
-    bar.BackgroundTransparency = 0.1
-    bar.BorderSizePixel = 0
-    bar.Parent = gui
-    Util.corner(bar, 14)
-    Util.stroke(bar, Color3.fromRGB(255, 255, 255), 1, 0.85)
-
-    local label = Instance.new("TextLabel")
-    label.Size = UDim2.fromOffset(70, 48)
-    label.Position = UDim2.fromOffset(8, 0)
-    label.BackgroundTransparency = 1
-    label.Text = "Style:"
-    label.Font = Enum.Font.GothamMedium
-    label.TextSize = 14
-    label.TextColor3 = Color3.fromRGB(230, 230, 235)
-    label.Parent = bar
-
-    local current
-    local function open(style)
-        if current and current.Parent then current:Destroy() end
-        current = DeviceSelector.run(function() end, style)
-    end
-
-    local function makeBtn(text, x)
-        local b = Instance.new("TextButton")
-        b.Size = UDim2.fromOffset(58, 34)
-        b.Position = UDim2.fromOffset(x, 7)
-        b.BackgroundColor3 = Color3.fromRGB(10, 132, 255)
-        b.Text = text
-        b.Font = Enum.Font.GothamSemibold
-        b.TextSize = 15
-        b.TextColor3 = Color3.fromRGB(255, 255, 255)
-        b.AutoButtonColor = true
-        b.Parent = bar
-        Util.corner(b, 10)
-        return b
-    end
-
-    makeBtn("A", 78).MouseButton1Click:Connect(function() open("A") end)
-    makeBtn("B", 142).MouseButton1Click:Connect(function() open("B") end)
-
-    open("A") -- start on A
-end
-
-Boot.run(showSwitcher)
+Boot.run(function()
+    DeviceSelector.run(function(device)
+        -- device is "mobile" | "tablet" | "desktop" | nil (dismissed)
+        -- TODO: launch Desktop.start(device) here once built.
+    end, "B")
+end)
 end)
 
 SYNC.import("init")
