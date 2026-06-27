@@ -28,7 +28,7 @@ local TOP_INSET    = 30   -- leave room for the menu bar (vertical docks)
 
 local APPS = {
     { name = "Finder",    icon = "folder",         top = Color3.fromRGB(70, 170, 255),  bot = Color3.fromRGB(20, 110, 230) },
-    { name = "Safari",    icon = "compass",        top = Color3.fromRGB(90, 200, 255),  bot = Color3.fromRGB(20, 120, 235) },
+    { name = "Sense Browser", icon = "compass",    top = Color3.fromRGB(90, 200, 255),  bot = Color3.fromRGB(20, 120, 235) },
     { name = "Messages",  icon = "message-circle", top = Color3.fromRGB(90, 220, 110),  bot = Color3.fromRGB(40, 180, 70) },
     { name = "Mail",      icon = "mail",           top = Color3.fromRGB(80, 180, 255),  bot = Color3.fromRGB(30, 120, 240) },
     { name = "Maps",      icon = "map",            top = Color3.fromRGB(120, 215, 130), bot = Color3.fromRGB(70, 175, 90) },
