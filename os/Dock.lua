@@ -207,10 +207,15 @@ function Dock.create(parent, onAppClick)
         offVel = offVel + (-220 * (curOff - targetOff) - 26 * offVel) * sdt
         curOff = curOff + offVel * sdt
 
-        -- Target sizes from cursor proximity (only while shown)
+        -- Magnify only when the cursor is actually near the dock vertically (so an
+        -- always-shown dock stays flat until you approach it).
+        local restTop = vp.Y - (BASE + PADY * 2) - BOTTOM_MARGIN
+        local magnifyActive = shown and (mouseY >= restTop - 30)
+
+        -- Target sizes from cursor proximity
         for _, ic in ipairs(icons) do
             local target = BASE
-            if shown then
+            if magnifyActive then
                 local d = math.abs(mouseX - ic.restCenter)
                 if d < INFLUENCE then
                     local f = math.cos((d / INFLUENCE) * (math.pi / 2)) -- 1 at cursor -> 0 at edge

@@ -122,6 +122,24 @@ function Util.stroke(parent, color, thickness, transparency)
     return s
 end
 
+-- Liquid Glass rim light: a hairline stroke that's bright along the top edge and
+-- fades toward the bottom, giving panels that lit-glass edge. Returns the stroke.
+function Util.rimStroke(parent, thickness, topAlpha, botAlpha)
+    local s = Instance.new("UIStroke")
+    s.Color = Color3.fromRGB(255, 255, 255)
+    s.Thickness = thickness or 1.5
+    s.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+    s.Parent = parent
+    local g = Instance.new("UIGradient")
+    g.Rotation = 90
+    g.Transparency = NumberSequence.new({
+        NumberSequenceKeypoint.new(0, topAlpha or 0.35), -- top: brighter
+        NumberSequenceKeypoint.new(1, botAlpha or 0.9),  -- bottom: faint
+    })
+    g.Parent = s
+    return s
+end
+
 function Util.padding(parent, all)
     local p = Instance.new("UIPadding")
     local u = UDim.new(0, all or 0)

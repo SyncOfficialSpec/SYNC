@@ -1,16 +1,19 @@
 -- SYNC / ui / Switch
--- macOS-style toggle switch. Switch.create(parent, initial, onChange) -> { set, get }
--- Animates the knob slide + track color (gray -> system green).
+-- Apple-accurate toggle switch (50x30 track, 26 knob, systemGreen on / gray off).
+-- Switch.create(parent, initial, onChange) -> { instance, get, set }
 
 local Util = SYNC.import("core/Util")
 
 local Switch = {}
 
-local W, H = 46, 28
-local KNOB = 24
-local GREEN = Color3.fromRGB(48, 209, 88)
-local OFF = Color3.fromRGB(90, 90, 98)
-local WHITE = Color3.fromRGB(255, 255, 255)
+local W, H   = 50, 30
+local KNOB   = 26
+local INSET  = 2
+local GREEN  = Color3.fromRGB(52, 199, 89)   -- systemGreen
+local OFF    = Color3.fromRGB(74, 74, 80)     -- dark off-track
+local WHITE  = Color3.fromRGB(255, 255, 255)
+
+local function knobX(on) return on and (W - KNOB - INSET) or INSET end
 
 function Switch.create(parent, initial, onChange)
     local value = initial and true or false
@@ -26,27 +29,23 @@ function Switch.create(parent, initial, onChange)
 
     local knob = Instance.new("Frame")
     knob.Size = UDim2.fromOffset(KNOB, KNOB)
-    knob.AnchorPoint = Vector2.new(value and 1 or 0, 0.5)
-    knob.Position = UDim2.new(value and 1 or 0, value and -2 or 2, 0.5, 0)
+    knob.AnchorPoint = Vector2.new(0, 0.5)
+    knob.Position = UDim2.new(0, knobX(value), 0.5, 0)
     knob.BackgroundColor3 = WHITE
     knob.BorderSizePixel = 0
     knob.Parent = track
     Util.corner(knob, KNOB / 2)
-    Util.shadow(knob, { blur = 8, transparency = 0.7, offset = UDim2.fromOffset(0, 1) })
+    Util.shadow(knob, { blur = 6, transparency = 0.65, offset = UDim2.fromOffset(0, 1) })
 
     local function render(animate)
-        local props = {
-            [knob] = {
-                AnchorPoint = Vector2.new(value and 1 or 0, 0.5),
-                Position = UDim2.new(value and 1 or 0, value and -2 or 2, 0.5, 0),
-            },
-            [track] = { BackgroundColor3 = value and GREEN or OFF },
-        }
+        local kp = { Position = UDim2.new(0, knobX(value), 0.5, 0) }
+        local tp = { BackgroundColor3 = value and GREEN or OFF }
         if animate then
-            Util.tween(knob, props[knob], 0.18, Enum.EasingStyle.Quart)
-            Util.tween(track, props[track], 0.18)
+            Util.tween(knob, kp, 0.2, Enum.EasingStyle.Back, Enum.EasingDirection.Out)
+            Util.tween(track, tp, 0.2)
         else
-            for inst, p in pairs(props) do for k, v in pairs(p) do inst[k] = v end end
+            knob.Position = kp.Position
+            track.BackgroundColor3 = tp.BackgroundColor3
         end
     end
 
@@ -59,10 +58,7 @@ function Switch.create(parent, initial, onChange)
     return {
         instance = track,
         get = function() return value end,
-        set = function(v, animate)
-            value = v and true or false
-            render(animate ~= false)
-        end,
+        set = function(v, animate) value = v and true or false; render(animate ~= false) end,
     }
 end
 
