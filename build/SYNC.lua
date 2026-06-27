@@ -370,24 +370,22 @@ end)
 
 SYNC.define("ui/Switch", function()
 -- SYNC / ui / Switch
--- Apple-accurate toggle switch (50x30 track, 26 knob, systemGreen on / gray off).
--- Switch.create(parent, initial, onChange) -> { instance, get, set }
+-- macOS-style toggle: neutral grey track, light/white rounded-rectangle knob
+-- (no green). Switch.create(parent, initial, onChange) -> { instance, get, set }
 
 local Util = SYNC.import("core/Util")
 
+local W, H     = 50, 30
+local KW, KH   = 26, 24       -- knob is a wide rounded rectangle
+local INSET_X  = 3
+local TRACK_OFF = Color3.fromRGB(58, 58, 62)    -- recessed dark grey
+local TRACK_ON  = Color3.fromRGB(120, 120, 126) -- lighter grey when on
+local KNOB_OFF  = Color3.fromRGB(210, 210, 214) -- light grey knob
+local KNOB_ON   = Color3.fromRGB(248, 248, 250) -- white knob
+
 local Switch = {}
 
-local W, H    = 50, 30
-local KNOB    = 26
-local INSET   = 2
-local KRADIUS = 9                              -- squircle knob (not a full circle)
-local GREEN   = Color3.fromRGB(52, 199, 89)    -- systemGreen (on)
-local OFF     = Color3.fromRGB(58, 58, 62)     -- recessed dark off-track
-local KNOB_ON  = Color3.fromRGB(255, 255, 255) -- white knob when on
-local KNOB_OFF = Color3.fromRGB(222, 222, 226) -- light-gray knob when off
-local WHITE   = Color3.fromRGB(255, 255, 255)
-
-local function knobX(on) return on and (W - KNOB - INSET) or INSET end
+local function knobX(on) return on and (W - KW - INSET_X) or INSET_X end
 
 function Switch.create(parent, initial, onChange)
     local value = initial and true or false
@@ -396,29 +394,30 @@ function Switch.create(parent, initial, onChange)
     track.Text = ""
     track.AutoButtonColor = false
     track.Size = UDim2.fromOffset(W, H)
-    track.BackgroundColor3 = value and GREEN or OFF
+    track.BackgroundColor3 = value and TRACK_ON or TRACK_OFF
     track.BorderSizePixel = 0
     track.Parent = parent
     Util.corner(track, H / 2)
 
     local knob = Instance.new("Frame")
-    knob.Size = UDim2.fromOffset(KNOB, KNOB)
+    knob.Size = UDim2.fromOffset(KW, KH)
     knob.AnchorPoint = Vector2.new(0, 0.5)
     knob.Position = UDim2.new(0, knobX(value), 0.5, 0)
     knob.BackgroundColor3 = value and KNOB_ON or KNOB_OFF
     knob.BorderSizePixel = 0
     knob.Parent = track
-    Util.corner(knob, KRADIUS)
-    Util.shadow(knob, { blur = 6, transparency = 0.65, offset = UDim2.fromOffset(0, 1) })
+    Util.corner(knob, 9) -- rounded rectangle, not a circle
+    Util.shadow(knob, { blur = 6, transparency = 0.6, offset = UDim2.fromOffset(0, 1) })
 
     local function render(animate)
         local kp = { Position = UDim2.new(0, knobX(value), 0.5, 0), BackgroundColor3 = value and KNOB_ON or KNOB_OFF }
-        local tp = { BackgroundColor3 = value and GREEN or OFF }
+        local tp = { BackgroundColor3 = value and TRACK_ON or TRACK_OFF }
         if animate then
-            Util.tween(knob, kp, 0.2, Enum.EasingStyle.Back, Enum.EasingDirection.Out)
-            Util.tween(track, tp, 0.2)
+            Util.tween(knob, kp, 0.18, Enum.EasingStyle.Quart)
+            Util.tween(track, tp, 0.18)
         else
             knob.Position = kp.Position
+            knob.BackgroundColor3 = kp.BackgroundColor3
             track.BackgroundColor3 = tp.BackgroundColor3
         end
     end
@@ -1257,10 +1256,9 @@ end)
 
 SYNC.define("os/Settings", function()
 -- SYNC / os / Settings
--- macOS Tahoe "Liquid Glass" style settings panel, opened from the dock's
--- Settings icon. Translucent panel, bright rim-light edge, grouped rounded rows.
--- No open/close animation (appears and closes instantly). Clicking inside does
--- NOT close it; only the close button or clicking outside does.
+-- An actual macOS-style window: title bar with traffic-light buttons, a grouped
+-- settings list below. No open/close animation. Clicking inside doesn't close it;
+-- the red traffic light, or clicking outside, does.
 --
 -- Settings.open({ alwaysShow = bool, onAlwaysShow = function(v) })
 
@@ -1272,7 +1270,11 @@ local Switch = SYNC.import("ui/Switch")
 local Settings = {}
 
 local WHITE = Color3.fromRGB(255, 255, 255)
-local SUB   = Color3.fromRGB(152, 152, 162)
+local SUB   = Color3.fromRGB(150, 150, 158)
+local WIN   = Color3.fromRGB(32, 32, 35)
+local BAR   = Color3.fromRGB(44, 44, 48)
+local GROUP = Color3.fromRGB(46, 46, 50)
+local HAIR  = Color3.fromRGB(0, 0, 0)
 
 Settings._gui = nil
 
@@ -1280,7 +1282,8 @@ function Settings.open(opts)
     opts = opts or {}
     if Settings._gui then return end
 
-    local cardW, cardH = 404, 188
+    local cardW, cardH = 420, 168
+    local TB = 40 -- title bar height
 
     local gui = Instance.new("ScreenGui")
     gui.Name = "SYNC_Settings"
@@ -1293,8 +1296,7 @@ function Settings.open(opts)
         gui:Destroy()
     end
 
-    -- Outside-click catcher (no dimming). A Frame won't absorb clicks, so use a
-    -- transparent button. Clicking it (i.e. outside the card) closes.
+    -- Outside-click catcher
     local catcher = Instance.new("TextButton")
     catcher.Text = ""
     catcher.AutoButtonColor = false
@@ -1304,85 +1306,92 @@ function Settings.open(opts)
     catcher.Parent = gui
     catcher.MouseButton1Click:Connect(close)
 
-    -- Card is a TextButton so clicks inside are absorbed (don't reach the catcher).
-    local card = Instance.new("TextButton")
-    card.Text = ""
-    card.AutoButtonColor = false
-    card.AnchorPoint = Vector2.new(0.5, 0.5)
-    card.Position = UDim2.fromScale(0.5, 0.5)
-    card.Size = UDim2.fromOffset(cardW, cardH)
-    card.BackgroundColor3 = Color3.fromRGB(28, 28, 34)
-    card.BackgroundTransparency = 0.12 -- liquid glass: quite translucent
-    card.BorderSizePixel = 0
-    card.ZIndex = 2
-    card.Parent = gui
-    Util.corner(card, 26)
-    Util.rimStroke(card, 1.5, 0.3, 0.9)
-    Util.shadow(card, { blur = 50, spread = -2, transparency = 0.45, offset = UDim2.fromOffset(0, 18) })
+    -- Window (TextButton so clicks inside are absorbed)
+    local win = Instance.new("TextButton")
+    win.Text = ""
+    win.AutoButtonColor = false
+    win.AnchorPoint = Vector2.new(0.5, 0.5)
+    win.Position = UDim2.fromScale(0.5, 0.5)
+    win.Size = UDim2.fromOffset(cardW, cardH)
+    win.BackgroundColor3 = WIN
+    win.BackgroundTransparency = 0.04
+    win.BorderSizePixel = 0
+    win.ClipsDescendants = true
+    win.ZIndex = 2
+    win.Parent = gui
+    Util.corner(win, 12)
+    Util.stroke(win, WHITE, 1, 0.85)
+    Util.shadow(win, { blur = 50, spread = -2, transparency = 0.4, offset = UDim2.fromOffset(0, 20) })
 
-    -- Header
+    -- Title bar
+    local bar = Instance.new("Frame")
+    bar.Size = UDim2.new(1, 0, 0, TB)
+    bar.BackgroundColor3 = BAR
+    bar.BackgroundTransparency = 0.12
+    bar.BorderSizePixel = 0
+    bar.ZIndex = 3
+    bar.Parent = win
+    local hair = Instance.new("Frame")
+    hair.Size = UDim2.new(1, 0, 0, 1)
+    hair.Position = UDim2.new(0, 0, 1, 0)
+    hair.AnchorPoint = Vector2.new(0, 1)
+    hair.BackgroundColor3 = HAIR
+    hair.BackgroundTransparency = 0.7
+    hair.BorderSizePixel = 0
+    hair.ZIndex = 3
+    hair.Parent = bar
+
+    local lights = { Color3.fromRGB(255, 95, 87), Color3.fromRGB(254, 188, 46), Color3.fromRGB(40, 200, 64) }
+    for i, col in ipairs(lights) do
+        local dot = Instance.new(i == 1 and "TextButton" or "Frame")
+        if i == 1 then dot.Text = ""; dot.AutoButtonColor = false end
+        dot.Size = UDim2.fromOffset(12, 12)
+        dot.Position = UDim2.fromOffset(14 + (i - 1) * 20, (TB - 12) / 2)
+        dot.BackgroundColor3 = col
+        dot.BorderSizePixel = 0
+        dot.ZIndex = 4
+        dot.Parent = bar
+        Util.corner(dot, 6)
+        if i == 1 then dot.MouseButton1Click:Connect(close) end
+    end
+
     local title = Instance.new("TextLabel")
-    title.Text = "Settings"
-    title.Size = UDim2.fromOffset(cardW - 80, 30)
-    title.Position = UDim2.fromOffset(26, 22)
+    title.Size = UDim2.new(1, 0, 1, 0)
     title.BackgroundTransparency = 1
+    title.Text = "Settings"
     title.Font = Theme.fonts.title
-    title.TextSize = 24
-    title.TextColor3 = WHITE
-    title.TextXAlignment = Enum.TextXAlignment.Left
+    title.TextSize = 14
+    title.TextColor3 = Color3.fromRGB(210, 210, 216)
     title.ZIndex = 3
-    title.Parent = card
-
-    local closeBtn = Instance.new("ImageButton")
-    closeBtn.Size = UDim2.fromOffset(28, 28)
-    closeBtn.Position = UDim2.fromOffset(cardW - 42, 24)
-    closeBtn.BackgroundColor3 = WHITE
-    closeBtn.BackgroundTransparency = 0.84
-    closeBtn.AutoButtonColor = false
-    closeBtn.ZIndex = 3
-    closeBtn.Parent = card
-    Util.corner(closeBtn, 14)
-    local cicon = Instance.new("ImageLabel")
-    cicon.Size = UDim2.fromOffset(13, 13)
-    cicon.AnchorPoint = Vector2.new(0.5, 0.5)
-    cicon.Position = UDim2.fromScale(0.5, 0.5)
-    cicon.BackgroundTransparency = 1
-    cicon.ZIndex = 4
-    cicon.Parent = closeBtn
-    Icons.apply(cicon, "x", Color3.fromRGB(220, 220, 228))
-    closeBtn.MouseEnter:Connect(function() Util.tween(closeBtn, { BackgroundTransparency = 0.74 }, 0.12) end)
-    closeBtn.MouseLeave:Connect(function() Util.tween(closeBtn, { BackgroundTransparency = 0.84 }, 0.15) end)
-    closeBtn.MouseButton1Click:Connect(close)
+    title.Parent = bar
 
     -- Section header
     local section = Instance.new("TextLabel")
     section.Text = "DOCK"
-    section.Size = UDim2.fromOffset(cardW - 52, 14)
-    section.Position = UDim2.fromOffset(28, 66)
+    section.Size = UDim2.fromOffset(cardW - 40, 14)
+    section.Position = UDim2.fromOffset(20, TB + 14)
     section.BackgroundTransparency = 1
     section.Font = Theme.fonts.body
     section.TextSize = 11
     section.TextColor3 = SUB
     section.TextXAlignment = Enum.TextXAlignment.Left
     section.ZIndex = 3
-    section.Parent = card
+    section.Parent = win
 
-    -- Grouped row card (lighter translucent surface, like iOS/macOS grouped lists)
+    -- Grouped row
     local group = Instance.new("Frame")
-    group.Size = UDim2.fromOffset(cardW - 48, 64)
-    group.Position = UDim2.fromOffset(24, 86)
-    group.BackgroundColor3 = WHITE
-    group.BackgroundTransparency = 0.92
+    group.Size = UDim2.fromOffset(cardW - 32, 60)
+    group.Position = UDim2.fromOffset(16, TB + 34)
+    group.BackgroundColor3 = GROUP
     group.BorderSizePixel = 0
     group.ZIndex = 3
-    group.Parent = card
-    Util.corner(group, 14)
-    Util.rimStroke(group, 1, 0.7, 0.95)
+    group.Parent = win
+    Util.corner(group, 10)
+    Util.stroke(group, WHITE, 1, 0.9)
 
-    -- Icon tile (colored, like a settings row glyph)
     local tile = Instance.new("Frame")
     tile.Size = UDim2.fromOffset(30, 30)
-    tile.Position = UDim2.fromOffset(14, 17)
+    tile.Position = UDim2.fromOffset(12, 15)
     tile.BackgroundColor3 = Color3.fromRGB(40, 130, 240)
     tile.BorderSizePixel = 0
     tile.ZIndex = 4
@@ -1404,7 +1413,7 @@ function Settings.open(opts)
     local rowTitle = Instance.new("TextLabel")
     rowTitle.Text = "Always show Dock"
     rowTitle.Size = UDim2.fromOffset(240, 20)
-    rowTitle.Position = UDim2.fromOffset(56, 13)
+    rowTitle.Position = UDim2.fromOffset(54, 11)
     rowTitle.BackgroundTransparency = 1
     rowTitle.Font = Theme.fonts.body
     rowTitle.TextSize = 15
@@ -1416,7 +1425,7 @@ function Settings.open(opts)
     local rowDesc = Instance.new("TextLabel")
     rowDesc.Text = "Hidden until you touch the bottom edge"
     rowDesc.Size = UDim2.fromOffset(300, 16)
-    rowDesc.Position = UDim2.fromOffset(56, 33)
+    rowDesc.Position = UDim2.fromOffset(54, 31)
     rowDesc.BackgroundTransparency = 1
     rowDesc.Font = Theme.fonts.caption
     rowDesc.TextSize = 12
