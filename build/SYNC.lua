@@ -30,6 +30,7 @@ SYNC.define("core/Icons", function()
 local Icons = {}
 
 local DATA = {
+    ["orbit"] = { 16898613613, 967, 612 },
     ["smartphone"] = { 16898613777, 257, 918 },
     ["tablet"] = { 16898613777, 918, 906 },
     ["monitor"] = { 16898613613, 404, 820 },
