@@ -1625,8 +1625,8 @@ local Icons = SYNC.import("core/Icons")
 local MenuBar = {}
 
 local WHITE = Color3.fromRGB(255, 255, 255)
-local DIM   = Color3.fromRGB(232, 232, 236)
-local HEIGHT = 26
+local DIM   = Color3.fromRGB(236, 236, 240)
+local HEIGHT = 24
 local APPLE_LOGO = "rbxassetid://6031075938"
 
 -- A left-side text menu (Apple menu, app name, File/Edit/...) as a hover button.
@@ -1687,8 +1687,8 @@ function MenuBar.create(parent)
     local bar = Instance.new("Frame")
     bar.Size = UDim2.new(1, 0, 0, HEIGHT)
     bar.Position = UDim2.fromOffset(0, 0)
-    bar.BackgroundColor3 = Color3.fromRGB(28, 28, 32)
-    bar.BackgroundTransparency = 0.25
+    bar.BackgroundColor3 = Color3.fromRGB(22, 22, 26)
+    bar.BackgroundTransparency = 0.3 -- liquid glass: fairly translucent
     bar.BorderSizePixel = 0
     bar.ZIndex = 2
     bar.Parent = parent
@@ -1753,12 +1753,13 @@ function MenuBar.create(parent)
     rl.Padding = UDim.new(0, 2)
     rl.Parent = right
 
-    statusIcon(right, 1, "sliders-horizontal") -- control center
-    statusIcon(right, 2, "battery-full")
-    statusIcon(right, 3, "wifi")
-    statusIcon(right, 4, "search")
+    -- Order matches macOS (left to right): search, wifi, battery, control center, clock
+    statusIcon(right, 1, "search")
+    statusIcon(right, 2, "wifi")
+    statusIcon(right, 3, "battery-full")
+    statusIcon(right, 4, "sliders-horizontal") -- control center
 
-    local clockBtn = statusItem(right, 5, 132)
+    local clockBtn = statusItem(right, 5, 150)
     local clock = Instance.new("TextLabel")
     clock.Size = UDim2.fromScale(1, 1)
     clock.BackgroundTransparency = 1
@@ -1773,8 +1774,9 @@ function MenuBar.create(parent)
     cpad.Parent = clockBtn
 
     local function tickClock()
-        -- e.g. "Sat 28 Jun  17:42"
-        clock.Text = os.date("%a %d %b  %H:%M")
+        -- macOS US default: 12-hour with AM/PM, e.g. "Sat Jun 28  9:41 AM"
+        local s = os.date("%a %b %d  %I:%M %p")
+        clock.Text = (s:gsub("  0(%d)", "  %1")) -- trim leading zero on the hour
     end
     tickClock()
 
