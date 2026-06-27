@@ -15,7 +15,8 @@ function Desktop.start()
     gui.Name = "SYNC_Desktop"
     Util.mount(gui)
 
-    local menubar = MenuBar.create(gui)
+    -- Menu bar hidden for now (module kept for later): local menubar = MenuBar.create(gui)
+    local menubar = nil
 
     local dock
     dock = Dock.create(gui, function(appName)
