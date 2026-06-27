@@ -299,6 +299,11 @@ function DeviceSelector.run(onChoose)
     local function closeMenu(chosen)
         if closing then return end
         closing = true
+        -- Explicitly clear row outlines/checks so nothing lingers behind the fade
+        for _, opt in ipairs(options) do
+            tw(opt.stroke, { Transparency = 1 }, QUICK)
+            opt.check.hide()
+        end
         -- Content (CanvasGroup) fades as one unit; card bg/stroke/shadow fade with
         -- it and the whole thing shrinks slightly. Fast and clean, nothing lingers.
         Util.tween(content, { GroupTransparency = 1 }, 0.2, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
