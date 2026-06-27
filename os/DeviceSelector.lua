@@ -155,12 +155,18 @@ function DeviceSelector.run(onChoose)
     -- Card: a plain Frame so the native UIShadow renders fully (a CanvasGroup
     -- would clip the shadow). The content lives in an inner CanvasGroup so the
     -- whole panel can still fade uniformly on close.
+    -- Card: center-anchored so it expands open from height 0 (Rayfield-style).
+    -- Plain Frame so the native UIShadow renders fully; content in an inner
+    -- CanvasGroup that clips + fades as one unit.
+    local centerX, centerY = vp.X / 2, vp.Y / 2
     local card = Instance.new("Frame")
-    card.Size = UDim2.fromOffset(cardW, cardH)
-    card.Position = UDim2.fromOffset(cardX, fromY) -- starts below screen, slides up
+    card.AnchorPoint = Vector2.new(0.5, 0.5)
+    card.Size = UDim2.fromOffset(cardW, 0) -- starts collapsed
+    card.Position = UDim2.fromOffset(centerX, centerY)
     card.BackgroundColor3 = S.cardColor
     card.BackgroundTransparency = 1
     card.BorderSizePixel = 0
+    card.ClipsDescendants = true
     card.ZIndex = 2
     card.Parent = gui
     Util.corner(card, 26)
@@ -170,24 +176,20 @@ function DeviceSelector.run(onChoose)
     local shadow = Util.shadow(card, { blur = 40, spread = -2, transparency = 1, offset = UDim2.fromOffset(0, 12) })
 
     local content = Instance.new("CanvasGroup")
-    content.Size = UDim2.fromScale(1, 1)
+    content.Size = UDim2.fromOffset(cardW, cardH) -- fixed, so it doesn't squish as card expands
+    content.Position = UDim2.fromScale(0.5, 0.5)
+    content.AnchorPoint = Vector2.new(0.5, 0.5)
     content.BackgroundTransparency = 1
     content.BorderSizePixel = 0
     content.GroupTransparency = 1
     content.ZIndex = 2
     content.Parent = card
 
-    local cardScale = Instance.new("UIScale")
-    cardScale.Scale = 0.84
-    cardScale.Parent = card
-
-    -- macOS-style entrance: glide up from below while the card springs open with a
-    -- gentle overshoot (Back), fading in. Position uses Back too so it eases past
-    -- center then settles; fade uses Quint so it doesn't flash.
-    local POS = { 0.6, Enum.EasingStyle.Back, Enum.EasingDirection.Out }
-    local FADE = { 0.5, Enum.EasingStyle.Quint, Enum.EasingDirection.Out }
-    Util.tween(card, { Position = UDim2.fromOffset(cardX, cardY) }, POS[1], POS[2], POS[3])
-    Util.tween(cardScale, { Scale = 1 }, POS[1], POS[2], POS[3])
+    -- Rayfield-style entrance: expand height 0 -> full with Exponential easing,
+    -- fading the content/card in slightly behind it.
+    local EXP = { 0.5, Enum.EasingStyle.Exponential, Enum.EasingDirection.Out }
+    local FADE = { 0.4, Enum.EasingStyle.Exponential, Enum.EasingDirection.Out }
+    Util.tween(card, { Size = UDim2.fromOffset(cardW, cardH) }, EXP[1], EXP[2], EXP[3])
     Util.tween(card, { BackgroundTransparency = S.cardTransp }, FADE[1], FADE[2], FADE[3])
     Util.tween(cardStroke, { Transparency = S.cardStrokeTransp }, FADE[1], FADE[2], FADE[3])
     Util.tween(content, { GroupTransparency = 0 }, FADE[1], FADE[2], FADE[3])
@@ -312,16 +314,14 @@ function DeviceSelector.run(onChoose)
         closing = true
         -- macOS-style exit: reverse of the entrance. Slides down, scales, fades out
         -- as one unit (content CanvasGroup + card bg/stroke/shadow).
-        -- Exit: anticipation dip up (Back In) then drops down off-screen, fading.
-        local OUT = { 0.42, Enum.EasingStyle.Back, Enum.EasingDirection.In }
-        local OF = { 0.32, Enum.EasingStyle.Quint, Enum.EasingDirection.In }
-        Util.tween(card, { Position = UDim2.fromOffset(cardX, fromY) }, OUT[1], OUT[2], OUT[3])
-        Util.tween(cardScale, { Scale = 0.84 }, OUT[1], OUT[2], OUT[3])
-        Util.tween(card, { BackgroundTransparency = 1 }, OF[1], OF[2], OF[3])
-        Util.tween(cardStroke, { Transparency = 1 }, OF[1], OF[2], OF[3])
+        -- Rayfield-style exit: collapse height to 0 (Exponential), fade out first.
+        local EXP = { 0.45, Enum.EasingStyle.Exponential, Enum.EasingDirection.InOut }
+        local OF = { 0.25, Enum.EasingStyle.Exponential, Enum.EasingDirection.Out }
         Util.tween(content, { GroupTransparency = 1 }, OF[1], OF[2], OF[3])
+        Util.tween(card, { Size = UDim2.fromOffset(cardW, 0), BackgroundTransparency = 1 }, EXP[1], EXP[2], EXP[3])
+        Util.tween(cardStroke, { Transparency = 1 }, OF[1], OF[2], OF[3])
         if shadow then Util.tween(shadow, { Transparency = 1 }, OF[1], OF[2], OF[3]) end
-        task.delay(OUT[1] + 0.05, function()
+        task.delay(EXP[1] + 0.05, function()
             gui:Destroy()
             if onChoose then onChoose(chosen) end
         end)
