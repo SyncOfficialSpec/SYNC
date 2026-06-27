@@ -38,6 +38,27 @@ local DATA = {
     ["power"] = { 16898613699, 820, 147 },
     ["grid-3x3"] = { 16898613509, 98, 771 },
     ["command"] = { 16898613044, 563, 918 },
+    ["compass"] = { 16898613044, 514, 967 },
+    ["mail"] = { 16898613613, 820, 0 },
+    ["message-circle"] = { 16898613613, 563, 820 },
+    ["music"] = { 16898613613, 967, 563 },
+    ["image"] = { 16898613509, 306, 918 },
+    ["calendar"] = { 16898612819, 355, 918 },
+    ["file-text"] = { 16898613353, 869, 355 },
+    ["camera"] = { 16898612819, 967, 563 },
+    ["map"] = { 16898613613, 306, 771 },
+    ["gamepad-2"] = { 16898613353, 710, 967 },
+    ["sparkles"] = { 16898613777, 918, 49 },
+    ["globe"] = { 16898613509, 771, 563 },
+    ["app-window"] = { 16898612629, 612, 820 },
+    ["folder-open"] = { 16898613353, 820, 759 },
+    ["calculator"] = { 16898612819, 563, 918 },
+    ["clock"] = { 16898613044, 771, 661 },
+    ["cloud"] = { 16898613044, 918, 306 },
+    ["video"] = { 16898613869, 355, 967 },
+    ["headphones"] = { 16898613509, 306, 869 },
+    ["book-open"] = { 16898612819, 820, 355 },
+    ["github"] = { 16898613509, 0, 820 },
 }
 
 local RECT = Vector2.new(48, 48)
@@ -45,14 +66,9 @@ local RECT = Vector2.new(48, 48)
 function Icons.get(name)
     local d = DATA[name]
     if not d then return nil end
-    return {
-        Image = "rbxassetid://" .. d[1],
-        ImageRectSize = RECT,
-        ImageRectOffset = Vector2.new(d[2], d[3]),
-    }
+    return { Image = "rbxassetid://" .. d[1], ImageRectSize = RECT, ImageRectOffset = Vector2.new(d[2], d[3]) }
 end
 
--- Apply a Lucide icon to an existing ImageLabel/ImageButton.
 function Icons.apply(img, name, color)
     local d = DATA[name]
     if not d then return false end
