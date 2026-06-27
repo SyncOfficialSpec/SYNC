@@ -4,13 +4,14 @@
 
 local Util = SYNC.import("core/Util")
 
-local W, H     = 50, 30
-local KW, KH   = 26, 24       -- knob is a wide rounded rectangle
+local W, H     = 56, 32
+local KW, KH   = 30, 26       -- big rounded-rectangle knob, fills most of the track
+local KRADIUS  = 11           -- generous corner (rounded rect, not a circle)
 local INSET_X  = 3
-local TRACK_OFF = Color3.fromRGB(58, 58, 62)    -- recessed dark grey
-local TRACK_ON  = Color3.fromRGB(120, 120, 126) -- lighter grey when on
-local KNOB_OFF  = Color3.fromRGB(210, 210, 214) -- light grey knob
-local KNOB_ON   = Color3.fromRGB(248, 248, 250) -- white knob
+local TRACK_OFF = Color3.fromRGB(78, 78, 84)    -- grey off-track
+local TRACK_ON  = Color3.fromRGB(128, 128, 134) -- lighter grey when on
+local KNOB_OFF  = Color3.fromRGB(245, 245, 248) -- near-white knob
+local KNOB_ON   = Color3.fromRGB(255, 255, 255) -- white knob
 
 local Switch = {}
 
@@ -39,7 +40,7 @@ function Switch.create(parent, initial, onChange)
     knob.BorderSizePixel = 0
     knob.ZIndex = baseZ + 1
     knob.Parent = track
-    Util.corner(knob, 9) -- rounded rectangle, not a circle
+    Util.corner(knob, KRADIUS) -- rounded rectangle, not a circle
     Util.shadow(knob, { blur = 6, transparency = 0.6, offset = UDim2.fromOffset(0, 1) })
 
     local function render(animate)
