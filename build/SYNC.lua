@@ -613,16 +613,20 @@ function DeviceSelector.run(onChoose)
     content.Parent = card
 
     local cardScale = Instance.new("UIScale")
-    cardScale.Scale = 0.9
+    cardScale.Scale = 0.84
     cardScale.Parent = card
 
-    -- macOS-style entrance: slide up from below, scale up, fade in (smooth Quint)
-    local IN = { 0.55, Enum.EasingStyle.Quint, Enum.EasingDirection.Out }
-    Util.tween(card, { Position = UDim2.fromOffset(cardX, cardY), BackgroundTransparency = S.cardTransp }, IN[1], IN[2], IN[3])
-    Util.tween(cardStroke, { Transparency = S.cardStrokeTransp }, IN[1], IN[2], IN[3])
-    Util.tween(content, { GroupTransparency = 0 }, IN[1], IN[2], IN[3])
-    Util.tween(cardScale, { Scale = 1 }, IN[1], IN[2], IN[3])
-    if shadow then Util.tween(shadow, { Transparency = 0.5 }, IN[1], IN[2], IN[3]) end
+    -- macOS-style entrance: glide up from below while the card springs open with a
+    -- gentle overshoot (Back), fading in. Position uses Back too so it eases past
+    -- center then settles; fade uses Quint so it doesn't flash.
+    local POS = { 0.6, Enum.EasingStyle.Back, Enum.EasingDirection.Out }
+    local FADE = { 0.5, Enum.EasingStyle.Quint, Enum.EasingDirection.Out }
+    Util.tween(card, { Position = UDim2.fromOffset(cardX, cardY) }, POS[1], POS[2], POS[3])
+    Util.tween(cardScale, { Scale = 1 }, POS[1], POS[2], POS[3])
+    Util.tween(card, { BackgroundTransparency = S.cardTransp }, FADE[1], FADE[2], FADE[3])
+    Util.tween(cardStroke, { Transparency = S.cardStrokeTransp }, FADE[1], FADE[2], FADE[3])
+    Util.tween(content, { GroupTransparency = 0 }, FADE[1], FADE[2], FADE[3])
+    if shadow then Util.tween(shadow, { Transparency = 0.5 }, FADE[1], FADE[2], FADE[3]) end
 
     -- Close (thin Lucide X)
     local closeBtn = Instance.new("ImageButton")
@@ -743,12 +747,15 @@ function DeviceSelector.run(onChoose)
         closing = true
         -- macOS-style exit: reverse of the entrance. Slides down, scales, fades out
         -- as one unit (content CanvasGroup + card bg/stroke/shadow).
-        local OUT = { 0.45, Enum.EasingStyle.Quint, Enum.EasingDirection.In }
-        Util.tween(card, { Position = UDim2.fromOffset(cardX, fromY), BackgroundTransparency = 1 }, OUT[1], OUT[2], OUT[3])
-        Util.tween(cardStroke, { Transparency = 1 }, OUT[1], OUT[2], OUT[3])
-        Util.tween(content, { GroupTransparency = 1 }, OUT[1], OUT[2], OUT[3])
-        Util.tween(cardScale, { Scale = 0.9 }, OUT[1], OUT[2], OUT[3])
-        if shadow then Util.tween(shadow, { Transparency = 1 }, OUT[1], OUT[2], OUT[3]) end
+        -- Exit: anticipation dip up (Back In) then drops down off-screen, fading.
+        local OUT = { 0.42, Enum.EasingStyle.Back, Enum.EasingDirection.In }
+        local OF = { 0.32, Enum.EasingStyle.Quint, Enum.EasingDirection.In }
+        Util.tween(card, { Position = UDim2.fromOffset(cardX, fromY) }, OUT[1], OUT[2], OUT[3])
+        Util.tween(cardScale, { Scale = 0.84 }, OUT[1], OUT[2], OUT[3])
+        Util.tween(card, { BackgroundTransparency = 1 }, OF[1], OF[2], OF[3])
+        Util.tween(cardStroke, { Transparency = 1 }, OF[1], OF[2], OF[3])
+        Util.tween(content, { GroupTransparency = 1 }, OF[1], OF[2], OF[3])
+        if shadow then Util.tween(shadow, { Transparency = 1 }, OF[1], OF[2], OF[3]) end
         task.delay(OUT[1] + 0.05, function()
             gui:Destroy()
             if onChoose then onChoose(chosen) end
