@@ -458,9 +458,9 @@ local WHITE  = Color3.fromRGB(255, 255, 255)
 
 -- Per-device tile gradient + Lucide glyph
 local DEVICES = {
-    { id = "mobile",  title = "Mobile",  desc = "Phone-optimized layout",  icon = "smartphone",
+    { id = "mobile",  title = "Mobile",  desc = "Phone optimized layout",  icon = "smartphone",
       top = Color3.fromRGB(52, 199, 89),  bot = Color3.fromRGB(40, 167, 69) },
-    { id = "tablet",  title = "Tablet",  desc = "Tablet-optimized layout", icon = "tablet",
+    { id = "tablet",  title = "Tablet",  desc = "Tablet optimized layout", icon = "tablet",
       top = Color3.fromRGB(10, 132, 255), bot = Color3.fromRGB(0, 96, 223) },
     { id = "desktop", title = "Desktop", desc = "Full desktop experience", icon = "monitor",
       top = Color3.fromRGB(94, 92, 230),  bot = Color3.fromRGB(75, 63, 214) },
@@ -489,11 +489,13 @@ local function tw(inst, props, preset)
     return Util.tween(inst, props, preset[1], preset[2], preset[3])
 end
 
--- Colored icon tile with a white Lucide glyph
+-- Colored icon tile with a white Lucide glyph. Anchored at center so its hover
+-- pop scales evenly. Returns the tile frame and its UIScale.
 local function buildTile(parent, device)
     local tile = Instance.new("Frame")
     tile.Size = UDim2.fromOffset(50, 50)
-    tile.Position = UDim2.fromOffset(14, 12)
+    tile.AnchorPoint = Vector2.new(0.5, 0.5)
+    tile.Position = UDim2.fromOffset(14 + 25, 12 + 25)
     tile.BackgroundColor3 = device.top
     tile.BorderSizePixel = 0
     tile.ZIndex = 5
@@ -505,6 +507,9 @@ local function buildTile(parent, device)
     grad.Rotation = 90
     grad.Parent = tile
 
+    local scale = Instance.new("UIScale")
+    scale.Parent = tile
+
     local glyph = Instance.new("ImageLabel")
     glyph.Size = UDim2.fromOffset(28, 28)
     glyph.AnchorPoint = Vector2.new(0.5, 0.5)
@@ -514,7 +519,7 @@ local function buildTile(parent, device)
     glyph.Parent = tile
     Icons.apply(glyph, device.icon, WHITE)
 
-    return tile, glyph
+    return tile, scale
 end
 
 -- Selected checkmark: accent circle + white Lucide check. Returns { show, hide }
@@ -672,7 +677,8 @@ function DeviceSelector.run(onChoose)
     -- Continue button (confirms the selection)
     local continueBtn = Instance.new("TextButton")
     continueBtn.Size = UDim2.fromOffset(optW, btnH)
-    continueBtn.Position = UDim2.fromOffset(optX, btnY)
+    continueBtn.AnchorPoint = Vector2.new(0.5, 0.5)
+    continueBtn.Position = UDim2.fromOffset(cardW / 2, btnY + btnH / 2) -- center anchor
     continueBtn.BackgroundColor3 = ACCENT
     continueBtn.AutoButtonColor = false
     continueBtn.Text = "Continue"
@@ -747,7 +753,8 @@ function DeviceSelector.run(onChoose)
         opt.Text = ""
         opt.AutoButtonColor = false
         opt.Size = UDim2.fromOffset(optW, optH)
-        opt.Position = UDim2.fromOffset(optX, yPos)
+        opt.AnchorPoint = Vector2.new(0.5, 0.5)
+        opt.Position = UDim2.fromOffset(cardW / 2, yPos + optH / 2) -- center anchor: hover grows evenly
         opt.BackgroundColor3 = S.rowColor
         opt.BackgroundTransparency = S.rowTransp
         opt.BorderSizePixel = 0
@@ -756,7 +763,7 @@ function DeviceSelector.run(onChoose)
         Util.corner(opt, 16)
         local optStroke = Util.stroke(opt, ACCENT, 2, 1)
 
-        local tile = buildTile(opt, device)
+        local tile, tileScale = buildTile(opt, device)
 
         local titleLabel = Instance.new("TextLabel")
         titleLabel.Text = device.title
@@ -790,20 +797,22 @@ function DeviceSelector.run(onChoose)
         optScale.Parent = opt
 
         local data = {
-            id = device.id, bg = opt, stroke = optStroke, tile = tile,
+            id = device.id, bg = opt, stroke = optStroke, tile = tile, tileScale = tileScale,
             label = titleLabel, desc = descLabel, check = check, scale = optScale,
         }
         options[#options + 1] = data
 
         opt.MouseEnter:Connect(function()
             if data.id ~= selectedId then setRow(data, "hover") end
-            tw(optScale, { Scale = 1.02 }, QUICK)
+            tw(optScale, { Scale = 1.03 }, QUICK)
+            tw(tileScale, { Scale = 1.1 }, SPRING)
         end)
         opt.MouseLeave:Connect(function()
             setRow(data, data.id == selectedId and "selected" or "normal")
             tw(optScale, { Scale = 1 }, SMOOTH)
+            tw(tileScale, { Scale = 1 }, SMOOTH)
         end)
-        opt.MouseButton1Down:Connect(function() tw(optScale, { Scale = 0.97 }, QUICK) end)
+        opt.MouseButton1Down:Connect(function() tw(optScale, { Scale = 0.98 }, QUICK) end)
         opt.MouseButton1Click:Connect(function()
             applySelection(data.id, true)
             tw(optScale, { Scale = 1 }, SPRING)
