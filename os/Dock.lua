@@ -1,12 +1,11 @@
 -- SYNC / os / Dock
--- macOS-style dock with cursor-proximity magnification (fisheye). Icons grow
--- toward the cursor with a smooth cosine falloff, push their neighbours apart,
--- show their name on hover, and bounce when clicked. Slides up on first show.
---
--- Dock.create(parent) -> { destroy } ; parent is a ScreenGui/Frame to host it.
+-- macOS-style dock with cursor-proximity magnification, auto-hide, launch bounce,
+-- and three screen positions (Bottom / Left / Right). The dock relayouts to the
+-- chosen edge: bottom = horizontal, left/right = vertical. Size + magnification
+-- are adjustable and persisted. Dock.create(parent, onAppClick) -> { ... }.
 
-local RunService        = game:GetService("RunService")
-local UserInputService  = game:GetService("UserInputService")
+local RunService       = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
 
 local Theme = SYNC.import("core/Theme")
 local Util  = SYNC.import("core/Util")
@@ -16,19 +15,17 @@ local Dock = {}
 
 local WHITE = Color3.fromRGB(255, 255, 255)
 
--- Tunables
-local BASE          = 52    -- resting icon size (px)
-local MAX           = 94    -- size directly under the cursor
-local GAP           = 14    -- gap between icons
-local INFLUENCE     = 150   -- horizontal reach of the magnification (px)
-local BOTTOM_MARGIN = 14    -- gap from screen bottom to dock
-local PADX          = 12    -- dock inner horizontal padding
-local PADY          = 8     -- dock inner vertical padding
-local BOUNCE_AMP    = 28    -- launch bounce height
-local BOUNCE_DUR    = 0.5
+local BASE_DEFAULT = 52
+local GAP          = 14
+local INFLUENCE    = 150
+local MARGIN       = 14   -- gap from the screen edge
+local PADX         = 12   -- dock inner padding along its length
+local PADY         = 8    -- dock inner padding across its thickness
+local BOUNCE_AMP   = 28
+local BOUNCE_DUR   = 0.5
+local REVEAL_PX    = 4
+local TOP_INSET    = 30   -- leave room for the menu bar (vertical docks)
 
--- App roster: name, Lucide glyph, squircle gradient. A few real-ish macOS apps
--- plus some "Test" tiles, as requested.
 local APPS = {
     { name = "Finder",    icon = "folder",         top = Color3.fromRGB(70, 170, 255),  bot = Color3.fromRGB(20, 110, 230) },
     { name = "Safari",    icon = "compass",        top = Color3.fromRGB(90, 200, 255),  bot = Color3.fromRGB(20, 120, 235) },
@@ -47,7 +44,7 @@ local APPS = {
 
 local function buildIcon(parent, app)
     local holder = Instance.new("ImageButton")
-    holder.Size = UDim2.fromOffset(BASE, BASE)
+    holder.Size = UDim2.fromOffset(BASE_DEFAULT, BASE_DEFAULT)
     holder.AnchorPoint = Vector2.new(0.5, 1)
     holder.BackgroundTransparency = 1
     holder.AutoButtonColor = false
@@ -61,13 +58,13 @@ local function buildIcon(parent, app)
     tile.ZIndex = 6
     tile.Parent = holder
     local corner = Instance.new("UICorner")
-    corner.CornerRadius = UDim.new(0.2237, 0) -- squircle-ish, scales with size
+    corner.CornerRadius = UDim.new(0.2237, 0)
     corner.Parent = tile
     local grad = Instance.new("UIGradient")
     grad.Color = ColorSequence.new(app.top, app.bot)
     grad.Rotation = 90
     grad.Parent = tile
-    Util.stroke(tile, WHITE, 1, 0.86) -- subtle top highlight edge
+    Util.stroke(tile, WHITE, 1, 0.86)
 
     local glyph = Instance.new("ImageLabel")
     glyph.Size = UDim2.fromScale(0.56, 0.56)
@@ -78,13 +75,11 @@ local function buildIcon(parent, app)
     glyph.Parent = tile
     Icons.apply(glyph, app.icon, app.dark and Color3.fromRGB(40, 40, 46) or WHITE)
 
-    -- Name label (shown on hover, above the icon)
     local label = Instance.new("TextLabel")
-    label.AutoLocalize = false
     label.AnchorPoint = Vector2.new(0.5, 1)
     label.Position = UDim2.new(0.5, 0, 0, -10)
-    label.Size = UDim2.fromOffset(0, 22)
     label.AutomaticSize = Enum.AutomaticSize.X
+    label.Size = UDim2.fromOffset(0, 22)
     label.BackgroundColor3 = Color3.fromRGB(30, 30, 36)
     label.BackgroundTransparency = 1
     label.Text = "  " .. app.name .. "  "
@@ -97,79 +92,45 @@ local function buildIcon(parent, app)
     Util.corner(label, 7)
     local lstroke = Util.stroke(label, WHITE, 1, 1)
 
-    -- Running indicator dot (sits just under the icon, inside the bar padding)
-    if app.running then
-        local dot = Instance.new("Frame")
-        dot.Size = UDim2.fromOffset(4, 4)
-        dot.AnchorPoint = Vector2.new(0.5, 0)
-        dot.Position = UDim2.new(0.5, 0, 1, 5)
-        dot.BackgroundColor3 = WHITE
-        dot.BackgroundTransparency = 0.25
-        dot.BorderSizePixel = 0
-        dot.ZIndex = 6
-        dot.Parent = holder
-        Util.corner(dot, 2)
-    end
-
-    return { holder = holder, label = label, lstroke = lstroke, size = BASE, bounceStart = nil, restCenter = 0, pressed = false, app = app.name }
+    return {
+        holder = holder, label = label, lstroke = lstroke, app = app.name,
+        size = BASE_DEFAULT, bounceStart = nil, restCenter = 0, centerMain = 0,
+        pressed = false, labelShown = false,
+    }
 end
 
 function Dock.create(parent, onAppClick)
     local vp = Util.viewport()
-    local cx = vp.X / 2
-    local stripH = MAX + 60
-    local baselineY = stripH - BOTTOM_MARGIN - PADY -- in strip-local coords
-    local barLocalY = stripH - BOTTOM_MARGIN
 
-    -- Hover strip across the bottom. The bar + icons live INSIDE it so hovering
-    -- an icon doesn't fire the strip's MouseLeave (which would kill magnify).
-    local strip = Instance.new("Frame")
-    strip.AnchorPoint = Vector2.new(0.5, 1)
-    strip.Position = UDim2.fromOffset(cx, vp.Y)
-    strip.Size = UDim2.fromOffset(vp.X, stripH)
-    strip.BackgroundTransparency = 1
-    strip.ZIndex = 4
-    strip.Parent = parent
-
-    -- Dock bar (frosted, rounded, soft shadow)
+    -- Dock bar
     local bar = Instance.new("Frame")
-    bar.AnchorPoint = Vector2.new(0.5, 1)
     bar.BackgroundColor3 = Color3.fromRGB(40, 40, 48)
     bar.BackgroundTransparency = 0.22
     bar.BorderSizePixel = 0
     bar.ZIndex = 5
-    bar.Parent = strip
+    bar.Parent = parent
     Util.corner(bar, 22)
     Util.stroke(bar, WHITE, 1, 0.86)
     Util.shadow(bar, { blur = 36, spread = 0, transparency = 0.55, offset = UDim2.fromOffset(0, 10) })
 
     local icons = {}
     for _, app in ipairs(APPS) do
-        local ic = buildIcon(strip, app)
-        icons[#icons + 1] = ic
+        icons[#icons + 1] = buildIcon(parent, app)
     end
 
-    -- Resting centers (for stable distance math, independent of live magnify)
-    local restingW = #icons * BASE + (#icons - 1) * GAP
-    local restLeft = cx - restingW / 2
-    for i, ic in ipairs(icons) do
-        ic.restCenter = restLeft + (i - 1) * (BASE + GAP) + BASE / 2
-    end
-
-    -- Auto-hide: the dock stays hidden off the bottom edge and only reveals when
-    -- the cursor presses against the very bottom of the screen (like macOS).
-    local REVEAL_PX = 4                       -- must touch within this of the bottom
-    local hideOffset = stripH                 -- how far down to tuck it away
+    -- Persisted, live-editable state
+    local function clamp01(x) return math.clamp(x, 0, 1) end
+    local baseSize = math.floor(40 + clamp01(tonumber(Util.load("DockSizeFrac")) or 0.4) * 32 + 0.5)
+    local magScale = 1.0 + clamp01(tonumber(Util.load("DockMagFrac")) or 0.55) * 1.4
+    local pos = Util.load("DockPosition") or "bottom"
     local alwaysShow = Util.load("DockAlwaysShow") == "true"
-    local shown = false
-    local curOff = hideOffset                 -- current slide offset (starts hidden)
-    local offVel = 0                          -- spring velocity for the slide
 
-    -- Press feedback + click (bounce + app action). Labels are handled in the
-    -- render loop (poll-based) so a missed MouseLeave can't leave one stuck.
+    local shown = false
+    local curOff = 200
+    local offVel = 0
+
+    -- Press feedback + click (labels handled in the loop)
     for _, ic in ipairs(icons) do
-        ic.labelShown = false
-        ic.center = ic.restCenter
         ic.holder.MouseButton1Down:Connect(function() ic.pressed = true end)
         ic.holder.MouseButton1Up:Connect(function() ic.pressed = false end)
         ic.holder.MouseLeave:Connect(function() ic.pressed = false end)
@@ -179,61 +140,62 @@ function Dock.create(parent, onAppClick)
         end)
     end
 
-    -- Adjustable dock size + magnification (persisted, live-editable via Settings)
-    local function clamp01(x) return math.clamp(x, 0, 1) end
-    local baseSize = math.floor(40 + clamp01(tonumber(Util.load("DockSizeFrac")) or 0.4) * 32 + 0.5)
-    local magScale = 1.0 + clamp01(tonumber(Util.load("DockMagFrac")) or 0.55) * 1.4
-
     local conn
     conn = RunService.RenderStepped:Connect(function(dt)
         local m = UserInputService:GetMouseLocation()
         local mouseX, mouseY = m.X, m.Y
-        local alpha = 1 - math.exp(-dt * 16) -- frame-rate independent smoothing
+        local alpha = 1 - math.exp(-dt * 16)
 
-        -- Derived sizing (recomputed each frame so size/magnification update live)
         local BASE = baseSize
         local MAX = baseSize * magScale
-        local stripHeight = MAX + 60
-        local baselineY = stripHeight - BOTTOM_MARGIN - PADY
-        local barLocalY = stripHeight - BOTTOM_MARGIN
-        hideOffset = stripHeight
-        strip.Size = UDim2.fromOffset(vp.X, stripHeight)
-        local restingW = #icons * BASE + (#icons - 1) * GAP
-        local restLeft = cx - restingW / 2
-        for i, ic in ipairs(icons) do
-            ic.restCenter = restLeft + (i - 1) * (BASE + GAP) + BASE / 2
+        local thickness = BASE + PADY * 2
+        local isV = (pos ~= "bottom")
+        local mainCenter = isV and (TOP_INSET + (vp.Y - TOP_INSET) / 2) or (vp.X / 2)
+        local cursorMain = isV and mouseY or mouseX
+
+        -- Reveal / hide / near-dock checks per edge
+        local revealHit, hideAway, nearDock
+        if pos == "bottom" then
+            revealHit = mouseY >= vp.Y - REVEAL_PX
+            hideAway  = mouseY < vp.Y - (MAX + 40)
+            nearDock  = mouseY >= (vp.Y - thickness - MARGIN) - 30
+        elseif pos == "left" then
+            revealHit = mouseX <= REVEAL_PX
+            hideAway  = mouseX > (MAX + 40)
+            nearDock  = mouseX <= (MARGIN + thickness) + 30
+        else -- right
+            revealHit = mouseX >= vp.X - REVEAL_PX
+            hideAway  = mouseX < vp.X - (MAX + 40)
+            nearDock  = mouseX >= (vp.X - MARGIN - thickness) - 30
         end
 
-        -- Reveal/hide state. If "always show" is on, the dock is always out.
-        -- Otherwise: reveal only at the very bottom edge, hide once the cursor
-        -- moves well above the dock (hysteresis).
-        if alwaysShow then
-            shown = true
-        elseif not shown then
-            if mouseY >= vp.Y - REVEAL_PX then shown = true end
-        else
-            if mouseY < vp.Y - (MAX + 40) then shown = false end
-        end
+        if alwaysShow then shown = true
+        elseif not shown then if revealHit then shown = true end
+        else if hideAway then shown = false end end
 
-        -- Spring the slide offset so the dock eases out with a little life.
+        local hideOffset = thickness + 40
         local sdt = math.min(dt, 1 / 30)
         local targetOff = shown and 0 or hideOffset
         offVel = offVel + (-220 * (curOff - targetOff) - 26 * offVel) * sdt
         curOff = curOff + offVel * sdt
 
-        -- Magnify only when the cursor is actually near the dock vertically (so an
-        -- always-shown dock stays flat until you approach it).
-        local restTop = vp.Y - (BASE + PADY * 2) - BOTTOM_MARGIN
-        local magnifyActive = shown and (mouseY >= restTop - 30)
+        local magnifyActive = shown and nearDock
 
-        -- Target sizes from cursor proximity
+        -- Resting centers along the main axis
+        local restingLen = #icons * BASE + (#icons - 1) * GAP
+        local restStart = mainCenter - restingLen / 2
+        for i, ic in ipairs(icons) do
+            ic.restCenter = restStart + (i - 1) * (BASE + GAP) + BASE / 2
+        end
+
+        -- Magnified sizes
         for _, ic in ipairs(icons) do
             local target = BASE
             if magnifyActive then
-                local d = math.abs(mouseX - ic.restCenter)
+                local d = math.abs(cursorMain - ic.restCenter)
                 if d < INFLUENCE then
-                    local f = math.cos((d / INFLUENCE) * (math.pi / 2)) -- 1 at cursor -> 0 at edge
-                    f = f * f * (3 - 2 * f)                              -- smoothstep, softer shoulders
+                    local f = math.cos((d / INFLUENCE) * (math.pi / 2))
+                    f = f * f * (3 - 2 * f)
                     target = BASE + (MAX - BASE) * f
                 end
             end
@@ -241,35 +203,51 @@ function Dock.create(parent, onAppClick)
             ic.size = ic.size + (target - ic.size) * alpha
         end
 
-        -- Lay out centered, summing live sizes (neighbours pushed apart)
+        -- Lay out along the main axis
         local W = GAP * (#icons - 1)
         for _, ic in ipairs(icons) do W += ic.size end
-        local accX = cx - W / 2
-        local off = curOff
+        local accM = mainCenter - W / 2
+
+        local baseBottomY = vp.Y - MARGIN - PADY
+        local baseLeftX   = MARGIN + PADY
+        local baseRightX  = vp.X - MARGIN - PADY
+
         for _, ic in ipairs(icons) do
-            local center = accX + ic.size / 2
+            local cm = accM + ic.size / 2
+            ic.centerMain = cm
             local bounce = 0
             if ic.bounceStart then
                 local t = tick() - ic.bounceStart
-                if t < BOUNCE_DUR then
-                    bounce = -BOUNCE_AMP * math.sin((t / BOUNCE_DUR) * math.pi)
-                else
-                    ic.bounceStart = nil
-                end
+                if t < BOUNCE_DUR then bounce = BOUNCE_AMP * math.sin((t / BOUNCE_DUR) * math.pi)
+                else ic.bounceStart = nil end
             end
-            local lift = (ic.size - BASE) * 0.16 -- magnified icons rise a touch more
-            ic.center = center
+            local interior = (ic.size - BASE) * 0.16 + bounce
             ic.holder.Size = UDim2.fromOffset(ic.size, ic.size)
-            ic.holder.Position = UDim2.fromOffset(center, baselineY + off + bounce - lift)
-            accX += ic.size + GAP
+
+            if pos == "bottom" then
+                ic.holder.AnchorPoint = Vector2.new(0.5, 1)
+                ic.holder.Position = UDim2.fromOffset(cm, baseBottomY + curOff - interior)
+                ic.label.AnchorPoint = Vector2.new(0.5, 1)
+                ic.label.Position = UDim2.new(0.5, 0, 0, -8)
+            elseif pos == "left" then
+                ic.holder.AnchorPoint = Vector2.new(0, 0.5)
+                ic.holder.Position = UDim2.fromOffset(baseLeftX - curOff + interior, cm)
+                ic.label.AnchorPoint = Vector2.new(0, 0.5)
+                ic.label.Position = UDim2.new(1, 8, 0.5, 0)
+            else -- right
+                ic.holder.AnchorPoint = Vector2.new(1, 0.5)
+                ic.holder.Position = UDim2.fromOffset(baseRightX + curOff - interior, cm)
+                ic.label.AnchorPoint = Vector2.new(1, 0.5)
+                ic.label.Position = UDim2.new(0, -8, 0.5, 0)
+            end
+            accM += ic.size + GAP
         end
 
-        -- Labels: show the one under the cursor, hide the rest. Poll-based so it
-        -- can never get stuck (e.g. when a panel opens over the dock).
+        -- Labels (poll-based)
         local hovered = nil
         if magnifyActive then
             for _, ic in ipairs(icons) do
-                if mouseX >= ic.center - ic.size / 2 and mouseX <= ic.center + ic.size / 2 then
+                if cursorMain >= ic.centerMain - ic.size / 2 and cursorMain <= ic.centerMain + ic.size / 2 then
                     hovered = ic
                     break
                 end
@@ -284,20 +262,40 @@ function Dock.create(parent, onAppClick)
             end
         end
 
-        -- Bar wraps the icons and rides the intro offset
-        bar.Size = UDim2.fromOffset(W + PADX * 2, BASE + PADY * 2)
-        bar.Position = UDim2.fromOffset(cx, barLocalY + off)
+        -- Bar wraps the icons on the chosen edge
+        local lengthPx = W + PADX * 2
+        if pos == "bottom" then
+            bar.AnchorPoint = Vector2.new(0.5, 1)
+            bar.Size = UDim2.fromOffset(lengthPx, thickness)
+            bar.Position = UDim2.fromOffset(mainCenter, (vp.Y - MARGIN) + curOff)
+        elseif pos == "left" then
+            bar.AnchorPoint = Vector2.new(0, 0.5)
+            bar.Size = UDim2.fromOffset(thickness, lengthPx)
+            bar.Position = UDim2.fromOffset(MARGIN - curOff, mainCenter)
+        else -- right
+            bar.AnchorPoint = Vector2.new(1, 0.5)
+            bar.Size = UDim2.fromOffset(thickness, lengthPx)
+            bar.Position = UDim2.fromOffset((vp.X - MARGIN) + curOff, mainCenter)
+        end
     end)
 
     return {
         setAlwaysShow = function(v) alwaysShow = v and true or false end,
         setDockSize = function(f) baseSize = math.floor(40 + clamp01(f) * 32 + 0.5) end,
         setMagnification = function(f) magScale = 1.0 + clamp01(f) * 1.4 end,
+        setPosition = function(p)
+            pos = p
+            shown = false
+            curOff = baseSize + PADY * 2 + 40
+            offVel = 0
+        end,
         getDockFrac = function() return (baseSize - 40) / 32 end,
         getMagFrac = function() return (magScale - 1.0) / 1.4 end,
+        getPosition = function() return pos end,
         destroy = function()
             if conn then conn:Disconnect() end
-            strip:Destroy() -- bar + icons are children, go with it
+            bar:Destroy()
+            for _, ic in ipairs(icons) do ic.holder:Destroy() end
         end,
     }
 end

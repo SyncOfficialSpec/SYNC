@@ -20,7 +20,7 @@ function Slider.create(parent, initial, onChange)
     track.AnchorPoint = Vector2.new(0, 0.5)
     track.Position = UDim2.new(0, 0, 0.5, 0)
     track.Size = UDim2.new(1, 0, 0, 4)
-    track.BackgroundColor3 = Color3.fromRGB(86, 86, 92)
+    track.BackgroundColor3 = Color3.fromRGB(74, 74, 80)
     track.BorderSizePixel = 0
     track.ZIndex = baseZ
     track.Parent = parent
@@ -28,22 +28,28 @@ function Slider.create(parent, initial, onChange)
 
     local fill = Instance.new("Frame")
     fill.Size = UDim2.new(value, 0, 1, 0)
-    fill.BackgroundColor3 = Color3.fromRGB(225, 225, 230)
+    fill.BackgroundColor3 = Color3.fromRGB(236, 236, 240)
     fill.BorderSizePixel = 0
     fill.ZIndex = baseZ
     fill.Parent = track
     Util.corner(fill, 2)
 
+    -- Round knob with a touch of depth (convex shading + drop shadow), Apple style
     local knob = Instance.new("Frame")
-    knob.Size = UDim2.fromOffset(16, 16)
+    knob.Size = UDim2.fromOffset(18, 18)
     knob.AnchorPoint = Vector2.new(0.5, 0.5)
     knob.Position = UDim2.new(value, 0, 0.5, 0)
     knob.BackgroundColor3 = WHITE
     knob.BorderSizePixel = 0
     knob.ZIndex = baseZ + 1
     knob.Parent = track
-    Util.corner(knob, 8)
-    Util.shadow(knob, { blur = 6, transparency = 0.6, offset = UDim2.fromOffset(0, 1) })
+    Util.corner(knob, 9)
+    local kg = Instance.new("UIGradient")
+    kg.Color = ColorSequence.new(Color3.fromRGB(255, 255, 255), Color3.fromRGB(232, 232, 238))
+    kg.Rotation = 90
+    kg.Parent = knob
+    Util.stroke(knob, Color3.fromRGB(0, 0, 0), 1, 0.86)
+    Util.shadow(knob, { blur = 8, transparency = 0.55, offset = UDim2.fromOffset(0, 1) })
 
     -- Transparent hit area for press + drag
     local hit = Instance.new("TextButton")

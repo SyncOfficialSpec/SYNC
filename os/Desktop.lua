@@ -21,6 +21,11 @@ function Desktop.start()
     dock = Dock.create(gui, function(appName)
         if appName == "Settings" then
             Settings.open({
+                position = dock.getPosition(),
+                onPosition = function(p)
+                    dock.setPosition(p)
+                    Util.save("DockPosition", p)
+                end,
                 alwaysShow = Util.load("DockAlwaysShow") == "true",
                 onAlwaysShow = function(v)
                     Util.save("DockAlwaysShow", v and "true" or "false")

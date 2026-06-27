@@ -10,6 +10,7 @@ local Util   = SYNC.import("core/Util")
 local Icons  = SYNC.import("core/Icons")
 local Switch = SYNC.import("ui/Switch")
 local Slider = SYNC.import("ui/Slider")
+local Select = SYNC.import("ui/Select")
 
 local Settings = {}
 
@@ -26,7 +27,7 @@ function Settings.open(opts)
     opts = opts or {}
     if Settings._gui then return end
 
-    local cardW, cardH = 440, 232
+    local cardW, cardH = 440, 278
     local TB = 40 -- title bar height
 
     local gui = Instance.new("ScreenGui")
@@ -132,10 +133,10 @@ function Settings.open(opts)
     section.ZIndex = 3
     section.Parent = win
 
-    -- Grouped list (three rows with hairline separators)
+    -- Grouped list (rows with hairline separators)
     local rowH = 46
     local group = Instance.new("Frame")
-    group.Size = UDim2.fromOffset(cardW - 32, rowH * 3)
+    group.Size = UDim2.fromOffset(cardW - 32, rowH * 4)
     group.Position = UDim2.fromOffset(16, TB + 34)
     group.BackgroundColor3 = GROUP
     group.BorderSizePixel = 0
@@ -176,45 +177,62 @@ function Settings.open(opts)
         return r
     end
 
-    -- Row 1: Always show Dock (toggle)
-    local r1 = row(0, "Always show Dock")
+    -- Row 1: Dock position on screen (pop-up select)
+    local r1 = row(0, "Dock position on screen")
+    local posHolder = Instance.new("Frame")
+    posHolder.Size = UDim2.fromOffset(140, 26)
+    posHolder.AnchorPoint = Vector2.new(1, 0.5)
+    posHolder.Position = UDim2.new(1, -12, 0.5, 0)
+    posHolder.BackgroundTransparency = 1
+    posHolder.ZIndex = 4
+    posHolder.Parent = r1
+    local posLabels = { left = "Left", bottom = "Bottom", right = "Right" }
+    local cur = posLabels[opts.position or "bottom"] or "Bottom"
+    Select.create(posHolder, { "Left", "Bottom", "Right" }, cur, function(choice)
+        if opts.onPosition then opts.onPosition(string.lower(choice)) end
+    end)
+
+    divider(rowH)
+
+    -- Row 2: Always show Dock (toggle)
+    local r2 = row(rowH, "Always show Dock")
     local switchHolder = Instance.new("Frame")
     switchHolder.Size = UDim2.fromOffset(54, 26)
     switchHolder.AnchorPoint = Vector2.new(1, 0.5)
     switchHolder.Position = UDim2.new(1, -14, 0.5, 0)
     switchHolder.BackgroundTransparency = 1
     switchHolder.ZIndex = 4
-    switchHolder.Parent = r1
+    switchHolder.Parent = r2
     Switch.create(switchHolder, opts.alwaysShow, function(v)
         if opts.onAlwaysShow then opts.onAlwaysShow(v) end
     end)
 
-    divider(rowH)
+    divider(rowH * 2)
 
-    -- Row 2: Magnification (slider)
-    local r2 = row(rowH, "Magnification")
+    -- Row 3: Magnification (slider)
+    local r3 = row(rowH * 2, "Magnification")
     local magHolder = Instance.new("Frame")
     magHolder.Size = UDim2.fromOffset(170, rowH)
     magHolder.AnchorPoint = Vector2.new(1, 0.5)
     magHolder.Position = UDim2.new(1, -16, 0.5, 0)
     magHolder.BackgroundTransparency = 1
     magHolder.ZIndex = 4
-    magHolder.Parent = r2
+    magHolder.Parent = r3
     Slider.create(magHolder, opts.mag or 0.55, function(f)
         if opts.onMag then opts.onMag(f) end
     end)
 
-    divider(rowH * 2)
+    divider(rowH * 3)
 
-    -- Row 3: Dock Size (slider)
-    local r3 = row(rowH * 2, "Dock Size")
+    -- Row 4: Dock Size (slider)
+    local r4 = row(rowH * 3, "Dock Size")
     local sizeHolder = Instance.new("Frame")
     sizeHolder.Size = UDim2.fromOffset(170, rowH)
     sizeHolder.AnchorPoint = Vector2.new(1, 0.5)
     sizeHolder.Position = UDim2.new(1, -16, 0.5, 0)
     sizeHolder.BackgroundTransparency = 1
     sizeHolder.ZIndex = 4
-    sizeHolder.Parent = r3
+    sizeHolder.Parent = r4
     Slider.create(sizeHolder, opts.dockSize or 0.4, function(f)
         if opts.onDockSize then opts.onDockSize(f) end
     end)
