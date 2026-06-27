@@ -587,14 +587,13 @@ function DeviceSelector.run(onChoose)
     gui.Name = "SYNC_DeviceSelector"
     Util.mount(gui)
 
+    -- Invisible backdrop (no screen dimming, just keeps layering consistent)
     local backdrop = Instance.new("Frame")
     backdrop.Size = UDim2.fromScale(1, 1)
-    backdrop.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
     backdrop.BackgroundTransparency = 1
     backdrop.BorderSizePixel = 0
     backdrop.ZIndex = 1
     backdrop.Parent = gui
-    Util.tween(backdrop, { BackgroundTransparency = 1 - S.backdropA }, 0.45)
 
     -- Card (CanvasGroup so the whole panel fades uniformly on close)
     local card = Instance.new("CanvasGroup")
@@ -689,8 +688,6 @@ function DeviceSelector.run(onChoose)
     continueBtn.ZIndex = 3
     continueBtn.Parent = card
     Util.corner(continueBtn, 14)
-    local continueScale = Instance.new("UIScale")
-    continueScale.Parent = continueBtn
 
     local function setContinueEnabled(on)
         continueBtn.Active = on
@@ -793,29 +790,26 @@ function DeviceSelector.run(onChoose)
 
         local check = buildCheck(opt)
 
-        local optScale = Instance.new("UIScale")
-        optScale.Parent = opt
-
         local data = {
             id = device.id, bg = opt, stroke = optStroke, tile = tile, tileScale = tileScale,
-            label = titleLabel, desc = descLabel, check = check, scale = optScale,
+            label = titleLabel, desc = descLabel, check = check,
         }
         options[#options + 1] = data
 
+        -- Hover/select life comes from the tile pop + row highlight only (no text
+        -- scaling: UIScale on text re-rasterizes at fractional sizes and shimmers).
         opt.MouseEnter:Connect(function()
             if data.id ~= selectedId then setRow(data, "hover") end
-            tw(optScale, { Scale = 1.03 }, QUICK)
             tw(tileScale, { Scale = 1.1 }, SPRING)
         end)
         opt.MouseLeave:Connect(function()
             setRow(data, data.id == selectedId and "selected" or "normal")
-            tw(optScale, { Scale = 1 }, SMOOTH)
             tw(tileScale, { Scale = 1 }, SMOOTH)
         end)
-        opt.MouseButton1Down:Connect(function() tw(optScale, { Scale = 0.98 }, QUICK) end)
+        opt.MouseButton1Down:Connect(function() tw(tileScale, { Scale = 1.04 }, QUICK) end)
         opt.MouseButton1Click:Connect(function()
             applySelection(data.id, true)
-            tw(optScale, { Scale = 1 }, SPRING)
+            tw(tileScale, { Scale = 1.1 }, SPRING)
         end)
     end
 
@@ -833,11 +827,10 @@ function DeviceSelector.run(onChoose)
         tw(continueBtn, { BackgroundColor3 = ACCENT }, SMOOTH)
     end)
     continueBtn.MouseButton1Down:Connect(function()
-        if continueBtn.Active then tw(continueScale, { Scale = 0.97 }, QUICK) end
+        if continueBtn.Active then tw(continueBtn, { BackgroundColor3 = Color3.fromRGB(0, 102, 214) }, QUICK) end
     end)
     continueBtn.MouseButton1Click:Connect(function()
         if not continueBtn.Active or not selectedId then return end
-        tw(continueScale, { Scale = 1 }, SPRING)
         Util.save("DevicePref", selectedId)
         closeMenu(selectedId)
     end)
