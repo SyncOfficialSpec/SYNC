@@ -180,6 +180,10 @@ function Dock.create(parent, onAppClick)
         ic.holder.MouseButton1Up:Connect(function() ic.pressed = false end)
         ic.holder.MouseButton1Click:Connect(function()
             ic.bounceStart = tick()
+            -- Hide the hover label now: opening an app steals focus so MouseLeave
+            -- may never fire, leaving the tooltip stuck on screen.
+            Util.tween(ic.label, { TextTransparency = 1, BackgroundTransparency = 1 }, 0.12)
+            Util.tween(ic.lstroke, { Transparency = 1 }, 0.12)
             if onAppClick then onAppClick(ic.app) end
         end)
     end
