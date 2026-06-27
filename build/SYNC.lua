@@ -350,6 +350,78 @@ end
 return Util
 end)
 
+SYNC.define("ui/Switch", function()
+-- SYNC / ui / Switch
+-- macOS-style toggle switch. Switch.create(parent, initial, onChange) -> { set, get }
+-- Animates the knob slide + track color (gray -> system green).
+
+local Util = SYNC.import("core/Util")
+
+local Switch = {}
+
+local W, H = 46, 28
+local KNOB = 24
+local GREEN = Color3.fromRGB(48, 209, 88)
+local OFF = Color3.fromRGB(90, 90, 98)
+local WHITE = Color3.fromRGB(255, 255, 255)
+
+function Switch.create(parent, initial, onChange)
+    local value = initial and true or false
+
+    local track = Instance.new("TextButton")
+    track.Text = ""
+    track.AutoButtonColor = false
+    track.Size = UDim2.fromOffset(W, H)
+    track.BackgroundColor3 = value and GREEN or OFF
+    track.BorderSizePixel = 0
+    track.Parent = parent
+    Util.corner(track, H / 2)
+
+    local knob = Instance.new("Frame")
+    knob.Size = UDim2.fromOffset(KNOB, KNOB)
+    knob.AnchorPoint = Vector2.new(value and 1 or 0, 0.5)
+    knob.Position = UDim2.new(value and 1 or 0, value and -2 or 2, 0.5, 0)
+    knob.BackgroundColor3 = WHITE
+    knob.BorderSizePixel = 0
+    knob.Parent = track
+    Util.corner(knob, KNOB / 2)
+    Util.shadow(knob, { blur = 8, transparency = 0.7, offset = UDim2.fromOffset(0, 1) })
+
+    local function render(animate)
+        local props = {
+            [knob] = {
+                AnchorPoint = Vector2.new(value and 1 or 0, 0.5),
+                Position = UDim2.new(value and 1 or 0, value and -2 or 2, 0.5, 0),
+            },
+            [track] = { BackgroundColor3 = value and GREEN or OFF },
+        }
+        if animate then
+            Util.tween(knob, props[knob], 0.18, Enum.EasingStyle.Quart)
+            Util.tween(track, props[track], 0.18)
+        else
+            for inst, p in pairs(props) do for k, v in pairs(p) do inst[k] = v end end
+        end
+    end
+
+    track.MouseButton1Click:Connect(function()
+        value = not value
+        render(true)
+        if onChange then onChange(value) end
+    end)
+
+    return {
+        instance = track,
+        get = function() return value end,
+        set = function(v, animate)
+            value = v and true or false
+            render(animate ~= false)
+        end,
+    }
+end
+
+return Switch
+end)
+
 SYNC.define("os/Boot", function()
 -- SYNC / os / Boot
 -- macOS-style boot screen: black backdrop, Apple logo, thin progress bar.
@@ -453,8 +525,9 @@ SYNC.define("os/Desktop", function()
 -- The desktop you land on after choosing "Desktop": a wallpaper plus the dock.
 -- Menu bar and windows come next. Desktop.start() -> { destroy }.
 
-local Util = SYNC.import("core/Util")
-local Dock = SYNC.import("os/Dock")
+local Util     = SYNC.import("core/Util")
+local Dock     = SYNC.import("os/Dock")
+local Settings = SYNC.import("os/Settings")
 
 local Desktop = {}
 
@@ -464,7 +537,18 @@ function Desktop.start()
     gui.Name = "SYNC_Desktop"
     Util.mount(gui)
 
-    local dock = Dock.create(gui)
+    local dock
+    dock = Dock.create(gui, function(appName)
+        if appName == "Settings" then
+            Settings.open({
+                alwaysShow = Util.load("DockAlwaysShow") == "true",
+                onAlwaysShow = function(v)
+                    Util.save("DockAlwaysShow", v and "true" or "false")
+                    dock.setAlwaysShow(v)
+                end,
+            })
+        end
+    end)
 
     return {
         gui = gui,
@@ -918,9 +1002,9 @@ local BOUNCE_DUR    = 0.5
 -- App roster: name, Lucide glyph, squircle gradient. A few real-ish macOS apps
 -- plus some "Test" tiles, as requested.
 local APPS = {
-    { name = "Finder",    icon = "folder",         top = Color3.fromRGB(70, 170, 255),  bot = Color3.fromRGB(20, 110, 230) },
-    { name = "Safari",    icon = "compass",        top = Color3.fromRGB(90, 200, 255),  bot = Color3.fromRGB(20, 120, 235) },
-    { name = "Messages",  icon = "message-circle", top = Color3.fromRGB(90, 220, 110),  bot = Color3.fromRGB(40, 180, 70) },
+    { name = "Finder",    icon = "folder",         top = Color3.fromRGB(70, 170, 255),  bot = Color3.fromRGB(20, 110, 230), running = true },
+    { name = "Safari",    icon = "compass",        top = Color3.fromRGB(90, 200, 255),  bot = Color3.fromRGB(20, 120, 235), running = true },
+    { name = "Messages",  icon = "message-circle", top = Color3.fromRGB(90, 220, 110),  bot = Color3.fromRGB(40, 180, 70), running = true },
     { name = "Mail",      icon = "mail",           top = Color3.fromRGB(80, 180, 255),  bot = Color3.fromRGB(30, 120, 240) },
     { name = "Maps",      icon = "map",            top = Color3.fromRGB(120, 215, 130), bot = Color3.fromRGB(70, 175, 90) },
     { name = "Photos",    icon = "image",          top = Color3.fromRGB(255, 120, 160), bot = Color3.fromRGB(255, 175, 70) },
@@ -985,10 +1069,24 @@ local function buildIcon(parent, app)
     Util.corner(label, 7)
     local lstroke = Util.stroke(label, WHITE, 1, 1)
 
-    return { holder = holder, label = label, lstroke = lstroke, size = BASE, bounceStart = nil, restCenter = 0 }
+    -- Running indicator dot (sits just under the icon, inside the bar padding)
+    if app.running then
+        local dot = Instance.new("Frame")
+        dot.Size = UDim2.fromOffset(4, 4)
+        dot.AnchorPoint = Vector2.new(0.5, 0)
+        dot.Position = UDim2.new(0.5, 0, 1, 5)
+        dot.BackgroundColor3 = WHITE
+        dot.BackgroundTransparency = 0.25
+        dot.BorderSizePixel = 0
+        dot.ZIndex = 6
+        dot.Parent = holder
+        Util.corner(dot, 2)
+    end
+
+    return { holder = holder, label = label, lstroke = lstroke, size = BASE, bounceStart = nil, restCenter = 0, pressed = false, app = app.name }
 end
 
-function Dock.create(parent)
+function Dock.create(parent, onAppClick)
     local vp = Util.viewport()
     local cx = vp.X / 2
     local stripH = MAX + 60
@@ -1034,20 +1132,28 @@ function Dock.create(parent)
     -- the cursor presses against the very bottom of the screen (like macOS).
     local REVEAL_PX = 4                       -- must touch within this of the bottom
     local hideOffset = stripH                 -- how far down to tuck it away
+    local alwaysShow = Util.load("DockAlwaysShow") == "true"
     local shown = false
     local curOff = hideOffset                 -- current slide offset (starts hidden)
+    local offVel = 0                          -- spring velocity for the slide
 
-    -- Hover labels + click bounce
+    -- Hover labels + press feedback + click (bounce + app action)
     for _, ic in ipairs(icons) do
         ic.holder.MouseEnter:Connect(function()
             Util.tween(ic.label, { TextTransparency = 0, BackgroundTransparency = 0.1 }, 0.15)
             Util.tween(ic.lstroke, { Transparency = 0.7 }, 0.15)
         end)
         ic.holder.MouseLeave:Connect(function()
+            ic.pressed = false
             Util.tween(ic.label, { TextTransparency = 1, BackgroundTransparency = 1 }, 0.15)
             Util.tween(ic.lstroke, { Transparency = 1 }, 0.15)
         end)
-        ic.holder.MouseButton1Click:Connect(function() ic.bounceStart = tick() end)
+        ic.holder.MouseButton1Down:Connect(function() ic.pressed = true end)
+        ic.holder.MouseButton1Up:Connect(function() ic.pressed = false end)
+        ic.holder.MouseButton1Click:Connect(function()
+            ic.bounceStart = tick()
+            if onAppClick then onAppClick(ic.app) end
+        end)
     end
 
     local conn
@@ -1056,15 +1162,22 @@ function Dock.create(parent)
         local mouseX, mouseY = m.X, m.Y
         local alpha = 1 - math.exp(-dt * 16) -- frame-rate independent smoothing
 
-        -- Reveal/hide state (hysteresis: reveal only at the very bottom edge,
-        -- hide once the cursor moves well above the dock).
-        if not shown then
+        -- Reveal/hide state. If "always show" is on, the dock is always out.
+        -- Otherwise: reveal only at the very bottom edge, hide once the cursor
+        -- moves well above the dock (hysteresis).
+        if alwaysShow then
+            shown = true
+        elseif not shown then
             if mouseY >= vp.Y - REVEAL_PX then shown = true end
         else
             if mouseY < vp.Y - (MAX + 40) then shown = false end
         end
+
+        -- Spring the slide offset so the dock eases out with a little life.
+        local sdt = math.min(dt, 1 / 30)
         local targetOff = shown and 0 or hideOffset
-        curOff = curOff + (targetOff - curOff) * (1 - math.exp(-dt * 12))
+        offVel = offVel + (-220 * (curOff - targetOff) - 26 * offVel) * sdt
+        curOff = curOff + offVel * sdt
 
         -- Target sizes from cursor proximity (only while shown)
         for _, ic in ipairs(icons) do
@@ -1073,9 +1186,11 @@ function Dock.create(parent)
                 local d = math.abs(mouseX - ic.restCenter)
                 if d < INFLUENCE then
                     local f = math.cos((d / INFLUENCE) * (math.pi / 2)) -- 1 at cursor -> 0 at edge
+                    f = f * f * (3 - 2 * f)                              -- smoothstep, softer shoulders
                     target = BASE + (MAX - BASE) * f
                 end
             end
+            if ic.pressed then target = target * 0.9 end
             ic.size = ic.size + (target - ic.size) * alpha
         end
 
@@ -1095,8 +1210,9 @@ function Dock.create(parent)
                     ic.bounceStart = nil
                 end
             end
+            local lift = (ic.size - BASE) * 0.16 -- magnified icons rise a touch more
             ic.holder.Size = UDim2.fromOffset(ic.size, ic.size)
-            ic.holder.Position = UDim2.fromOffset(center, baselineY + off + bounce)
+            ic.holder.Position = UDim2.fromOffset(center, baselineY + off + bounce - lift)
             accX += ic.size + GAP
         end
 
@@ -1106,6 +1222,7 @@ function Dock.create(parent)
     end)
 
     return {
+        setAlwaysShow = function(v) alwaysShow = v and true or false end,
         destroy = function()
             if conn then conn:Disconnect() end
             strip:Destroy() -- bar + icons are children, go with it
@@ -1114,6 +1231,179 @@ function Dock.create(parent)
 end
 
 return Dock
+end)
+
+SYNC.define("os/Settings", function()
+-- SYNC / os / Settings
+-- Apple-style settings panel opened from the dock's Settings icon. For now it
+-- holds the Dock section with an "Always show Dock" toggle (off by default = the
+-- dock auto-hides and only appears when the cursor touches the bottom edge).
+--
+-- Settings.open({ alwaysShow = bool, onAlwaysShow = function(v) }) -- one at a time
+
+local Theme  = SYNC.import("core/Theme")
+local Util   = SYNC.import("core/Util")
+local Icons  = SYNC.import("core/Icons")
+local Switch = SYNC.import("ui/Switch")
+
+local Settings = {}
+
+local WHITE = Color3.fromRGB(255, 255, 255)
+local CARD  = Color3.fromRGB(40, 40, 48)
+
+Settings._gui = nil
+
+function Settings.open(opts)
+    opts = opts or {}
+    if Settings._gui then return end -- already open
+
+    local vp = Util.viewport()
+    local cardW, cardH = 380, 188
+
+    local gui = Instance.new("ScreenGui")
+    gui.Name = "SYNC_Settings"
+    Util.mount(gui)
+    Settings._gui = gui
+
+    -- Outside-click catcher (no dimming)
+    local catcher = Instance.new("TextButton")
+    catcher.Text = ""
+    catcher.Size = UDim2.fromScale(1, 1)
+    catcher.BackgroundTransparency = 1
+    catcher.AutoButtonColor = false
+    catcher.ZIndex = 1
+    catcher.Parent = gui
+
+    local card = Instance.new("Frame")
+    card.AnchorPoint = Vector2.new(0.5, 0.5)
+    card.Position = UDim2.fromScale(0.5, 0.5)
+    card.Size = UDim2.fromOffset(cardW, cardH)
+    card.BackgroundColor3 = CARD
+    card.BackgroundTransparency = 0.14
+    card.BorderSizePixel = 0
+    card.ZIndex = 2
+    card.Parent = gui
+    Util.corner(card, 20)
+    local stroke = Util.stroke(card, WHITE, 1, 0.86)
+    Util.shadow(card, { blur = 40, spread = -2, transparency = 0.5, offset = UDim2.fromOffset(0, 12) })
+
+    local scale = Instance.new("UIScale")
+    scale.Scale = 0.94
+    scale.Parent = card
+
+    -- Header
+    local title = Instance.new("TextLabel")
+    title.Text = "Settings"
+    title.Size = UDim2.fromOffset(cardW - 70, 28)
+    title.Position = UDim2.fromOffset(24, 20)
+    title.BackgroundTransparency = 1
+    title.Font = Theme.fonts.title
+    title.TextSize = 22
+    title.TextColor3 = WHITE
+    title.TextXAlignment = Enum.TextXAlignment.Left
+    title.ZIndex = 3
+    title.Parent = card
+
+    local closeBtn = Instance.new("ImageButton")
+    closeBtn.Size = UDim2.fromOffset(26, 26)
+    closeBtn.Position = UDim2.fromOffset(cardW - 38, 20)
+    closeBtn.BackgroundColor3 = WHITE
+    closeBtn.BackgroundTransparency = 0.86
+    closeBtn.AutoButtonColor = false
+    closeBtn.ZIndex = 3
+    closeBtn.Parent = card
+    Util.corner(closeBtn, 13)
+    local cicon = Instance.new("ImageLabel")
+    cicon.Size = UDim2.fromOffset(14, 14)
+    cicon.AnchorPoint = Vector2.new(0.5, 0.5)
+    cicon.Position = UDim2.fromScale(0.5, 0.5)
+    cicon.BackgroundTransparency = 1
+    cicon.ZIndex = 4
+    cicon.Parent = closeBtn
+    Icons.apply(cicon, "x", Color3.fromRGB(210, 210, 217))
+
+    -- Section label
+    local section = Instance.new("TextLabel")
+    section.Text = "DOCK"
+    section.Size = UDim2.fromOffset(cardW - 48, 16)
+    section.Position = UDim2.fromOffset(24, 64)
+    section.BackgroundTransparency = 1
+    section.Font = Theme.fonts.body
+    section.TextSize = 11
+    section.TextColor3 = Color3.fromRGB(150, 150, 158)
+    section.TextXAlignment = Enum.TextXAlignment.Left
+    section.ZIndex = 3
+    section.Parent = card
+
+    -- Row: Always show Dock
+    local row = Instance.new("Frame")
+    row.Size = UDim2.fromOffset(cardW - 48, 64)
+    row.Position = UDim2.fromOffset(24, 86)
+    row.BackgroundColor3 = WHITE
+    row.BackgroundTransparency = 0.93
+    row.BorderSizePixel = 0
+    row.ZIndex = 3
+    row.Parent = card
+    Util.corner(row, 14)
+
+    local rowTitle = Instance.new("TextLabel")
+    rowTitle.Text = "Always show Dock"
+    rowTitle.Size = UDim2.fromOffset(220, 20)
+    rowTitle.Position = UDim2.fromOffset(16, 13)
+    rowTitle.BackgroundTransparency = 1
+    rowTitle.Font = Theme.fonts.body
+    rowTitle.TextSize = 15
+    rowTitle.TextColor3 = WHITE
+    rowTitle.TextXAlignment = Enum.TextXAlignment.Left
+    rowTitle.ZIndex = 4
+    rowTitle.Parent = row
+
+    local rowDesc = Instance.new("TextLabel")
+    rowDesc.Text = "Off: shows only when you touch the bottom edge"
+    rowDesc.Size = UDim2.fromOffset(250, 16)
+    rowDesc.Position = UDim2.fromOffset(16, 34)
+    rowDesc.BackgroundTransparency = 1
+    rowDesc.Font = Theme.fonts.caption
+    rowDesc.TextSize = 12
+    rowDesc.TextColor3 = Color3.fromRGB(150, 150, 158)
+    rowDesc.TextXAlignment = Enum.TextXAlignment.Left
+    rowDesc.ZIndex = 4
+    rowDesc.Parent = row
+
+    local switchHolder = Instance.new("Frame")
+    switchHolder.Size = UDim2.fromOffset(46, 28)
+    switchHolder.AnchorPoint = Vector2.new(1, 0.5)
+    switchHolder.Position = UDim2.new(1, -16, 0.5, 0)
+    switchHolder.BackgroundTransparency = 1
+    switchHolder.ZIndex = 4
+    switchHolder.Parent = row
+    Switch.create(switchHolder, opts.alwaysShow, function(v)
+        if opts.onAlwaysShow then opts.onAlwaysShow(v) end
+    end)
+
+    -- entrance / close
+    Util.tween(scale, { Scale = 1 }, 0.22, Enum.EasingStyle.Back, Enum.EasingDirection.Out)
+
+    local closing = false
+    local function close()
+        if closing then return end
+        closing = true
+        Util.tween(scale, { Scale = 0.96 }, 0.16, Enum.EasingStyle.Quad, Enum.EasingDirection.In)
+        Util.tween(card, { BackgroundTransparency = 1 }, 0.16)
+        Util.tween(stroke, { Transparency = 1 }, 0.16)
+        task.delay(0.18, function()
+            gui:Destroy()
+            Settings._gui = nil
+        end)
+    end
+
+    catcher.MouseButton1Click:Connect(close)
+    closeBtn.MouseButton1Click:Connect(close)
+
+    return { close = close }
+end
+
+return Settings
 end)
 
 SYNC.define("init", function()

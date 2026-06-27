@@ -30,9 +30,9 @@ local BOUNCE_DUR    = 0.5
 -- App roster: name, Lucide glyph, squircle gradient. A few real-ish macOS apps
 -- plus some "Test" tiles, as requested.
 local APPS = {
-    { name = "Finder",    icon = "folder",         top = Color3.fromRGB(70, 170, 255),  bot = Color3.fromRGB(20, 110, 230) },
-    { name = "Safari",    icon = "compass",        top = Color3.fromRGB(90, 200, 255),  bot = Color3.fromRGB(20, 120, 235) },
-    { name = "Messages",  icon = "message-circle", top = Color3.fromRGB(90, 220, 110),  bot = Color3.fromRGB(40, 180, 70) },
+    { name = "Finder",    icon = "folder",         top = Color3.fromRGB(70, 170, 255),  bot = Color3.fromRGB(20, 110, 230), running = true },
+    { name = "Safari",    icon = "compass",        top = Color3.fromRGB(90, 200, 255),  bot = Color3.fromRGB(20, 120, 235), running = true },
+    { name = "Messages",  icon = "message-circle", top = Color3.fromRGB(90, 220, 110),  bot = Color3.fromRGB(40, 180, 70), running = true },
     { name = "Mail",      icon = "mail",           top = Color3.fromRGB(80, 180, 255),  bot = Color3.fromRGB(30, 120, 240) },
     { name = "Maps",      icon = "map",            top = Color3.fromRGB(120, 215, 130), bot = Color3.fromRGB(70, 175, 90) },
     { name = "Photos",    icon = "image",          top = Color3.fromRGB(255, 120, 160), bot = Color3.fromRGB(255, 175, 70) },
@@ -97,10 +97,24 @@ local function buildIcon(parent, app)
     Util.corner(label, 7)
     local lstroke = Util.stroke(label, WHITE, 1, 1)
 
-    return { holder = holder, label = label, lstroke = lstroke, size = BASE, bounceStart = nil, restCenter = 0 }
+    -- Running indicator dot (sits just under the icon, inside the bar padding)
+    if app.running then
+        local dot = Instance.new("Frame")
+        dot.Size = UDim2.fromOffset(4, 4)
+        dot.AnchorPoint = Vector2.new(0.5, 0)
+        dot.Position = UDim2.new(0.5, 0, 1, 5)
+        dot.BackgroundColor3 = WHITE
+        dot.BackgroundTransparency = 0.25
+        dot.BorderSizePixel = 0
+        dot.ZIndex = 6
+        dot.Parent = holder
+        Util.corner(dot, 2)
+    end
+
+    return { holder = holder, label = label, lstroke = lstroke, size = BASE, bounceStart = nil, restCenter = 0, pressed = false, app = app.name }
 end
 
-function Dock.create(parent)
+function Dock.create(parent, onAppClick)
     local vp = Util.viewport()
     local cx = vp.X / 2
     local stripH = MAX + 60
@@ -146,20 +160,28 @@ function Dock.create(parent)
     -- the cursor presses against the very bottom of the screen (like macOS).
     local REVEAL_PX = 4                       -- must touch within this of the bottom
     local hideOffset = stripH                 -- how far down to tuck it away
+    local alwaysShow = Util.load("DockAlwaysShow") == "true"
     local shown = false
     local curOff = hideOffset                 -- current slide offset (starts hidden)
+    local offVel = 0                          -- spring velocity for the slide
 
-    -- Hover labels + click bounce
+    -- Hover labels + press feedback + click (bounce + app action)
     for _, ic in ipairs(icons) do
         ic.holder.MouseEnter:Connect(function()
             Util.tween(ic.label, { TextTransparency = 0, BackgroundTransparency = 0.1 }, 0.15)
             Util.tween(ic.lstroke, { Transparency = 0.7 }, 0.15)
         end)
         ic.holder.MouseLeave:Connect(function()
+            ic.pressed = false
             Util.tween(ic.label, { TextTransparency = 1, BackgroundTransparency = 1 }, 0.15)
             Util.tween(ic.lstroke, { Transparency = 1 }, 0.15)
         end)
-        ic.holder.MouseButton1Click:Connect(function() ic.bounceStart = tick() end)
+        ic.holder.MouseButton1Down:Connect(function() ic.pressed = true end)
+        ic.holder.MouseButton1Up:Connect(function() ic.pressed = false end)
+        ic.holder.MouseButton1Click:Connect(function()
+            ic.bounceStart = tick()
+            if onAppClick then onAppClick(ic.app) end
+        end)
     end
 
     local conn
@@ -168,15 +190,22 @@ function Dock.create(parent)
         local mouseX, mouseY = m.X, m.Y
         local alpha = 1 - math.exp(-dt * 16) -- frame-rate independent smoothing
 
-        -- Reveal/hide state (hysteresis: reveal only at the very bottom edge,
-        -- hide once the cursor moves well above the dock).
-        if not shown then
+        -- Reveal/hide state. If "always show" is on, the dock is always out.
+        -- Otherwise: reveal only at the very bottom edge, hide once the cursor
+        -- moves well above the dock (hysteresis).
+        if alwaysShow then
+            shown = true
+        elseif not shown then
             if mouseY >= vp.Y - REVEAL_PX then shown = true end
         else
             if mouseY < vp.Y - (MAX + 40) then shown = false end
         end
+
+        -- Spring the slide offset so the dock eases out with a little life.
+        local sdt = math.min(dt, 1 / 30)
         local targetOff = shown and 0 or hideOffset
-        curOff = curOff + (targetOff - curOff) * (1 - math.exp(-dt * 12))
+        offVel = offVel + (-220 * (curOff - targetOff) - 26 * offVel) * sdt
+        curOff = curOff + offVel * sdt
 
         -- Target sizes from cursor proximity (only while shown)
         for _, ic in ipairs(icons) do
@@ -185,9 +214,11 @@ function Dock.create(parent)
                 local d = math.abs(mouseX - ic.restCenter)
                 if d < INFLUENCE then
                     local f = math.cos((d / INFLUENCE) * (math.pi / 2)) -- 1 at cursor -> 0 at edge
+                    f = f * f * (3 - 2 * f)                              -- smoothstep, softer shoulders
                     target = BASE + (MAX - BASE) * f
                 end
             end
+            if ic.pressed then target = target * 0.9 end
             ic.size = ic.size + (target - ic.size) * alpha
         end
 
@@ -207,8 +238,9 @@ function Dock.create(parent)
                     ic.bounceStart = nil
                 end
             end
+            local lift = (ic.size - BASE) * 0.16 -- magnified icons rise a touch more
             ic.holder.Size = UDim2.fromOffset(ic.size, ic.size)
-            ic.holder.Position = UDim2.fromOffset(center, baselineY + off + bounce)
+            ic.holder.Position = UDim2.fromOffset(center, baselineY + off + bounce - lift)
             accX += ic.size + GAP
         end
 
@@ -218,6 +250,7 @@ function Dock.create(parent)
     end)
 
     return {
+        setAlwaysShow = function(v) alwaysShow = v and true or false end,
         destroy = function()
             if conn then conn:Disconnect() end
             strip:Destroy() -- bar + icons are children, go with it

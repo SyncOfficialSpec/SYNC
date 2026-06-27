@@ -2,8 +2,9 @@
 -- The desktop you land on after choosing "Desktop": a wallpaper plus the dock.
 -- Menu bar and windows come next. Desktop.start() -> { destroy }.
 
-local Util = SYNC.import("core/Util")
-local Dock = SYNC.import("os/Dock")
+local Util     = SYNC.import("core/Util")
+local Dock     = SYNC.import("os/Dock")
+local Settings = SYNC.import("os/Settings")
 
 local Desktop = {}
 
@@ -13,7 +14,18 @@ function Desktop.start()
     gui.Name = "SYNC_Desktop"
     Util.mount(gui)
 
-    local dock = Dock.create(gui)
+    local dock
+    dock = Dock.create(gui, function(appName)
+        if appName == "Settings" then
+            Settings.open({
+                alwaysShow = Util.load("DockAlwaysShow") == "true",
+                onAlwaysShow = function(v)
+                    Util.save("DockAlwaysShow", v and "true" or "false")
+                    dock.setAlwaysShow(v)
+                end,
+            })
+        end
+    end)
 
     return {
         gui = gui,
