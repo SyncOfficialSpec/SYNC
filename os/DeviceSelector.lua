@@ -1,24 +1,24 @@
 -- SYNC / os / DeviceSelector
--- First-run Apple-style device picker (Mobile / Tablet / Desktop).
--- macOS frosted dark panel (blur faked with translucency), colored icon tiles
--- with filled white glyphs + selected checkmark, macOS-tuned spring animations.
--- DeviceSelector.run(onChoose): onChoose(id) on pick, onChoose(saved) on dismiss.
+-- macOS frosted dark panel (blur faked with translucency), Lucide icon tiles,
+-- selected checkmark, a Continue button to confirm, macOS-tuned spring animations.
+-- DeviceSelector.run(onChoose): onChoose(id) on Continue, onChoose(nil) on dismiss.
 
 local Theme = SYNC.import("core/Theme")
 local Util  = SYNC.import("core/Util")
+local Icons = SYNC.import("core/Icons")
 
 local DeviceSelector = {}
 
 local ACCENT = Color3.fromRGB(10, 132, 255)
 local WHITE  = Color3.fromRGB(255, 255, 255)
 
--- Per-device tile gradient + glyph kind
+-- Per-device tile gradient + Lucide glyph
 local DEVICES = {
-    { id = "mobile",  title = "Mobile",  desc = "Phone-optimized layout",
+    { id = "mobile",  title = "Mobile",  desc = "Phone-optimized layout",  icon = "smartphone",
       top = Color3.fromRGB(52, 199, 89),  bot = Color3.fromRGB(40, 167, 69) },
-    { id = "tablet",  title = "Tablet",  desc = "Tablet-optimized layout",
+    { id = "tablet",  title = "Tablet",  desc = "Tablet-optimized layout", icon = "tablet",
       top = Color3.fromRGB(10, 132, 255), bot = Color3.fromRGB(0, 96, 223) },
-    { id = "desktop", title = "Desktop", desc = "Full desktop experience",
+    { id = "desktop", title = "Desktop", desc = "Full desktop experience", icon = "monitor",
       top = Color3.fromRGB(94, 92, 230),  bot = Color3.fromRGB(75, 63, 214) },
 }
 
@@ -31,7 +31,6 @@ local S = {
     rowColor = WHITE, rowTransp = 0.93,
     hoverColor = WHITE, hoverTransp = 0.88,
     selColor = ACCENT, selTransp = 0.8,
-    selStroke = ACCENT,
     closeColor = WHITE, closeTransp = 0.86, closeHover = WHITE, closeHoverTransp = 0.78,
     closeIcon = Color3.fromRGB(210, 210, 217),
     backdropA = 0.6,
@@ -46,9 +45,7 @@ local function tw(inst, props, preset)
     return Util.tween(inst, props, preset[1], preset[2], preset[3])
 end
 
--- ---------------------------------------------------------------------------
--- Colored icon tile with filled white glyph
--- ---------------------------------------------------------------------------
+-- Colored icon tile with a white Lucide glyph
 local function buildTile(parent, device)
     local tile = Instance.new("Frame")
     tile.Size = UDim2.fromOffset(50, 50)
@@ -64,48 +61,19 @@ local function buildTile(parent, device)
     grad.Rotation = 90
     grad.Parent = tile
 
-    local box = Instance.new("Frame")
-    box.Size = UDim2.fromOffset(28, 28)
-    box.AnchorPoint = Vector2.new(0.5, 0.5)
-    box.Position = UDim2.fromScale(0.5, 0.5)
-    box.BackgroundTransparency = 1
-    box.ZIndex = 6
-    box.Parent = tile
+    local glyph = Instance.new("ImageLabel")
+    glyph.Size = UDim2.fromOffset(28, 28)
+    glyph.AnchorPoint = Vector2.new(0.5, 0.5)
+    glyph.Position = UDim2.fromScale(0.5, 0.5)
+    glyph.BackgroundTransparency = 1
+    glyph.ZIndex = 6
+    glyph.Parent = tile
+    Icons.apply(glyph, device.icon, WHITE)
 
-    local function fill(w, h, radius, ax, ay, px, pxoff, py, pyoff, transp)
-        local f = Instance.new("Frame")
-        f.Size = UDim2.fromOffset(w, h)
-        f.AnchorPoint = Vector2.new(ax, ay)
-        f.Position = UDim2.new(px, pxoff, py, pyoff)
-        f.BackgroundColor3 = WHITE
-        f.BackgroundTransparency = transp or 0
-        f.BorderSizePixel = 0
-        f.ZIndex = 6
-        f.Parent = box
-        if radius and radius > 0 then Util.corner(f, radius) end
-        return f
-    end
-
-    if device.id == "mobile" then
-        local body = fill(15, 25, 4, 0.5, 0.5, 0.5, 0, 0.5, 0)
-        fill(7, 1.6, 0.8, 0.5, 1, 0.5, 0, 1, -3, 0.45)
-        body.Parent = box
-    elseif device.id == "tablet" then
-        fill(26, 19, 4, 0.5, 0.5, 0.5, 0, 0.5, 0)
-        fill(8, 1.6, 0.8, 0.5, 1, 0.5, 0, 0.5, 8, 0.45)
-    else -- desktop
-        fill(26, 16, 3, 0.5, 0, 0.5, 0, 0, 1)        -- screen
-        fill(4, 4, 0, 0.5, 0, 0.5, 0, 0, 17)         -- neck
-        fill(14, 2.6, 1.3, 0.5, 0, 0.5, 0, 0, 21)    -- base
-    end
-
-    return tile
+    return tile, glyph
 end
 
--- ---------------------------------------------------------------------------
--- Selected checkmark: accent circle + white tick (built from two frames)
--- Returns { show(animate), hide() }
--- ---------------------------------------------------------------------------
+-- Selected checkmark: accent circle + white Lucide check. Returns { show, hide }
 local function buildCheck(parent)
     local c = Instance.new("Frame")
     c.Size = UDim2.fromOffset(22, 22)
@@ -122,48 +90,31 @@ local function buildCheck(parent)
     scale.Scale = 0.4
     scale.Parent = c
 
-    local long = Instance.new("Frame")
-    long.Size = UDim2.fromOffset(11, 2.6)
-    long.AnchorPoint = Vector2.new(0.5, 0.5)
-    long.Position = UDim2.new(0.5, 1.5, 0.5, -1)
-    long.Rotation = -45
-    long.BackgroundColor3 = WHITE
-    long.BackgroundTransparency = 1
-    long.BorderSizePixel = 0
-    long.ZIndex = 7
-    long.Parent = c
-    Util.corner(long, 1.3)
-
-    local short = Instance.new("Frame")
-    short.Size = UDim2.fromOffset(6, 2.6)
-    short.AnchorPoint = Vector2.new(0.5, 0.5)
-    short.Position = UDim2.new(0.5, -4, 0.5, 2)
-    short.Rotation = 45
-    short.BackgroundColor3 = WHITE
-    short.BackgroundTransparency = 1
-    short.BorderSizePixel = 0
-    short.ZIndex = 7
-    short.Parent = c
-    Util.corner(short, 1.3)
+    local tick = Instance.new("ImageLabel")
+    tick.Size = UDim2.fromOffset(15, 15)
+    tick.AnchorPoint = Vector2.new(0.5, 0.5)
+    tick.Position = UDim2.fromScale(0.5, 0.5)
+    tick.BackgroundTransparency = 1
+    tick.ImageTransparency = 1
+    tick.ZIndex = 7
+    tick.Parent = c
+    Icons.apply(tick, "check", WHITE)
 
     return {
         show = function(animate)
             if animate then
                 tw(c, { BackgroundTransparency = 0 }, QUICK)
-                tw(long, { BackgroundTransparency = 0 }, QUICK)
-                tw(short, { BackgroundTransparency = 0 }, QUICK)
+                tw(tick, { ImageTransparency = 0 }, QUICK)
                 tw(scale, { Scale = 1 }, SPRING)
             else
                 c.BackgroundTransparency = 0
-                long.BackgroundTransparency = 0
-                short.BackgroundTransparency = 0
+                tick.ImageTransparency = 0
                 scale.Scale = 1
             end
         end,
         hide = function()
             tw(c, { BackgroundTransparency = 1 }, QUICK)
-            tw(long, { BackgroundTransparency = 1 }, QUICK)
-            tw(short, { BackgroundTransparency = 1 }, QUICK)
+            tw(tick, { ImageTransparency = 1 }, QUICK)
             scale.Scale = 0.4
         end,
     }
@@ -176,15 +127,17 @@ function DeviceSelector.run(onChoose)
     local cardW = 384
     local optH, spacing, optX = 74, 12, 20
     local optW = cardW - 40
-    local startY = 104
-    local cardH = startY + (#DEVICES * optH) + ((#DEVICES - 1) * spacing) + 22
+    local startY = 110
+    local rowsEnd = startY + (#DEVICES * optH) + ((#DEVICES - 1) * spacing)
+    local btnY = rowsEnd + 18
+    local btnH = 46
+    local cardH = btnY + btnH + 22
     local cardX, cardY = (vp.X - cardW) / 2, (vp.Y - cardH) / 2
 
     local gui = Instance.new("ScreenGui")
     gui.Name = "SYNC_DeviceSelector"
     Util.mount(gui)
 
-    -- Backdrop
     local backdrop = Instance.new("Frame")
     backdrop.Size = UDim2.fromScale(1, 1)
     backdrop.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
@@ -194,7 +147,7 @@ function DeviceSelector.run(onChoose)
     backdrop.Parent = gui
     Util.tween(backdrop, { BackgroundTransparency = 1 - S.backdropA }, 0.45)
 
-    -- Card (CanvasGroup so the whole panel can fade uniformly on close)
+    -- Card (CanvasGroup so the whole panel fades uniformly on close)
     local card = Instance.new("CanvasGroup")
     card.Size = UDim2.fromOffset(cardW, cardH)
     card.Position = UDim2.fromOffset(cardX, cardY)
@@ -215,7 +168,7 @@ function DeviceSelector.run(onChoose)
     cardScale.Parent = card
     tw(cardScale, { Scale = 1 }, SPRING)
 
-    -- Close button
+    -- Close (thin Lucide X)
     local closeBtn = Instance.new("ImageButton")
     closeBtn.Size = UDim2.fromOffset(28, 28)
     closeBtn.Position = UDim2.fromOffset(cardW - 40, 18)
@@ -223,13 +176,21 @@ function DeviceSelector.run(onChoose)
     closeBtn.BackgroundTransparency = S.closeTransp
     closeBtn.BorderSizePixel = 0
     closeBtn.AutoButtonColor = false
-    closeBtn.Image = "rbxassetid://7072725342"
-    closeBtn.ImageColor3 = S.closeIcon
     closeBtn.ZIndex = 4
     closeBtn.Parent = card
     Util.corner(closeBtn, 14)
+
+    local closeIcon = Instance.new("ImageLabel")
+    closeIcon.Size = UDim2.fromOffset(15, 15)
+    closeIcon.AnchorPoint = Vector2.new(0.5, 0.5)
+    closeIcon.Position = UDim2.fromScale(0.5, 0.5)
+    closeIcon.BackgroundTransparency = 1
+    closeIcon.ZIndex = 5
+    closeIcon.Parent = closeBtn
+    Icons.apply(closeIcon, "x", S.closeIcon)
+
     closeBtn.MouseEnter:Connect(function()
-        tw(closeBtn, { BackgroundColor3 = S.closeHover, BackgroundTransparency = S.closeHoverTransp or S.closeTransp }, QUICK)
+        tw(closeBtn, { BackgroundColor3 = S.closeHover, BackgroundTransparency = S.closeHoverTransp }, QUICK)
     end)
     closeBtn.MouseLeave:Connect(function()
         tw(closeBtn, { BackgroundColor3 = S.closeColor, BackgroundTransparency = S.closeTransp }, SMOOTH)
@@ -264,6 +225,29 @@ function DeviceSelector.run(onChoose)
     local selectedId = saved
     local closing = false
 
+    -- Continue button (confirms the selection)
+    local continueBtn = Instance.new("TextButton")
+    continueBtn.Size = UDim2.fromOffset(optW, btnH)
+    continueBtn.Position = UDim2.fromOffset(optX, btnY)
+    continueBtn.BackgroundColor3 = ACCENT
+    continueBtn.AutoButtonColor = false
+    continueBtn.Text = "Continue"
+    continueBtn.Font = Theme.fonts.title
+    continueBtn.TextSize = 16
+    continueBtn.TextColor3 = WHITE
+    continueBtn.BorderSizePixel = 0
+    continueBtn.ZIndex = 3
+    continueBtn.Parent = card
+    Util.corner(continueBtn, 14)
+    local continueScale = Instance.new("UIScale")
+    continueScale.Parent = continueBtn
+
+    local function setContinueEnabled(on)
+        continueBtn.Active = on
+        continueBtn.AutoButtonColor = false
+        tw(continueBtn, { BackgroundTransparency = on and 0 or 0.55, TextTransparency = on and 0 or 0.45 }, SMOOTH)
+    end
+
     local function setRow(opt, state)
         if state == "selected" then
             tw(opt.bg, { BackgroundColor3 = S.selColor, BackgroundTransparency = S.selTransp }, SMOOTH)
@@ -296,13 +280,12 @@ function DeviceSelector.run(onChoose)
                 opt.check.hide()
             end
         end
+        setContinueEnabled(true)
     end
 
     local function closeMenu(chosen)
         if closing then return end
         closing = true
-        -- The whole card fades and shrinks as one unit (CanvasGroup), so nothing
-        -- lingers. Backdrop and shadow fade alongside it. Fast and clean.
         Util.tween(card, { GroupTransparency = 1 }, 0.2, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
         Util.tween(cardScale, { Scale = 0.95 }, 0.22, Enum.EasingStyle.Quad, Enum.EasingDirection.In)
         Util.tween(shadow, { ImageTransparency = 1 }, 0.2)
@@ -327,7 +310,7 @@ function DeviceSelector.run(onChoose)
         opt.ZIndex = 3
         opt.Parent = card
         Util.corner(opt, 16)
-        local optStroke = Util.stroke(opt, S.selStroke, 2, 1)
+        local optStroke = Util.stroke(opt, ACCENT, 2, 1)
 
         local tile = buildTile(opt, device)
 
@@ -380,16 +363,33 @@ function DeviceSelector.run(onChoose)
         opt.MouseButton1Click:Connect(function()
             applySelection(data.id, true)
             tw(optScale, { Scale = 1 }, SPRING)
-            task.delay(0.24, function()
-                Util.save("DevicePref", data.id)
-                closeMenu(data.id)
-            end)
         end)
     end
 
-    if selectedId then applySelection(selectedId, false) end
+    -- Initial state: pre-select saved choice, else disable Continue until a pick
+    if selectedId then
+        applySelection(selectedId, false)
+    else
+        setContinueEnabled(false)
+    end
 
-    closeBtn.MouseButton1Click:Connect(function() closeMenu(selectedId) end)
+    continueBtn.MouseEnter:Connect(function()
+        if continueBtn.Active then tw(continueBtn, { BackgroundColor3 = Color3.fromRGB(40, 150, 255) }, QUICK) end
+    end)
+    continueBtn.MouseLeave:Connect(function()
+        tw(continueBtn, { BackgroundColor3 = ACCENT }, SMOOTH)
+    end)
+    continueBtn.MouseButton1Down:Connect(function()
+        if continueBtn.Active then tw(continueScale, { Scale = 0.97 }, QUICK) end
+    end)
+    continueBtn.MouseButton1Click:Connect(function()
+        if not continueBtn.Active or not selectedId then return end
+        tw(continueScale, { Scale = 1 }, SPRING)
+        Util.save("DevicePref", selectedId)
+        closeMenu(selectedId)
+    end)
+
+    closeBtn.MouseButton1Click:Connect(function() closeMenu(nil) end)
 
     return gui
 end
