@@ -130,32 +130,23 @@ function Util.padding(parent, all)
     return p
 end
 
--- Subtle, soft drop shadow for minimal Apple-like depth. Uses a feathered asset
--- with a TRANSPARENT center (so it never paints a solid block behind the card).
--- Created as a SIBLING behind `target` (children always render above their parent).
--- Call AFTER target.Position/Size are set. Returns the ImageLabel.
-function Util.shadow(target, spread, transparency)
-    spread = spread or 26
-    local sh = Instance.new("ImageLabel")
-    sh.Name = "Shadow"
-    sh.BackgroundTransparency = 1
-    sh.Image = "rbxassetid://6014261993"            -- soft feathered shadow, clear center
-    sh.ImageColor3 = Color3.fromRGB(0, 0, 0)
-    sh.ImageTransparency = transparency or 0.65
-    sh.ScaleType = Enum.ScaleType.Slice
-    sh.SliceCenter = Rect.new(49, 49, 463, 463)     -- 512px asset, symmetric corners (no seam)
-    sh.AnchorPoint = target.AnchorPoint
-    sh.Size = UDim2.new(
-        target.Size.X.Scale, target.Size.X.Offset + spread * 2,
-        target.Size.Y.Scale, target.Size.Y.Offset + spread * 2
-    )
-    sh.Position = UDim2.new(
-        target.Position.X.Scale, target.Position.X.Offset - spread,
-        target.Position.Y.Scale, target.Position.Y.Offset - spread + 4  -- slight downward cast
-    )
-    sh.ZIndex = math.max((target.ZIndex or 1) - 1, 1)
-    sh.Parent = target.Parent
-    return sh
+-- Real drop shadow using the native UIShadow modifier (released June 2026).
+-- Parented to `target`, it follows the element's rounded corners automatically
+-- with true gaussian blur. opts: { blur, spread, transparency, offset, color }.
+-- Returns the UIShadow, or nil on older clients that lack the class.
+function Util.shadow(target, opts)
+    opts = opts or {}
+    local ok, sh = pcall(function()
+        local s = Instance.new("UIShadow")
+        s.Color = opts.color or Color3.fromRGB(0, 0, 0)
+        s.BlurRadius = UDim.new(0, opts.blur or 34)
+        s.Spread = opts.spread or 0
+        s.Offset = opts.offset or UDim2.fromOffset(0, 10)
+        s.Transparency = opts.transparency ~= nil and opts.transparency or 0.5
+        s.Parent = target
+        return s
+    end)
+    return ok and sh or nil
 end
 
 -- Standard SYNC tween. props is a table of properties to animate.

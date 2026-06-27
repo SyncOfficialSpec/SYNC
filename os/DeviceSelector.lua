@@ -151,26 +151,36 @@ function DeviceSelector.run(onChoose)
     backdrop.ZIndex = 1
     backdrop.Parent = gui
 
-    -- Card (CanvasGroup so the whole panel fades uniformly on close)
-    local card = Instance.new("CanvasGroup")
+    -- Card: a plain Frame so the native UIShadow renders fully (a CanvasGroup
+    -- would clip the shadow). The content lives in an inner CanvasGroup so the
+    -- whole panel can still fade uniformly on close.
+    local card = Instance.new("Frame")
     card.Size = UDim2.fromOffset(cardW, cardH)
     card.Position = UDim2.fromOffset(cardX, cardY)
     card.BackgroundColor3 = S.cardColor
     card.BackgroundTransparency = S.cardTransp
     card.BorderSizePixel = 0
-    card.GroupTransparency = 0
     card.ZIndex = 2
     card.Parent = gui
     Util.corner(card, 26)
     local cardStroke = Util.stroke(card, S.cardStroke, 1, S.cardStrokeTransp)
 
-    local shadow = Util.shadow(card, 38, 1)
-    Util.tween(shadow, { ImageTransparency = 0.62 }, 0.5)
+    -- Native shadow, follows the rounded corners, soft and minimal
+    local shadow = Util.shadow(card, { blur = 40, spread = -2, transparency = 1, offset = UDim2.fromOffset(0, 12) })
+
+    local content = Instance.new("CanvasGroup")
+    content.Size = UDim2.fromScale(1, 1)
+    content.BackgroundTransparency = 1
+    content.BorderSizePixel = 0
+    content.GroupTransparency = 0
+    content.ZIndex = 2
+    content.Parent = card
 
     local cardScale = Instance.new("UIScale")
     cardScale.Scale = 0.92
     cardScale.Parent = card
     tw(cardScale, { Scale = 1 }, SPRING)
+    if shadow then Util.tween(shadow, { Transparency = 0.5 }, 0.5) end
 
     -- Close (thin Lucide X)
     local closeBtn = Instance.new("ImageButton")
@@ -181,7 +191,7 @@ function DeviceSelector.run(onChoose)
     closeBtn.BorderSizePixel = 0
     closeBtn.AutoButtonColor = false
     closeBtn.ZIndex = 4
-    closeBtn.Parent = card
+    closeBtn.Parent = content
     Util.corner(closeBtn, 14)
 
     local closeIcon = Instance.new("ImageLabel")
@@ -211,7 +221,7 @@ function DeviceSelector.run(onChoose)
     title.TextColor3 = S.titleColor
     title.TextXAlignment = Enum.TextXAlignment.Left
     title.ZIndex = 3
-    title.Parent = card
+    title.Parent = content
 
     local subtitle = Instance.new("TextLabel")
     subtitle.Text = "How are you running SYNC?"
@@ -223,7 +233,7 @@ function DeviceSelector.run(onChoose)
     subtitle.TextColor3 = S.subColor
     subtitle.TextXAlignment = Enum.TextXAlignment.Left
     subtitle.ZIndex = 3
-    subtitle.Parent = card
+    subtitle.Parent = content
 
     local options = {}
     local selectedId = saved
@@ -242,7 +252,7 @@ function DeviceSelector.run(onChoose)
     continueBtn.TextColor3 = WHITE
     continueBtn.BorderSizePixel = 0
     continueBtn.ZIndex = 3
-    continueBtn.Parent = card
+    continueBtn.Parent = content
     Util.corner(continueBtn, 14)
 
     local function setContinueEnabled(on)
@@ -289,10 +299,13 @@ function DeviceSelector.run(onChoose)
     local function closeMenu(chosen)
         if closing then return end
         closing = true
-        Util.tween(card, { GroupTransparency = 1 }, 0.2, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
+        -- Content (CanvasGroup) fades as one unit; card bg/stroke/shadow fade with
+        -- it and the whole thing shrinks slightly. Fast and clean, nothing lingers.
+        Util.tween(content, { GroupTransparency = 1 }, 0.2, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
+        Util.tween(card, { BackgroundTransparency = 1 }, 0.2)
+        Util.tween(cardStroke, { Transparency = 1 }, 0.2)
         Util.tween(cardScale, { Scale = 0.95 }, 0.22, Enum.EasingStyle.Quad, Enum.EasingDirection.In)
-        Util.tween(shadow, { ImageTransparency = 1 }, 0.2)
-        Util.tween(backdrop, { BackgroundTransparency = 1 }, 0.24)
+        if shadow then Util.tween(shadow, { Transparency = 1 }, 0.2) end
         task.delay(0.26, function()
             gui:Destroy()
             if onChoose then onChoose(chosen) end
@@ -312,7 +325,7 @@ function DeviceSelector.run(onChoose)
         opt.BackgroundTransparency = S.rowTransp
         opt.BorderSizePixel = 0
         opt.ZIndex = 3
-        opt.Parent = card
+        opt.Parent = content
         Util.corner(opt, 16)
         local optStroke = Util.stroke(opt, ACCENT, 2, 1)
 
