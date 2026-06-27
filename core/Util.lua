@@ -143,7 +143,7 @@ function Util.shadow(target, spread, transparency)
     sh.ImageColor3 = Color3.fromRGB(0, 0, 0)
     sh.ImageTransparency = transparency or 0.65
     sh.ScaleType = Enum.ScaleType.Slice
-    sh.SliceCenter = Rect.new(49, 49, 450, 450)
+    sh.SliceCenter = Rect.new(49, 49, 463, 463)     -- 512px asset, symmetric corners (no seam)
     sh.AnchorPoint = target.AnchorPoint
     sh.Size = UDim2.new(
         target.Size.X.Scale, target.Size.X.Offset + spread * 2,

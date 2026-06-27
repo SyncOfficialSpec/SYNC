@@ -313,7 +313,7 @@ function Util.shadow(target, spread, transparency)
     sh.ImageColor3 = Color3.fromRGB(0, 0, 0)
     sh.ImageTransparency = transparency or 0.65
     sh.ScaleType = Enum.ScaleType.Slice
-    sh.SliceCenter = Rect.new(49, 49, 450, 450)
+    sh.SliceCenter = Rect.new(49, 49, 463, 463)     -- 512px asset, symmetric corners (no seam)
     sh.AnchorPoint = target.AnchorPoint
     sh.Size = UDim2.new(
         target.Size.X.Scale, target.Size.X.Offset + spread * 2,
@@ -609,8 +609,8 @@ function DeviceSelector.run(onChoose)
     Util.corner(card, 26)
     local cardStroke = Util.stroke(card, S.cardStroke, 1, S.cardStrokeTransp)
 
-    local shadow = Util.shadow(card, 26, 1)
-    Util.tween(shadow, { ImageTransparency = 0.65 }, 0.5)
+    local shadow = Util.shadow(card, 38, 1)
+    Util.tween(shadow, { ImageTransparency = 0.62 }, 0.5)
 
     local cardScale = Instance.new("UIScale")
     cardScale.Scale = 0.92

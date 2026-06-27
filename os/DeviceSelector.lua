@@ -165,8 +165,8 @@ function DeviceSelector.run(onChoose)
     Util.corner(card, 26)
     local cardStroke = Util.stroke(card, S.cardStroke, 1, S.cardStrokeTransp)
 
-    local shadow = Util.shadow(card, 26, 1)
-    Util.tween(shadow, { ImageTransparency = 0.65 }, 0.5)
+    local shadow = Util.shadow(card, 38, 1)
+    Util.tween(shadow, { ImageTransparency = 0.62 }, 0.5)
 
     local cardScale = Instance.new("UIScale")
     cardScale.Scale = 0.92
