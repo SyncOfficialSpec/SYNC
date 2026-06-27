@@ -94,19 +94,33 @@ local function bridgeConnect()
     return bridgePair()
 end
 
-local frameToggle = 0
+-- getcustomasset caches by file PATH (permanently) on many executors, so reusing
+-- the same filename shows a stale frame. Use a unique filename every frame and
+-- delete old ones to avoid filling the disk.
+local frameCounter = 0
+local oldFramePaths = {}
+local _delfile = (typeof(delfile) == "function" and delfile) or nil
 local function fetchFrame()
     if not (_getasset and typeof(writefile) == "function") then return nil end
     local body = reqRaw("/shot")
     if not body or #body < 100 then return nil end
-    frameToggle = 1 - frameToggle
-    local path = "SYNC/bframe" .. frameToggle .. ".png"
+    frameCounter = frameCounter + 1
+    local path = "SYNC/frames/f" .. frameCounter .. ".png"
     pcall(function()
-        if typeof(makefolder) == "function" and typeof(isfolder) == "function" and not isfolder("SYNC") then makefolder("SYNC") end
+        if typeof(makefolder) == "function" and typeof(isfolder) == "function" then
+            if not isfolder("SYNC") then makefolder("SYNC") end
+            if not isfolder("SYNC/frames") then makefolder("SYNC/frames") end
+        end
         writefile(path, body)
     end)
     local id
     pcall(function() id = _getasset(path) end)
+    -- keep only the last few files
+    table.insert(oldFramePaths, path)
+    if #oldFramePaths > 4 then
+        local old = table.remove(oldFramePaths, 1)
+        if _delfile then pcall(function() _delfile(old) end) end
+    end
     return id
 end
 
