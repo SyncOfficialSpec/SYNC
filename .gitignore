@@ -1,5 +1,3 @@
-# SYNC build output (obfuscate before release; keep raw out of git history if you prefer)
-build/SYNC.lua
-build/SYNC.min.lua
 .DS_Store
 node_modules/
+__pycache__/

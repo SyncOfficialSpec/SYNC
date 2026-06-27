@@ -1,10 +1,12 @@
 -- SYNC / init
--- Entry module. Runs the boot sequence, then hands off to the desktop.
--- (Desktop/menubar/dock land in the next milestone.)
+-- Entry module. Boot sequence -> device selector -> (desktop, coming next).
 
-local Boot = SYNC.import("os/Boot")
+local Boot           = SYNC.import("os/Boot")
+local DeviceSelector = SYNC.import("os/DeviceSelector")
 
 Boot.run(function()
-    -- TODO: launch Desktop here once built.
-    -- Desktop.start()
+    DeviceSelector.run(function(device)
+        -- device is "mobile" | "tablet" | "desktop" | nil (dismissed)
+        -- TODO: launch Desktop.start(device) here once built.
+    end)
 end)
