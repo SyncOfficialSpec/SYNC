@@ -1157,25 +1157,16 @@ function Dock.create(parent, onAppClick)
     local curOff = hideOffset                 -- current slide offset (starts hidden)
     local offVel = 0                          -- spring velocity for the slide
 
-    -- Hover labels + press feedback + click (bounce + app action)
+    -- Press feedback + click (bounce + app action). Labels are handled in the
+    -- render loop (poll-based) so a missed MouseLeave can't leave one stuck.
     for _, ic in ipairs(icons) do
-        ic.holder.MouseEnter:Connect(function()
-            Util.tween(ic.label, { TextTransparency = 0, BackgroundTransparency = 0.1 }, 0.15)
-            Util.tween(ic.lstroke, { Transparency = 0.7 }, 0.15)
-        end)
-        ic.holder.MouseLeave:Connect(function()
-            ic.pressed = false
-            Util.tween(ic.label, { TextTransparency = 1, BackgroundTransparency = 1 }, 0.15)
-            Util.tween(ic.lstroke, { Transparency = 1 }, 0.15)
-        end)
+        ic.labelShown = false
+        ic.center = ic.restCenter
         ic.holder.MouseButton1Down:Connect(function() ic.pressed = true end)
         ic.holder.MouseButton1Up:Connect(function() ic.pressed = false end)
+        ic.holder.MouseLeave:Connect(function() ic.pressed = false end)
         ic.holder.MouseButton1Click:Connect(function()
             ic.bounceStart = tick()
-            -- Hide the hover label now: opening an app steals focus so MouseLeave
-            -- may never fire, leaving the tooltip stuck on screen.
-            Util.tween(ic.label, { TextTransparency = 1, BackgroundTransparency = 1 }, 0.12)
-            Util.tween(ic.lstroke, { Transparency = 1 }, 0.12)
             if onAppClick then onAppClick(ic.app) end
         end)
     end
@@ -1240,9 +1231,30 @@ function Dock.create(parent, onAppClick)
                 end
             end
             local lift = (ic.size - BASE) * 0.16 -- magnified icons rise a touch more
+            ic.center = center
             ic.holder.Size = UDim2.fromOffset(ic.size, ic.size)
             ic.holder.Position = UDim2.fromOffset(center, baselineY + off + bounce - lift)
             accX += ic.size + GAP
+        end
+
+        -- Labels: show the one under the cursor, hide the rest. Poll-based so it
+        -- can never get stuck (e.g. when a panel opens over the dock).
+        local hovered = nil
+        if magnifyActive then
+            for _, ic in ipairs(icons) do
+                if mouseX >= ic.center - ic.size / 2 and mouseX <= ic.center + ic.size / 2 then
+                    hovered = ic
+                    break
+                end
+            end
+        end
+        for _, ic in ipairs(icons) do
+            local want = (ic == hovered)
+            if want ~= ic.labelShown then
+                ic.labelShown = want
+                Util.tween(ic.label, { TextTransparency = want and 0 or 1, BackgroundTransparency = want and 0.1 or 1 }, 0.12)
+                Util.tween(ic.lstroke, { Transparency = want and 0.7 or 1 }, 0.12)
+            end
         end
 
         -- Bar wraps the icons and rides the intro offset
