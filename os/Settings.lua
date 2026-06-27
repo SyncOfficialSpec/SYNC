@@ -74,6 +74,16 @@ function Settings.open(opts)
     bar.BorderSizePixel = 0
     bar.ZIndex = 3
     bar.Parent = win
+    -- Round only the top corners so the bar follows the window's rounded corners
+    local barCorner = Instance.new("UICorner")
+    local okCorner = pcall(function()
+        barCorner.TopLeftRadius = UDim.new(0, 12)
+        barCorner.TopRightRadius = UDim.new(0, 12)
+        barCorner.BottomLeftRadius = UDim.new(0, 0)
+        barCorner.BottomRightRadius = UDim.new(0, 0)
+    end)
+    if not okCorner then barCorner.CornerRadius = UDim.new(0, 12) end
+    barCorner.Parent = bar
     local hair = Instance.new("Frame")
     hair.Size = UDim2.new(1, 0, 0, 1)
     hair.Position = UDim2.new(0, 0, 1, 0)

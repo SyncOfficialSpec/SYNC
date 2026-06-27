@@ -390,12 +390,15 @@ local function knobX(on) return on and (W - KW - INSET_X) or INSET_X end
 function Switch.create(parent, initial, onChange)
     local value = initial and true or false
 
+    local baseZ = (parent.ZIndex or 1) + 1
+
     local track = Instance.new("TextButton")
     track.Text = ""
     track.AutoButtonColor = false
     track.Size = UDim2.fromOffset(W, H)
     track.BackgroundColor3 = value and TRACK_ON or TRACK_OFF
     track.BorderSizePixel = 0
+    track.ZIndex = baseZ
     track.Parent = parent
     Util.corner(track, H / 2)
 
@@ -405,6 +408,7 @@ function Switch.create(parent, initial, onChange)
     knob.Position = UDim2.new(0, knobX(value), 0.5, 0)
     knob.BackgroundColor3 = value and KNOB_ON or KNOB_OFF
     knob.BorderSizePixel = 0
+    knob.ZIndex = baseZ + 1
     knob.Parent = track
     Util.corner(knob, 9) -- rounded rectangle, not a circle
     Util.shadow(knob, { blur = 6, transparency = 0.6, offset = UDim2.fromOffset(0, 1) })
@@ -1331,6 +1335,16 @@ function Settings.open(opts)
     bar.BorderSizePixel = 0
     bar.ZIndex = 3
     bar.Parent = win
+    -- Round only the top corners so the bar follows the window's rounded corners
+    local barCorner = Instance.new("UICorner")
+    local okCorner = pcall(function()
+        barCorner.TopLeftRadius = UDim.new(0, 12)
+        barCorner.TopRightRadius = UDim.new(0, 12)
+        barCorner.BottomLeftRadius = UDim.new(0, 0)
+        barCorner.BottomRightRadius = UDim.new(0, 0)
+    end)
+    if not okCorner then barCorner.CornerRadius = UDim.new(0, 12) end
+    barCorner.Parent = bar
     local hair = Instance.new("Frame")
     hair.Size = UDim2.new(1, 0, 0, 1)
     hair.Position = UDim2.new(0, 0, 1, 0)
