@@ -969,21 +969,18 @@ local function reqRaw(path)
     return nil
 end
 
-local function bridgePing()
-    local b = reqRaw("/ping")
-    return b ~= nil and tostring(b):find('"ok"') ~= nil
+local function validateKey(key)
+    if not _req or not key then return false end
+    local ok, res = pcall(_req, { Url = BRIDGE .. "/validate?key=" .. urlencode(key), Method = "GET" })
+    if not ok or type(res) ~= "table" then return false end
+    local body = tostring(res.Body or "")
+    return body:find('"ok"%s*:%s*true') ~= nil
 end
-local function bridgePair()
-    local b = reqRaw("/pair")
-    if not b then return false end
-    local k = tostring(b):match('"key"%s*:%s*"(.-)"')
-    if k and k ~= "" then bridgeKey = k; return true end
-    return false
-end
-local function bridgeConnect()
-    if not _req then return false end
-    if not bridgePing() then return false end
-    return bridgePair()
+
+local function bridgeConnectWithKey(key)
+    if not validateKey(key) then return false end
+    bridgeKey = key
+    return true
 end
 
 -- getcustomasset caches by file PATH (permanently) on many executors, so reusing
@@ -1162,6 +1159,20 @@ function Browser.open()
     Util.corner(urlField, 15)
     local up = Instance.new("UIPadding"); up.PaddingLeft = UDim.new(0, 14); up.Parent = urlField
 
+    local refreshBtn = Instance.new("ImageButton")
+    refreshBtn.Size = UDim2.fromOffset(30, 30)
+    refreshBtn.Position = UDim2.new(1, -44, 0, (AB - 30) / 2)
+    refreshBtn.BackgroundTransparency = 1
+    refreshBtn.AutoButtonColor = false
+    refreshBtn.ZIndex = 4
+    refreshBtn.Parent = addr
+    Icons.apply(refreshBtn, "globe", DIM)
+    refreshBtn.MouseButton1Click:Connect(function()
+        if urlField.Text == "sense://homepage" then showHomepage()
+        elseif connected and liveImg then refreshFrame()
+        else navigate(urlField.Text) end
+    end)
+
     -- Content
     local content = Instance.new("Frame")
     content.Size = UDim2.new(1, 0, 1, -(TB + AB))
@@ -1171,18 +1182,10 @@ function Browser.open()
     content.ClipsDescendants = true
     content.ZIndex = 3
     content.Parent = win
-    do
-        local c = Instance.new("UICorner")
-        local ok = pcall(function()
-            c.TopLeftRadius = UDim.new(0, 0); c.TopRightRadius = UDim.new(0, 0)
-            c.BottomLeftRadius = UDim.new(0, 12); c.BottomRightRadius = UDim.new(0, 12)
-        end)
-        if not ok then c.CornerRadius = UDim.new(0, 12) end
-        c.Parent = content
-    end
 
     local function clearContent()
-        liveToken = liveToken + 1 -- stop any running frame loop
+        liveToken = liveToken + 1
+        liveImg = nil
         for _, ch in ipairs(content:GetChildren()) do
             if not ch:IsA("UICorner") then ch:Destroy() end
         end
@@ -1210,53 +1213,136 @@ function Browser.open()
     end
 
     -- ===== LIVE (bridge) view =====
+    local liveImg = nil
+
+    local function refreshFrame()
+        if not liveImg then return end
+        task.spawn(function()
+            local id = fetchFrame()
+            if liveImg and id then
+                liveImg.Image = id
+                for _, ch in ipairs(content:GetChildren()) do
+                    if ch:IsA("TextLabel") then ch.Visible = false end
+                end
+            end
+        end)
+    end
+
     local function showLive(url)
         if clockConn then clockConn:Disconnect(); clockConn = nil end
         clearContent()
-        local myToken = liveToken
+        liveImg = nil
         urlField.Text = url
 
         local img = Instance.new("ImageButton")
         img.Size = UDim2.fromScale(1, 1)
-        img.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+        img.BackgroundTransparency = 1
         img.BorderSizePixel = 0
         img.AutoButtonColor = false
-        img.ScaleType = Enum.ScaleType.Fit
+        img.ScaleType = Enum.ScaleType.Crop
         img.Image = ""
         img.ZIndex = 4
         img.Parent = content
+        liveImg = img
 
-        local loading = Instance.new("TextLabel")
-        loading.AnchorPoint = Vector2.new(0.5, 0.5)
-        loading.Position = UDim2.fromScale(0.5, 0.5)
-        loading.Size = UDim2.fromOffset(200, 24)
-        loading.BackgroundTransparency = 1
-        loading.Font = Theme.fonts.body
-        loading.TextSize = 14
-        loading.TextColor3 = DIM
-        loading.Text = "Loading…"
-        loading.ZIndex = 5
-        loading.Parent = content
+        -- click -> normalized coords -> bridge (via global InputBegan for reliability)
+        local aSize = 28
+        local scrollHold = false
+        local function scrollLoop(dy)
+            scrollHold = true
+            task.spawn(function()
+                while scrollHold and liveImg == img do
+                    reqRaw("/scroll?dy=" .. tostring(dy))
+                    task.wait(0.12)
+                    if liveImg == img then refreshFrame() end
+                    task.wait(0.12)
+                end
+            end)
+        end
 
-        -- click -> normalized coords -> bridge
-        img.MouseButton1Click:Connect(function()
-            local mp = UserInputService:GetMouseLocation()
+        local clickConn
+        clickConn = UserInputService.InputBegan:Connect(function(input, _g)
+            local isRight = input.UserInputType == Enum.UserInputType.MouseButton2
+            if input.UserInputType ~= Enum.UserInputType.MouseButton1 and not isRight then return end
+            if not liveImg or liveImg ~= img then return end
             local ap, asz = img.AbsolutePosition, img.AbsoluteSize
+            local pos = input.Position
+            local lx, ly = pos.X - ap.X, pos.Y - ap.Y
+            if lx < 0 or lx > asz.X or ly < 0 or ly > asz.Y then return end
             if asz.X <= 0 or asz.Y <= 0 then return end
-            local nx = math.clamp((mp.X - ap.X) / asz.X, 0, 1)
-            local ny = math.clamp((mp.Y - ap.Y) / asz.Y, 0, 1)
-            task.spawn(function() reqRaw("/click?x=" .. string.format("%.4f", nx) .. "&y=" .. string.format("%.4f", ny)) end)
+
+            local margin = aSize + 20
+            if lx > asz.X - margin and (ly < margin or ly > asz.Y - margin) then return end
+
+            local nx = math.clamp(lx / asz.X, 0, 1)
+            local ny = math.clamp(ly / asz.Y, 0, 1)
+
+            if isRight then
+                -- right-click: no dot, just send event
+                task.spawn(function()
+                    reqRaw("/click?x=" .. string.format("%.4f", nx) .. "&y=" .. string.format("%.4f", ny) .. "&button=right")
+                    for _ = 1, 6 do
+                        task.wait(0.4)
+                        if liveImg ~= img then return end
+                        local id = fetchFrame()
+                        if id then liveImg.Image = id; return end
+                    end
+                end)
+                return
+            end
+
+            local dot = Instance.new("Frame")
+            local ds = 20
+            dot.Size = UDim2.fromOffset(ds, ds)
+            dot.Position = UDim2.fromOffset(lx - ds / 2, ly - ds / 2)
+            dot.BackgroundColor3 = WHITE
+            dot.BackgroundTransparency = 0.4
+            dot.BorderSizePixel = 0
+            dot.ZIndex = 10
+            dot.Parent = content
+            Util.corner(dot, ds)
+            Util.tween(dot, { BackgroundTransparency = 1 }, 0.4)
+            task.delay(0.5, function() pcall(function() dot:Destroy() end) end)
+
+            task.spawn(function()
+                reqRaw("/click?x=" .. string.format("%.4f", nx) .. "&y=" .. string.format("%.4f", ny))
+                for _ = 1, 6 do
+                    task.wait(0.4)
+                    if liveImg ~= img then return end
+                    local id = fetchFrame()
+                    if id then liveImg.Image = id; return end
+                end
+            end)
         end)
 
-        -- frame polling loop
-        task.spawn(function()
-            while Browser._gui == gui and liveToken == myToken do
-                local id = fetchFrame()
-                if liveToken ~= myToken then break end
-                if id then img.Image = id; loading.Visible = false end
-                task.wait(0.5)
-            end
-        end)
+        -- clean up click connection when content is cleared
+        table.insert(conns, clickConn)
+
+        -- no frame fetch here — wait for navigation to finish first (handled in navigate())
+
+        local aUp = Instance.new("TextButton")
+        aUp.Text = "▲"; aUp.Size = UDim2.fromOffset(aSize, aSize)
+        aUp.Position = UDim2.new(1, -(aSize + 8), 0, 8)
+        aUp.BackgroundColor3 = Color3.fromRGB(30, 30, 34)
+        aUp.BorderSizePixel = 0; aUp.AutoButtonColor = false
+        aUp.Font = Theme.fonts.caption; aUp.TextSize = 13
+        aUp.TextColor3 = DIM; aUp.ZIndex = 5; aUp.Parent = content
+        Util.corner(aUp, 6)
+        aUp.MouseButton1Down:Connect(function() scrollLoop(80) end)
+        aUp.MouseButton1Up:Connect(function() scrollHold = false end)
+        aUp.MouseLeave:Connect(function() scrollHold = false end)
+
+        local aDown = Instance.new("TextButton")
+        aDown.Text = "▼"; aDown.Size = UDim2.fromOffset(aSize, aSize)
+        aDown.Position = UDim2.new(1, -(aSize + 8), 1, -(aSize + 8))
+        aDown.BackgroundColor3 = Color3.fromRGB(30, 30, 34)
+        aDown.BorderSizePixel = 0; aDown.AutoButtonColor = false
+        aDown.Font = Theme.fonts.caption; aDown.TextSize = 13
+        aDown.TextColor3 = DIM; aDown.ZIndex = 5; aDown.Parent = content
+        Util.corner(aDown, 6)
+        aDown.MouseButton1Down:Connect(function() scrollLoop(-80) end)
+        aDown.MouseButton1Up:Connect(function() scrollHold = false end)
+        aDown.MouseLeave:Connect(function() scrollHold = false end)
     end
 
     -- ===== Reader fallback (no app) =====
@@ -1276,6 +1362,34 @@ function Browser.open()
         pad.PaddingLeft = UDim.new(0, 24); pad.PaddingRight = UDim.new(0, 24)
         pad.Parent = sc
         local ll = Instance.new("UIListLayout"); ll.Padding = UDim.new(0, 10); ll.Parent = sc
+
+        local aSize = 28
+        local aUp = Instance.new("TextButton")
+        aUp.Text = "▲"; aUp.Size = UDim2.fromOffset(aSize, aSize)
+        aUp.Position = UDim2.new(1, -(aSize + 8), 0, 8)
+        aUp.BackgroundColor3 = Color3.fromRGB(30, 30, 34)
+        aUp.BorderSizePixel = 0; aUp.AutoButtonColor = false
+        aUp.Font = Theme.fonts.caption; aUp.TextSize = 13
+        aUp.TextColor3 = DIM; aUp.ZIndex = 5
+        aUp.Parent = content; Util.corner(aUp, 6)
+
+        local aDown = Instance.new("TextButton")
+        aDown.Text = "▼"; aDown.Size = UDim2.fromOffset(aSize, aSize)
+        aDown.Position = UDim2.new(1, -(aSize + 8), 1, -(aSize + 8))
+        aDown.BackgroundColor3 = Color3.fromRGB(30, 30, 34)
+        aDown.BorderSizePixel = 0; aDown.AutoButtonColor = false
+        aDown.Font = Theme.fonts.caption; aDown.TextSize = 13
+        aDown.TextColor3 = DIM; aDown.ZIndex = 5
+        aDown.Parent = content; Util.corner(aDown, 6)
+
+        local step = 200
+        aUp.MouseButton1Click:Connect(function()
+            sc.CanvasPosition = Vector2.new(0, math.max(0, sc.CanvasPosition.Y - step))
+        end)
+        aDown.MouseButton1Click:Connect(function()
+            sc.CanvasPosition = Vector2.new(0, math.min(sc.CanvasSize.Y.Offset - sc.AbsoluteSize.Y, sc.CanvasPosition.Y + step))
+        end)
+
         return sc
     end
 
@@ -1349,7 +1463,15 @@ function Browser.open()
         if connected then
             urlField.Text = url
             showLive(url)
-            task.spawn(function() reqRaw("/nav?url=" .. urlencode(url)) end)
+            task.spawn(function()
+                reqRaw("/nav?url=" .. urlencode(url))
+                for _ = 1, 12 do
+                    task.wait(0.5)
+                    if not liveImg then return end
+                    local id = fetchFrame()
+                    if id then liveImg.Image = id; return end
+                end
+            end)
         else
             if q:match("^https?://") or (q:match("^[%w%-]+%.[%w%-%.]+") and not q:find("%s")) then
                 readerOpenPage(url)
@@ -1397,9 +1519,9 @@ function Browser.open()
         end
 
         local searchWrap = Instance.new("Frame")
-        searchWrap.Size = UDim2.fromOffset(460, 52)
-        searchWrap.AnchorPoint = Vector2.new(0.5, 0.5)
+        searchWrap.Size = UDim2.fromOffset(420, 48)
         searchWrap.Position = UDim2.fromScale(0.5, 0.6)
+        searchWrap.AnchorPoint = Vector2.new(0.5, 0.5)
         searchWrap.BackgroundColor3 = Color3.fromRGB(26, 26, 30)
         searchWrap.BorderSizePixel = 0
         searchWrap.ZIndex = 4
@@ -1490,18 +1612,139 @@ function Browser.open()
         if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then dragging = false end
     end)
 
-    showHomepage()
+    -- ===== Key entry screen =====
+    local function showKeyEntry(msg)
+        if clockConn then clockConn:Disconnect(); clockConn = nil end
+        clearContent()
+        urlField.Text = "sense://unlock"
+        status.Text = "○ Enter key to connect"
+        status.TextColor3 = DIM
 
-    -- connect to the desktop app in the background
-    task.spawn(function()
-        connected = bridgeConnect()
-        if Browser._gui ~= gui then return end
-        if connected then
-            status.Text = "● Connected to Sense Browser app"
-            status.TextColor3 = OK_GREEN
+        local wrap = Instance.new("Frame")
+        wrap.Size = UDim2.new(1, 0, 1, 0)
+        wrap.BackgroundTransparency = 1
+        wrap.ZIndex = 4
+        wrap.Parent = content
+
+        local logoWrap = Instance.new("Frame")
+        logoWrap.Size = UDim2.fromOffset(72, 72)
+        logoWrap.AnchorPoint = Vector2.new(0.5, 0.5)
+        logoWrap.Position = UDim2.fromScale(0.5, 0.25)
+        logoWrap.BackgroundTransparency = 1
+        logoWrap.ZIndex = 4
+        logoWrap.Parent = wrap
+        local logoId = Util.remoteImage(LOGO_URL, "sense-logo.png")
+        if logoId then
+            local im = Instance.new("ImageLabel")
+            im.Size = UDim2.fromScale(1, 1); im.BackgroundTransparency = 1; im.Image = logoId; im.ZIndex = 4; im.Parent = logoWrap
         else
-            status.Text = "○ Reader mode (open the app for full browsing)"
-            status.TextColor3 = DIM
+            drawSaturn(logoWrap, 56, WHITE)
+        end
+
+        local title = Instance.new("TextLabel")
+        title.AnchorPoint = Vector2.new(0.5, 0)
+        title.Position = UDim2.fromScale(0.5, 0.36)
+        title.Size = UDim2.fromOffset(300, 24)
+        title.BackgroundTransparency = 1
+        title.Font = Theme.fonts.title
+        title.TextSize = 16
+        title.TextColor3 = WHITE
+        title.Text = "Enter Sense Key"
+        title.ZIndex = 4
+        title.Parent = wrap
+
+        local keyBox = Instance.new("TextBox")
+        keyBox.AnchorPoint = Vector2.new(0.5, 0)
+        keyBox.Position = UDim2.fromScale(0.5, 0.42)
+        keyBox.Size = UDim2.fromOffset(400, 38)
+        keyBox.BackgroundColor3 = Color3.fromRGB(30, 30, 34)
+        keyBox.BorderSizePixel = 0
+        keyBox.Font = Theme.fonts.body
+        keyBox.TextSize = 14
+        keyBox.TextColor3 = WHITE
+        keyBox.PlaceholderText = "Paste your key here"
+        keyBox.PlaceholderColor3 = DIM
+        keyBox.Text = ""
+        keyBox.TextXAlignment = Enum.TextXAlignment.Center
+        keyBox.ClearTextOnFocus = false
+        keyBox.ZIndex = 4
+        keyBox.Parent = wrap
+        Util.corner(keyBox, 19)
+
+        local errorMsg = Instance.new("TextLabel")
+        errorMsg.AnchorPoint = Vector2.new(0.5, 0)
+        errorMsg.Position = UDim2.fromScale(0.5, 0.50)
+        errorMsg.Size = UDim2.fromOffset(400, 18)
+        errorMsg.BackgroundTransparency = 1
+        errorMsg.Font = Theme.fonts.caption
+        errorMsg.TextSize = 12
+        errorMsg.TextColor3 = Color3.fromRGB(255, 80, 80)
+        errorMsg.Text = msg or ""
+        errorMsg.ZIndex = 4
+        errorMsg.Parent = wrap
+
+        local connectBtn = Instance.new("TextButton")
+        connectBtn.AnchorPoint = Vector2.new(0.5, 0)
+        connectBtn.Position = UDim2.fromScale(0.5, 0.55)
+        connectBtn.Size = UDim2.fromOffset(160, 38)
+        connectBtn.BackgroundColor3 = ACCENT
+        connectBtn.BorderSizePixel = 0
+        connectBtn.AutoButtonColor = false
+        connectBtn.Font = Theme.fonts.title
+        connectBtn.TextSize = 14
+        connectBtn.TextColor3 = WHITE
+        connectBtn.Text = "Connect"
+        connectBtn.ZIndex = 4
+        connectBtn.Parent = wrap
+        Util.corner(connectBtn, 19)
+
+        connectBtn.MouseButton1Click:Connect(function()
+            local k = keyBox.Text:match("^%s*(.-)%s*$")
+            if k == "" then return end
+            errorMsg.Text = "Validating..."
+            errorMsg.TextColor3 = DIM
+            task.spawn(function()
+                local ok = bridgeConnectWithKey(k)
+                if Browser._gui ~= gui then return end
+                if ok then
+                    connected = true
+                    status.Text = "● Connected to Sense Browser app"
+                    status.TextColor3 = OK_GREEN
+                    showHomepage()
+                else
+                    errorMsg.TextColor3 = Color3.fromRGB(255, 80, 80)
+                    errorMsg.Text = "Invalid key. Check the app and try again."
+                end
+            end)
+        end)
+
+        keyBox.FocusLost:Connect(function(enter)
+            if enter and keyBox.Text ~= "" then
+                connectBtn.MouseButton1Click:Fire()
+            end
+        end)
+    end
+
+    showKeyEntry()
+
+    -- Status polling: detect key changes / disconnection
+    task.spawn(function()
+        while Browser._gui == gui do
+            task.wait(5)
+            if connected then
+                local body
+                pcall(function() body = tostring(reqRaw("/validate?key=" .. urlencode(bridgeKey))) end)
+                if Browser._gui ~= gui then break end
+                if body and body:find('"ok"%s*:%s*true') then
+                    -- key still valid
+                else
+                    connected = false
+                    bridgeKey = nil
+                    status.Text = "○ Key changed — re-enter key"
+                    status.TextColor3 = DIM
+                    showKeyEntry("Key changed or expired. Enter the new key from the app.")
+                end
+            end
         end
     end)
 
@@ -2327,8 +2570,8 @@ local function menuButton(parent, text, bold, order)
     local pad = Instance.new("UIPadding")
     pad.PaddingLeft = UDim.new(0, 8); pad.PaddingRight = UDim.new(0, 8)
     pad.Parent = b
-    b.MouseEnter:Connect(function() Util.tween(b, { BackgroundTransparency = 0.78 }, 0.1) end)
-    b.MouseLeave:Connect(function() Util.tween(b, { BackgroundTransparency = 1 }, 0.12) end)
+    b.MouseEnter:Connect(function() b.BackgroundTransparency = 0.78 end)
+    b.MouseLeave:Connect(function() b.BackgroundTransparency = 1 end)
     return b
 end
 
@@ -2344,8 +2587,8 @@ local function statusItem(parent, order, width)
     b.ZIndex = 3
     b.Parent = parent
     Util.corner(b, 5)
-    b.MouseEnter:Connect(function() Util.tween(b, { BackgroundTransparency = 0.78 }, 0.1) end)
-    b.MouseLeave:Connect(function() Util.tween(b, { BackgroundTransparency = 1 }, 0.12) end)
+    b.MouseEnter:Connect(function() b.BackgroundTransparency = 0.78 end)
+    b.MouseLeave:Connect(function() b.BackgroundTransparency = 1 end)
     return b
 end
 

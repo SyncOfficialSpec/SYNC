@@ -35,8 +35,8 @@ local function menuButton(parent, text, bold, order)
     local pad = Instance.new("UIPadding")
     pad.PaddingLeft = UDim.new(0, 8); pad.PaddingRight = UDim.new(0, 8)
     pad.Parent = b
-    b.MouseEnter:Connect(function() Util.tween(b, { BackgroundTransparency = 0.78 }, 0.1) end)
-    b.MouseLeave:Connect(function() Util.tween(b, { BackgroundTransparency = 1 }, 0.12) end)
+    b.MouseEnter:Connect(function() b.BackgroundTransparency = 0.78 end)
+    b.MouseLeave:Connect(function() b.BackgroundTransparency = 1 end)
     return b
 end
 
@@ -52,8 +52,8 @@ local function statusItem(parent, order, width)
     b.ZIndex = 3
     b.Parent = parent
     Util.corner(b, 5)
-    b.MouseEnter:Connect(function() Util.tween(b, { BackgroundTransparency = 0.78 }, 0.1) end)
-    b.MouseLeave:Connect(function() Util.tween(b, { BackgroundTransparency = 1 }, 0.12) end)
+    b.MouseEnter:Connect(function() b.BackgroundTransparency = 0.78 end)
+    b.MouseLeave:Connect(function() b.BackgroundTransparency = 1 end)
     return b
 end
 
