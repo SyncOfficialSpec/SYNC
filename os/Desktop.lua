@@ -7,6 +7,7 @@ local Dock     = SYNC.import("os/Dock")
 local Settings = SYNC.import("os/Settings")
 local MenuBar  = SYNC.import("os/MenuBar")
 local Browser  = SYNC.import("os/Browser")
+local Cursor   = SYNC.import("apps/Cursor")
 
 local Desktop = {}
 
@@ -46,8 +47,12 @@ function Desktop.start()
                     Util.save("DockSizeFrac", tostring(f))
                 end,
             })
+        elseif appName == "Cursor" then
+            Cursor.open()
         end
     end)
+
+    Cursor.restore()
 
     return {
         gui = gui,
