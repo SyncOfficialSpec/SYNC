@@ -332,37 +332,33 @@ function CursorApp.open()
     grid.ScrollBarThickness = 4
     grid.ScrollBarImageColor3 = Color3.fromRGB(120, 120, 128)
     grid.ScrollBarImageTransparency = 0.4
-    pcall(function() grid.AutomaticCanvasSize = Enum.AutomaticCanvasSize.Y end)
+    grid.CanvasSize = UDim2.fromOffset(0, 0)
     grid.ZIndex = 3
     grid.Parent = win
 
-    local gridLayout = Instance.new("UIGridLayout")
-    gridLayout.CellSize = UDim2.fromOffset(84, 96)
-    gridLayout.CellPadding = UDim2.fromOffset(10, 10)
-    gridLayout.FillDirection = Enum.FillDirection.Horizontal
-    gridLayout.HorizontalAlignment = Enum.HorizontalAlignment.Left
-    gridLayout.VerticalAlignment = Enum.VerticalAlignment.Top
-    gridLayout.StartCorner = Enum.StartCorner.TopLeft
-    gridLayout.Parent = grid
-
-    local gridPad = Instance.new("UIPadding")
-    gridPad.PaddingTop = UDim.new(0, 4)
-    gridPad.Parent = grid
+    local CELL_W, CELL_H = 84, 96
+    local PAD = 10
+    local GRID_W = W - 24
+    local COLS = math.max(1, math.floor((GRID_W + PAD) / (CELL_W + PAD)))
 
     local gridCards = {}
     local function renderGrid()
         for _, card in ipairs(gridCards) do card.frame:Destroy() end
         gridCards = {}
-        gridLayout.Parent = nil
-        gridLayout.Parent = grid
 
+        local col, row = 0, 0
         for _, c in ipairs(CURSORS) do
             if activeCat ~= "All" and c.cat ~= activeCat then
                 -- skip mismatched category
             else
+                local x = col * (CELL_W + PAD) + PAD
+                local y = row * (CELL_H + PAD) + PAD
+
                 local frame = Instance.new("TextButton")
                 frame.Text = ""
                 frame.AutoButtonColor = false
+                frame.Size = UDim2.fromOffset(CELL_W, CELL_H)
+                frame.Position = UDim2.fromOffset(x, y)
                 frame.BackgroundColor3 = Color3.fromRGB(44, 44, 48)
                 frame.BackgroundTransparency = 0.12
                 frame.BorderSizePixel = 0
@@ -410,6 +406,12 @@ function CursorApp.open()
                     renderGrid()
                 end)
 
+                col = col + 1
+                if col >= COLS then
+                    col = 0
+                    row = row + 1
+                end
+
                 table.insert(gridCards, { frame = frame, id = c.id })
             end
         end
@@ -417,6 +419,7 @@ function CursorApp.open()
         if #gridCards == 0 then
             local empty = Instance.new("TextLabel")
             empty.Size = UDim2.fromOffset(W - 40, 40)
+            empty.Position = UDim2.fromOffset(PAD, PAD)
             empty.BackgroundTransparency = 1
             empty.Font = Theme.fonts.caption
             empty.TextSize = 14
@@ -425,10 +428,11 @@ function CursorApp.open()
             empty.ZIndex = 4
             empty.Parent = grid
             table.insert(gridCards, { frame = empty })
+            row = 0
         end
 
-        task.wait()
-        grid.CanvasSize = UDim2.fromOffset(0, gridLayout.AbsoluteContentSize.Y + 8)
+        local totalRows = row + (col > 0 and 1 or 0)
+        grid.CanvasSize = UDim2.fromOffset(0, totalRows * (CELL_H + PAD) + PAD)
     end
     renderGrid()
 
