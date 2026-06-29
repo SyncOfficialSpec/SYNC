@@ -332,7 +332,7 @@ function CursorApp.open()
     grid.ScrollBarThickness = 4
     grid.ScrollBarImageColor3 = Color3.fromRGB(120, 120, 128)
     grid.ScrollBarImageTransparency = 0.4
-    grid.CanvasSize = UDim2.new(0, 0, 0, 0)
+    grid.AutomaticCanvasSize = Enum.AutomaticCanvasSize.Y
     grid.ZIndex = 3
     grid.Parent = win
 
