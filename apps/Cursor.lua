@@ -24,10 +24,16 @@ local ACCENT = Theme.accent
 
 local RAW = "https://raw.githubusercontent.com/SyncOfficialSpec/SYNC/main/assets/cursors/"
 
--- Cursor artwork (white masters; tinted at runtime). aspect = width / height.
+-- Cursor artwork. `tintable` white masters recolour via ImageColor3; the fixed
+-- full-colour `art` pieces render exactly as supplied. aspect = width / height.
+local TIP = Vector2.new(0.14, 0.06)
 local SHAPES = {
-    { id = "solid",   name = "Solid",   url = RAW .. "arrow_solid.png",   file = "sync_cursor_solid.png",   aspect = 256/254, tip = Vector2.new(0.14, 0.06) },
-    { id = "outline", name = "Outline", url = RAW .. "arrow_outline.png", file = "sync_cursor_outline.png", aspect = 229/256, tip = Vector2.new(0.14, 0.06) },
+    { id = "solid",    name = "Solid",   url = RAW .. "arrow_solid.png",   file = "sync_cur_solid.png",   aspect = 256/254, tip = TIP, tintable = true },
+    { id = "outline",  name = "Outline", url = RAW .. "arrow_outline.png", file = "sync_cur_outline.png", aspect = 229/256, tip = TIP, tintable = true },
+    { id = "art_white", name = "Snow",     url = RAW .. "art_white.png", file = "sync_cur_white.png", aspect = 229/256, tip = TIP, tintable = false },
+    { id = "art_navy",  name = "Graphite", url = RAW .. "art_navy.png",  file = "sync_cur_navy.png",  aspect = 256/256, tip = TIP, tintable = false },
+    { id = "art_red",   name = "Crimson",  url = RAW .. "art_red.png",   file = "sync_cur_red.png",   aspect = 256/256, tip = TIP, tintable = false },
+    { id = "art_grad",  name = "Aurora",   url = RAW .. "art_grad.png",  file = "sync_cur_grad.png",  aspect = 256/256, tip = TIP, tintable = false },
 }
 local function shapeDef(id)
     for _, s in ipairs(SHAPES) do if s.id == id then return s end end
@@ -75,16 +81,16 @@ local function cfg(t)
     }
 end
 
--- The four designs the user supplied, as ready presets
+-- The four supplied designs (exact art), plus tintable extras
 local GALLERY = {
-    { name = "Snow",     conf = cfg{ shape="outline", color=WHITE, outline=false } },
-    { name = "Graphite", conf = cfg{ shape="solid", color=Color3.fromRGB(86,86,120), outline=true, outlineColor=Color3.fromRGB(20,20,28) } },
-    { name = "Crimson",  conf = cfg{ shape="solid", color=Color3.fromRGB(235,85,95), outline=false } },
-    { name = "Aurora",   conf = cfg{ shape="outline", color=Color3.fromRGB(90,120,255), gradient=true, colorB=Color3.fromRGB(255,90,200), outline=false, glow=0.4 } },
+    { name = "Snow",     conf = cfg{ shape="art_white", outline=false } },
+    { name = "Graphite", conf = cfg{ shape="art_navy",  outline=false } },
+    { name = "Crimson",  conf = cfg{ shape="art_red",   outline=false } },
+    { name = "Aurora",   conf = cfg{ shape="art_grad",  outline=false } },
     { name = "Mint",     conf = cfg{ shape="solid", color=Color3.fromRGB(90,255,200), glow=0.5 } },
     { name = "Gold",     conf = cfg{ shape="solid", color=Color3.fromRGB(254,200,70), outline=true, outlineColor=Color3.fromRGB(120,80,0) } },
     { name = "Rainbow",  conf = cfg{ shape="solid", rainbow=true, glow=0.4 } },
-    { name = "Comet",    conf = cfg{ shape="solid", color=Color3.fromRGB(90,200,255), trail=8, glow=0.6 } },
+    { name = "Comet",    conf = cfg{ shape="outline", color=Color3.fromRGB(90,200,255), trail=8, glow=0.6 } },
 }
 
 -- Serialisation (Color3 <-> {r,g,b})
@@ -146,8 +152,8 @@ local function rebuild()
         borderImg:Destroy(); borderImg = nil
     end
 
-    -- gradient overlay on the main image
-    if config.gradient then
+    -- gradient overlay on the main image (tintable masters only)
+    if config.gradient and def.tintable then
         if not gradient then
             gradient = Instance.new("UIGradient")
             gradient.Rotation = 35
@@ -185,9 +191,14 @@ local function applyVisuals(color, size, rotation, opacity)
         root.Rotation = rotation
     end
     if mainImg then
-        mainImg.ImageColor3 = config.gradient and WHITE or color
+        -- fixed art keeps its own colours; masters take the live tint/gradient
+        if not def.tintable then
+            mainImg.ImageColor3 = WHITE
+        else
+            mainImg.ImageColor3 = config.gradient and WHITE or color
+            if gradient then gradient.Color = ColorSequence.new(color, config.colorB) end
+        end
         mainImg.ImageTransparency = opacity
-        if gradient then gradient.Color = ColorSequence.new(color, config.colorB) end
     end
     if borderImg then
         local th = math.clamp(config.outlineThickness or 2, 1, 6)
@@ -218,6 +229,9 @@ local function startOverlay()
     overlayGui.DisplayOrder = 999999
     overlayGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
     Util.mount(overlayGui)
+    -- Util.mount sets DisplayOrder 999999 for every SYNC gui, so app windows
+    -- opened later would tie and draw over the cursor. Force this above all.
+    pcall(function() overlayGui.DisplayOrder = 2147483647 end)
 
     rippleLayer = Instance.new("Frame")
     rippleLayer.Size = UDim2.fromScale(1, 1)
@@ -727,6 +741,7 @@ function CursorApp.open()
         end
     end
     for _, s in ipairs(SHAPES) do
+      if s.tintable then
         local cell = Instance.new("TextButton")
         cell.Text = ""; cell.AutoButtonColor = false
         cell.Size = UDim2.fromOffset(56, 56)
@@ -747,6 +762,7 @@ function CursorApp.open()
         ic.Parent = cell
         cell.MouseButton1Click:Connect(function() setField("shape", s.id); refreshShapes() end)
         table.insert(shapeCells, { id = s.id, cell = cell })
+      end
     end
 
     -- SIZE
