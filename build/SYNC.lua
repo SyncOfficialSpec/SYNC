@@ -3306,7 +3306,7 @@ function CursorApp.open()
     grid.ScrollBarThickness = 4
     grid.ScrollBarImageColor3 = Color3.fromRGB(120, 120, 128)
     grid.ScrollBarImageTransparency = 0.4
-    grid.AutomaticCanvasSize = Enum.AutomaticCanvasSize.Y
+    pcall(function() grid.AutomaticCanvasSize = Enum.AutomaticCanvasSize.Y end)
     grid.ZIndex = 3
     grid.Parent = win
 
@@ -3331,65 +3331,63 @@ function CursorApp.open()
         gridLayout.Parent = grid
 
         for _, c in ipairs(CURSORS) do
-            if activeCat ~= "All" and c.cat ~= activeCat then continue end
+            if activeCat ~= "All" and c.cat ~= activeCat then
+                -- skip mismatched category
+            else
+                local frame = Instance.new("TextButton")
+                frame.Text = ""
+                frame.AutoButtonColor = false
+                frame.BackgroundColor3 = Color3.fromRGB(44, 44, 48)
+                frame.BackgroundTransparency = 0.12
+                frame.BorderSizePixel = 0
+                frame.ZIndex = 3
+                frame.Parent = grid
+                Util.corner(frame, 10)
 
-            local frame = Instance.new("TextButton")
-            frame.Text = ""
-            frame.AutoButtonColor = false
-            frame.BackgroundColor3 = Color3.fromRGB(44, 44, 48)
-            frame.BackgroundTransparency = 0.12
-            frame.BorderSizePixel = 0
-            frame.ZIndex = 3
-            frame.Parent = grid
-            Util.corner(frame, 10)
+                local sel = Instance.new("Frame")
+                sel.Size = UDim2.fromScale(1, 1)
+                sel.BackgroundTransparency = (c.id == activeId) and 0.7 or 1
+                sel.BackgroundColor3 = ACCENT
+                sel.BorderSizePixel = 0
+                sel.ZIndex = 4
+                sel.Parent = frame
+                Util.corner(sel, 10)
+                Util.stroke(frame, ACCENT, 2, (c.id == activeId) and 0.3 or 1)
 
-            -- Current selection indicator
-            local sel = Instance.new("Frame")
-            sel.Size = UDim2.fromScale(1, 1)
-            sel.BackgroundTransparency = (c.id == activeId) and 0.7 or 1
-            sel.BackgroundColor3 = ACCENT
-            sel.BorderSizePixel = 0
-            sel.ZIndex = 4
-            sel.Parent = frame
-            Util.corner(sel, 10)
-            Util.stroke(frame, ACCENT, 2, (c.id == activeId) and 0.3 or 1)
+                local preview = Instance.new("TextLabel")
+                preview.Size = UDim2.fromOffset(38, 38)
+                preview.Position = UDim2.fromScale(0.5, 0.5)
+                preview.AnchorPoint = Vector2.new(0.5, 0.5)
+                preview.BackgroundTransparency = 1
+                preview.Font = Enum.Font.Gotham
+                preview.Text = c.char
+                preview.TextColor3 = c.color
+                preview.TextSize = c.size
+                preview.ZIndex = 5
+                preview.Parent = frame
 
-            -- Cursor preview
-            local preview = Instance.new("TextLabel")
-            preview.Size = UDim2.fromOffset(38, 38)
-            preview.Position = UDim2.fromScale(0.5, 0.5)
-            preview.AnchorPoint = Vector2.new(0.5, 0.5)
-            preview.BackgroundTransparency = 1
-            preview.Font = Enum.Font.Gotham
-            preview.Text = c.char
-            preview.TextColor3 = c.color
-            preview.TextSize = c.size
-            preview.ZIndex = 5
-            preview.Parent = frame
+                local nameLbl = Instance.new("TextLabel")
+                nameLbl.Size = UDim2.new(1, -4, 0, 16)
+                nameLbl.Position = UDim2.new(0, 2, 1, -18)
+                nameLbl.BackgroundTransparency = 1
+                nameLbl.Font = Theme.fonts.caption
+                nameLbl.TextSize = 11
+                nameLbl.TextColor3 = DIM
+                nameLbl.Text = c.name
+                nameLbl.TextXAlignment = Enum.TextXAlignment.Center
+                nameLbl.TextTruncate = Enum.TextTruncate.AtEnd
+                nameLbl.ZIndex = 5
+                nameLbl.Parent = frame
 
-            -- Name label
-            local nameLbl = Instance.new("TextLabel")
-            nameLbl.Size = UDim2.new(1, -4, 0, 16)
-            nameLbl.Position = UDim2.new(0, 2, 1, -18)
-            nameLbl.BackgroundTransparency = 1
-            nameLbl.Font = Theme.fonts.caption
-            nameLbl.TextSize = 11
-            nameLbl.TextColor3 = DIM
-            nameLbl.Text = c.name
-            nameLbl.TextXAlignment = Enum.TextXAlignment.Center
-            nameLbl.TextTruncate = Enum.TextTruncate.AtEnd
-            nameLbl.ZIndex = 5
-            nameLbl.Parent = frame
+                frame.MouseButton1Click:Connect(function()
+                    applyCursor(c.id)
+                    renderGrid()
+                end)
 
-            frame.MouseButton1Click:Connect(function()
-                applyCursor(c.id)
-                renderGrid()
-            end)
-
-            table.insert(gridCards, { frame = frame, id = c.id })
+                table.insert(gridCards, { frame = frame, id = c.id })
+            end
         end
 
-        -- If no items, show a message
         if #gridCards == 0 then
             local empty = Instance.new("TextLabel")
             empty.Size = UDim2.fromOffset(W - 40, 40)
@@ -3402,6 +3400,9 @@ function CursorApp.open()
             empty.Parent = grid
             table.insert(gridCards, { frame = empty })
         end
+
+        task.wait()
+        grid.CanvasSize = UDim2.fromOffset(0, gridLayout.AbsoluteContentSize.Y + 8)
     end
     renderGrid()
 
