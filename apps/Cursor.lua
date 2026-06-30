@@ -51,12 +51,18 @@ local function shapeDef(id)
     return SHAPES[1]
 end
 
+-- Bump CVER whenever cursor art changes so the on-disk cache filename changes
+-- and executors re-download instead of serving a stale getcustomasset copy.
+local CVER = "1"
+
 -- asset id cache (resolved lazily; false = tried and failed)
 local assetCache = {}
+local assetFails = {}
 local function assetFor(id)
     local d = shapeDef(id)
     if assetCache[id] == nil then
-        assetCache[id] = Util.remoteImage(d.url, d.file) or false
+        local ok, res = pcall(Util.remoteImage, d.url, CVER .. "_" .. d.file)
+        assetCache[id] = (ok and res) or false
     end
     return assetCache[id] or nil
 end
@@ -120,13 +126,14 @@ end
 -- ===========================================================================
 -- Overlay engine (singleton) — image-based, config driven
 -- ===========================================================================
-local overlayGui, root, conn, inputConn, endConn
+local overlayGui, root, conn, inputConn, endConn, mouseIconConn
 local mainImg, borderImg, glowImg, gradient
 local trailImgs = {}
 local rippleLayer
 local history = {}
 local config
 local pressed = false
+local watching = false
 local onChangeCB
 
 -- the shape shown right now: pack pointer while pressing, else the base shape
@@ -234,8 +241,64 @@ local function applyVisuals(color, size, rotation, opacity)
     end
 end
 
-local function startOverlay()
-    if overlayGui then return end
+-- Unique token for this execution. If the script is re-run, a new module load
+-- replaces _G.__SYNC_CURSOR_GEN, and any loops from the old run see the mismatch
+-- and stop themselves -- so re-executing never stacks ghost cursors.
+local GEN = {}
+pcall(function() _G.__SYNC_CURSOR_GEN = GEN end)
+local function isCurrentGen() return _G.__SYNC_CURSOR_GEN == GEN end
+
+-- Remove overlays left behind by a previous execution.
+local function destroyOldOverlays()
+    local parents = {}
+    pcall(function() if typeof(gethui) == "function" then parents[#parents + 1] = gethui() end end)
+    pcall(function() parents[#parents + 1] = game:GetService("CoreGui") end)
+    pcall(function() parents[#parents + 1] = Util.localPlayer():FindFirstChild("PlayerGui") end)
+    for _, p in ipairs(parents) do
+        if p then
+            for _, ch in ipairs(p:GetChildren()) do
+                if ch.Name == "SYNC_CursorOverlay" then pcall(function() ch:Destroy() end) end
+            end
+        end
+    end
+end
+
+-- Tear down connections + instance refs WITHOUT restoring the system cursor
+-- (used by the watchdog when rebuilding after a wipe). Safe to call any time.
+local function resetRefs()
+    for _, c in ipairs({ conn, inputConn, endConn, mouseIconConn }) do
+        if c then pcall(function() c:Disconnect() end) end
+    end
+    conn, inputConn, endConn, mouseIconConn = nil, nil, nil, nil
+    if overlayGui then pcall(function() overlayGui:Destroy() end) end
+    overlayGui, root, mainImg, borderImg, glowImg, gradient, rippleLayer =
+        nil, nil, nil, nil, nil, nil, nil
+    trailImgs, history = {}, {}
+end
+
+local startOverlay  -- fwd decl (watchdog rebuilds via it)
+
+-- Watchdog: some games periodically wipe CoreGui to kill exploit UIs. If our
+-- overlay vanishes while a cursor is active, silently rebuild it.
+local function startWatchdog()
+    if watching then return end
+    watching = true
+    task.spawn(function()
+        while config and isCurrentGen() do
+            task.wait(1)
+            if config and isCurrentGen() and (overlayGui == nil or overlayGui.Parent == nil) then
+                resetRefs()
+                startOverlay()
+            end
+        end
+        watching = false
+    end)
+end
+
+function startOverlay()
+    if overlayGui and overlayGui.Parent then return end
+    if overlayGui then resetRefs() end
+    destroyOldOverlays()
     overlayGui = Instance.new("ScreenGui")
     overlayGui.Name = "SYNC_CursorOverlay"
     overlayGui.ResetOnSpawn = false
@@ -268,7 +331,9 @@ local function startOverlay()
     local clock = 0
     local refreshAcc = 0
     conn = RunService.RenderStepped:Connect(function(dt)
+        if not isCurrentGen() then if conn then conn:Disconnect(); conn = nil end return end
         if not config then return end
+        if not (root and root.Parent) then return end  -- wiped; watchdog will rebuild
         clock = clock + dt
         local m = UserInputService:GetMouseLocation()
 
@@ -280,8 +345,17 @@ local function startOverlay()
             refreshAcc = 0
             local id = activeShapeId()
             local a = assetFor(id)
-            if not a then assetCache[id] = nil end  -- allow a retry next cycle
+            if not a then
+                assetFails[id] = (assetFails[id] or 0) + 1
+                if assetFails[id] <= 5 then assetCache[id] = nil end  -- retry, capped
+            else
+                assetFails[id] = nil
+            end
             pcall(function() UserInputService.MouseIconEnabled = (a == nil) end)
+            -- resync press state in case an InputEnded was missed over sinking UI
+            pcall(function()
+                pressed = UserInputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton1)
+            end)
         end
 
         local color = config.color
@@ -339,14 +413,25 @@ local function startOverlay()
         task.delay(0.5, function() ring:Destroy() end)
     end)
 
+    -- Re-hide the system cursor if a game tries to turn it back on (the classic
+    -- reason custom cursors flicker / double up for other people).
+    mouseIconConn = UserInputService:GetPropertyChangedSignal("MouseIconEnabled"):Connect(function()
+        if config and UserInputService.MouseIconEnabled and assetFor(activeShapeId()) then
+            pcall(function() UserInputService.MouseIconEnabled = false end)
+        end
+    end)
+
     -- hide the system cursor only if our art is ready; the 1s loop keeps this true
     pcall(function() UserInputService.MouseIconEnabled = (assetFor(activeShapeId()) == nil) end)
+
+    startWatchdog()
 end
 
 local function stopOverlay()
     if conn then conn:Disconnect(); conn = nil end
     if inputConn then inputConn:Disconnect(); inputConn = nil end
     if endConn then endConn:Disconnect(); endConn = nil end
+    if mouseIconConn then mouseIconConn:Disconnect(); mouseIconConn = nil end
     pressed = false
     if overlayGui then overlayGui:Destroy(); overlayGui = nil end
     root, mainImg, borderImg, glowImg, gradient, rippleLayer = nil, nil, nil, nil, nil, nil
