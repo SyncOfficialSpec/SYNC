@@ -131,6 +131,9 @@ function Util.httpGet(url)
     return nil
 end
 
+-- Whether a real request() API (headers/POST capable) is available.
+function Util.hasRequest() return _req ~= nil end
+
 -- GET with custom headers (e.g. an API key). Returns (body, statusCode).
 function Util.httpGetH(url, headers)
     if not _req then

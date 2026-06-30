@@ -29,7 +29,7 @@ local C = {
     side    = Color3.fromRGB(43, 45, 49),
     rail    = Color3.fromRGB(30, 31, 34),
     header  = Color3.fromRGB(30, 31, 34),
-    input   = Color3.fromRGB(56, 58, 64),
+    input   = Color3.fromRGB(64, 68, 77),
     active  = Color3.fromRGB(64, 66, 73),
     hover   = Color3.fromRGB(53, 55, 60),
     text    = Color3.fromRGB(219, 222, 225),
@@ -241,6 +241,7 @@ function DiscordApp.open()
     inputWrap.Size = UDim2.new(1, -32, 0, 42); inputWrap.Position = UDim2.new(0, 16, 1, -50)
     inputWrap.BackgroundColor3 = C.input; inputWrap.BorderSizePixel = 0; inputWrap.ZIndex = 4; inputWrap.Parent = main
     Util.corner(inputWrap, 8)
+    Util.stroke(inputWrap, Color3.fromRGB(0, 0, 0), 1, 0.6)
     local box = Instance.new("TextBox")
     box.Size = UDim2.new(1, -24, 1, 0); box.Position = UDim2.fromOffset(14, 0)
     box.BackgroundTransparency = 1; box.Text = ""; box.PlaceholderText = "Message"
@@ -304,11 +305,15 @@ function DiscordApp.open()
         chHeader.Text = "# " .. name
         clearFeed()
         notice("Loading #" .. name .. "...")
-        local msgs = getMessages(id)
-        clearFeed()
-        if not msgs then notice("Couldn't reach the relay. Is it deployed and configured?") return end
-        for _, m in ipairs(msgs) do addMessage(m); lastId = m.id end
         if btnHighlight then btnHighlight() end
+        task.spawn(function()
+            local msgs = getMessages(id)
+            if not alive or activeChannel ~= id then return end
+            clearFeed()
+            if not msgs then notice("Couldn't load #" .. name .. " from the relay.") return end
+            if #msgs == 0 then notice("No messages in #" .. name .. " yet. Say hi 👋") return end
+            for _, m in ipairs(msgs) do addMessage(m); lastId = m.id end
+        end)
     end
 
     -- build channel buttons
@@ -320,19 +325,7 @@ function DiscordApp.open()
         end
     end
 
-    local function loadChannels()
-        if not configured() then
-            serverName.Text = "Not configured"
-            notice("The Discord relay URL isn't set yet. Deploy the relay and it'll connect automatically.")
-            return
-        end
-        local chans = getChannels()
-        if not chans then
-            serverName.Text = "SYNC Server"
-            notice("Couldn't reach the relay (" .. relayURL() .. "). Check it's running.")
-            return
-        end
-        for _, ch in ipairs(chans) do
+    local function buildChannelButton(ch)
             local b = Instance.new("TextButton")
             b.Size = UDim2.new(1, 0, 0, 32); b.AutoButtonColor = false
             b.BackgroundColor3 = C.side; b.BackgroundTransparency = 1; b.BorderSizePixel = 0
@@ -349,9 +342,40 @@ function DiscordApp.open()
                 selectChannel(ch.id, ch.name, function() highlightChannel(ch.id); t.TextColor3 = C.bright end)
             end)
             chButtons[ch.id] = b
+    end
+
+    -- Non-blocking: build the window first, fetch channels in the background,
+    -- and show a clear diagnostic on screen if anything fails.
+    local function loadChannels()
+        if not configured() then
+            serverName.Text = "Not configured"
+            notice("The Discord relay URL isn't set yet.")
+            return
         end
-        -- auto-open first channel
-        if chans[1] then selectChannel(chans[1].id, chans[1].name, function() highlightChannel(chans[1].id) end) end
+        notice("Connecting to relay...")
+        task.spawn(function()
+            local url = relayURL() .. "/channels?key=" .. apiKey()
+            local body, status = Util.httpGetH(url, { ["X-API-Key"] = apiKey() })
+            if not alive then return end
+            if not body then
+                notice("No response from the relay.\n\nHTTP: " ..
+                    (Util.hasRequest() and "request() available" or "game:HttpGet only (no headers)") ..
+                    "\nstatus = " .. tostring(status) .. "\n" .. url)
+                return
+            end
+            local chans = jdecode(body)
+            if type(chans) ~= "table" or chans.error then
+                notice("Relay replied (status " .. tostring(status) .. "):\n\n" .. tostring(body):sub(1, 180))
+                return
+            end
+            clearFeed()
+            for _, ch in ipairs(chans) do buildChannelButton(ch) end
+            if chans[1] then
+                selectChannel(chans[1].id, chans[1].name, function() highlightChannel(chans[1].id) end)
+            else
+                notice("Connected, but no channels are configured on the relay.")
+            end
+        end)
     end
 
     -- send
