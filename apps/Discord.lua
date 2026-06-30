@@ -164,8 +164,23 @@ function DiscordApp.open()
     end
     local titleLbl = Instance.new("TextLabel")
     titleLbl.Size = UDim2.new(1,0,1,0); titleLbl.BackgroundTransparency = 1
-    titleLbl.Text = "Discord"; titleLbl.Font = Theme.fonts.title; titleLbl.TextSize = 13
+    titleLbl.Text = "Discord  ·  v5"; titleLbl.Font = Theme.fonts.title; titleLbl.TextSize = 13
     titleLbl.TextColor3 = C.muted; titleLbl.ZIndex = 6; titleLbl.Parent = bar
+
+    -- diagnostic label parented straight to the window (renders independently of
+    -- the right panel), so failures are always visible.
+    local dbg = Instance.new("TextLabel")
+    dbg.Position = UDim2.fromOffset(216, 56)
+    dbg.Size = UDim2.new(0, 460, 0, 320)
+    dbg.BackgroundTransparency = 1
+    dbg.Text = "build v5 — starting…"
+    dbg.TextColor3 = Color3.fromRGB(130, 220, 170)
+    dbg.Font = Theme.fonts.body; dbg.TextSize = 13
+    dbg.TextWrapped = true
+    dbg.TextXAlignment = Enum.TextXAlignment.Left
+    dbg.TextYAlignment = Enum.TextYAlignment.Top
+    dbg.ZIndex = 9; dbg.Parent = win
+    local function setDbg(t) pcall(function() dbg.Text = t end) end
 
     -- ---- left: channel rail ----
     local SIDE_W = 200
@@ -348,32 +363,37 @@ function DiscordApp.open()
     -- and show a clear diagnostic on screen if anything fails.
     local function loadChannels()
         if not configured() then
-            serverName.Text = "Not configured"
-            notice("The Discord relay URL isn't set yet.")
+            setDbg("Relay URL not configured.")
             return
         end
-        notice("Connecting to relay...")
+        setDbg("build v5\nHTTP: " .. (Util.hasRequest() and "request() available" or "game:HttpGet only") ..
+            "\nConnecting to relay…")
         task.spawn(function()
             local url = relayURL() .. "/channels?key=" .. apiKey()
-            local body, status = Util.httpGetH(url, { ["X-API-Key"] = apiKey() })
+            local ok, body, status = pcall(function() return Util.httpGetH(url, { ["X-API-Key"] = apiKey() }) end)
             if not alive then return end
+            if not ok then
+                setDbg("build v5\nRequest THREW an error:\n" .. tostring(body) .. "\n\n" .. url)
+                return
+            end
             if not body then
-                notice("No response from the relay.\n\nHTTP: " ..
-                    (Util.hasRequest() and "request() available" or "game:HttpGet only (no headers)") ..
-                    "\nstatus = " .. tostring(status) .. "\n" .. url)
+                setDbg("build v5\nNo response body.\nHTTP: " ..
+                    (Util.hasRequest() and "request()" or "game:HttpGet only") ..
+                    "\nstatus = " .. tostring(status) .. "\n\n" .. url)
                 return
             end
             local chans = jdecode(body)
             if type(chans) ~= "table" or chans.error then
-                notice("Relay replied (status " .. tostring(status) .. "):\n\n" .. tostring(body):sub(1, 180))
+                setDbg("build v5\nRelay replied (status " .. tostring(status) .. "):\n\n" .. tostring(body):sub(1, 220))
                 return
             end
+            setDbg("")  -- success: clear the diagnostic
             clearFeed()
             for _, ch in ipairs(chans) do buildChannelButton(ch) end
             if chans[1] then
                 selectChannel(chans[1].id, chans[1].name, function() highlightChannel(chans[1].id) end)
             else
-                notice("Connected, but no channels are configured on the relay.")
+                setDbg("Connected, but the relay has no channels configured.")
             end
         end)
     end
@@ -394,7 +414,8 @@ function DiscordApp.open()
     end
     box.FocusLost:Connect(function(enter) if enter then doSend() end end)
 
-    loadChannels()
+    local lok, lerr = pcall(loadChannels)
+    if not lok then setDbg("build v5\nloadChannels error:\n" .. tostring(lerr)) end
 
     -- poll active channel for new messages
     task.spawn(function()
