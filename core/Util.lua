@@ -134,6 +134,30 @@ end
 -- Whether a real request() API (headers/POST capable) is available.
 function Util.hasRequest() return _req ~= nil end
 
+-- Drive a ScrollingFrame's CanvasSize from its layout's content size. Replaces
+-- AutomaticCanvasSize, which some executors' Roblox builds lack (it throws as
+-- "not a valid member of Enum"). axis = "Y" (default) or "X". Order-independent:
+-- it waits for the layout to exist, so call it any time.
+function Util.autoCanvas(scroll, axis)
+    axis = axis or "Y"
+    task.spawn(function()
+        local layout
+        for _ = 1, 120 do
+            layout = scroll:FindFirstChildOfClass("UIListLayout") or scroll:FindFirstChildOfClass("UIGridLayout")
+            if layout then break end
+            task.wait()
+        end
+        if not layout then return end
+        local function upd()
+            local cs = layout.AbsoluteContentSize
+            scroll.CanvasSize = (axis == "X") and UDim2.fromOffset(cs.X + 8, 0)
+                or UDim2.fromOffset(0, cs.Y + 8)
+        end
+        layout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(upd)
+        upd()
+    end)
+end
+
 -- GET with custom headers (e.g. an API key). Returns (body, statusCode).
 function Util.httpGetH(url, headers)
     if not _req then

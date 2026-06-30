@@ -797,7 +797,7 @@ function CursorApp.open()
     packsPage.ScrollBarImageColor3 = Color3.fromRGB(120, 120, 128)
     packsPage.ScrollBarImageTransparency = 0.4
     packsPage.CanvasSize = UDim2.fromOffset(0, 0)
-    packsPage.AutomaticCanvasSize = Enum.AutomaticCanvasSize.Y
+    Util.autoCanvas(packsPage, "Y")
     packsPage.ZIndex = 3
     packsPage.Parent = win
     do
@@ -912,7 +912,7 @@ function CursorApp.open()
     customPage.ScrollBarImageColor3 = Color3.fromRGB(120, 120, 128)
     customPage.ScrollBarImageTransparency = 0.4
     customPage.CanvasSize = UDim2.fromOffset(0, 0)
-    customPage.AutomaticCanvasSize = Enum.AutomaticCanvasSize.Y  -- make controls scrollable
+    Util.autoCanvas(customPage, "Y")
     customPage.ZIndex = 3
     customPage.Parent = win
 
@@ -1151,7 +1151,7 @@ function CursorApp.open()
     presetScroll.BorderSizePixel = 0
     presetScroll.ScrollBarThickness = 0
     presetScroll.ScrollingDirection = Enum.ScrollingDirection.X
-    presetScroll.AutomaticCanvasSize = Enum.AutomaticCanvasSize.X
+    Util.autoCanvas(presetScroll, "X")
     presetScroll.CanvasSize = UDim2.fromOffset(0, 0)
     presetScroll.ZIndex = 4
     presetScroll.Parent = presetWrap

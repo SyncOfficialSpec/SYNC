@@ -173,7 +173,7 @@ function DiscordApp.open()
     dbg.Position = UDim2.fromOffset(216, 56)
     dbg.Size = UDim2.new(0, 460, 0, 320)
     dbg.BackgroundTransparency = 1
-    dbg.Text = "build v6 starting..."
+    dbg.Text = ""
     dbg.TextColor3 = Color3.fromRGB(130, 220, 170)
     dbg.Font = Theme.fonts.body; dbg.TextSize = 13
     dbg.TextWrapped = true
@@ -374,25 +374,25 @@ function DiscordApp.open()
             setDbg("Relay URL not configured.")
             return
         end
-        setDbg("build v6\nHTTP: " .. (Util.hasRequest() and "request() available" or "game:HttpGet only") ..
+        setDbg("Connecting...\nHTTP: " .. (Util.hasRequest() and "request() available" or "game:HttpGet only") ..
             "\nConnecting to relay…")
         task.spawn(function()
             local url = relayURL() .. "/channels?key=" .. apiKey()
             local ok, body, status = pcall(function() return Util.httpGetH(url, { ["X-API-Key"] = apiKey() }) end)
             if not alive then return end
             if not ok then
-                setDbg("build v6\nRequest THREW an error:\n" .. tostring(body) .. "\n\n" .. url)
+                setDbg("Request error:\n" .. tostring(body) .. "\n\n" .. url)
                 return
             end
             if not body then
-                setDbg("build v6\nNo response body.\nHTTP: " ..
+                setDbg("No response.\nHTTP: " ..
                     (Util.hasRequest() and "request()" or "game:HttpGet only") ..
                     "\nstatus = " .. tostring(status) .. "\n\n" .. url)
                 return
             end
             local chans = jdecode(body)
             if type(chans) ~= "table" or chans.error then
-                setDbg("build v6\nRelay replied (status " .. tostring(status) .. "):\n\n" .. tostring(body):sub(1, 220))
+                setDbg("Relay replied (status " .. tostring(status) .. "):\n\n" .. tostring(body):sub(1, 220))
                 return
             end
             setDbg("")  -- success: clear the diagnostic
@@ -423,7 +423,7 @@ function DiscordApp.open()
     box.FocusLost:Connect(function(enter) if enter then doSend() end end)
 
     local lok, lerr = pcall(loadChannels)
-    if not lok then setDbg("build v6\nloadChannels error:\n" .. tostring(lerr)) end
+    if not lok then setDbg("Load error:\n" .. tostring(lerr)) end
 
     -- poll active channel for new messages
     task.spawn(function()
@@ -438,7 +438,7 @@ function DiscordApp.open()
         end
     end)
   end)
-  if not okAll then setDbg("v6 CRASH:\n" .. tostring(errAll)) end
+  if not okAll then setDbg("Error:\n" .. tostring(errAll)) end
 
     return { close = close }
 end

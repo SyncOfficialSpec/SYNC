@@ -462,7 +462,7 @@ function Browser.open()
         sc.BorderSizePixel = 0
         sc.ScrollBarThickness = 5
         sc.CanvasSize = UDim2.new(0, 0, 0, 0)
-        sc.AutomaticCanvasSize = Enum.AutomaticCanvasSize.Y
+        Util.autoCanvas(sc, "Y")
         sc.ZIndex = 4
         sc.Parent = content
         local pad = Instance.new("UIPadding")
