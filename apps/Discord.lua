@@ -164,7 +164,7 @@ function DiscordApp.open()
     end
     local titleLbl = Instance.new("TextLabel")
     titleLbl.Size = UDim2.new(1,0,1,0); titleLbl.BackgroundTransparency = 1
-    titleLbl.Text = "Discord  ·  v5"; titleLbl.Font = Theme.fonts.title; titleLbl.TextSize = 13
+    titleLbl.Text = "Discord"; titleLbl.Font = Theme.fonts.title; titleLbl.TextSize = 13
     titleLbl.TextColor3 = C.muted; titleLbl.ZIndex = 6; titleLbl.Parent = bar
 
     -- diagnostic label parented straight to the window (renders independently of
@@ -173,7 +173,7 @@ function DiscordApp.open()
     dbg.Position = UDim2.fromOffset(216, 56)
     dbg.Size = UDim2.new(0, 460, 0, 320)
     dbg.BackgroundTransparency = 1
-    dbg.Text = "build v5 — starting…"
+    dbg.Text = "build v6 starting..."
     dbg.TextColor3 = Color3.fromRGB(130, 220, 170)
     dbg.Font = Theme.fonts.body; dbg.TextSize = 13
     dbg.TextWrapped = true
@@ -214,9 +214,12 @@ function DiscordApp.open()
     chList.Position = UDim2.fromOffset(8, 56); chList.Size = UDim2.new(1, -12, 1, -64)
     chList.BackgroundTransparency = 1; chList.BorderSizePixel = 0; chList.ScrollBarThickness = 3
     chList.ScrollBarImageColor3 = Color3.fromRGB(24,25,28); chList.CanvasSize = UDim2.fromOffset(0,0)
-    chList.AutomaticCanvasSize = Enum.AutomaticCanvasSize.Y; chList.ZIndex = 4; chList.Parent = side
+    chList.ZIndex = 4; chList.Parent = side
     local chLayout = Instance.new("UIListLayout"); chLayout.Padding = UDim.new(0,2)
     chLayout.SortOrder = Enum.SortOrder.LayoutOrder; chLayout.Parent = chList
+    chLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
+        chList.CanvasSize = UDim2.fromOffset(0, chLayout.AbsoluteContentSize.Y + 4)
+    end)
 
     -- ---- right: messages + input ----
     local main = Instance.new("Frame")
@@ -246,9 +249,13 @@ function DiscordApp.open()
     feed.Position = UDim2.fromOffset(8, 52); feed.Size = UDim2.new(1, -12, 1, -52-56)
     feed.BackgroundTransparency = 1; feed.BorderSizePixel = 0; feed.ScrollBarThickness = 4
     feed.ScrollBarImageColor3 = Color3.fromRGB(26,27,30); feed.CanvasSize = UDim2.fromOffset(0,0)
-    feed.AutomaticCanvasSize = Enum.AutomaticCanvasSize.Y; feed.ZIndex = 4; feed.Parent = main
+    feed.ZIndex = 4; feed.Parent = main
     local feedLayout = Instance.new("UIListLayout"); feedLayout.Padding = UDim.new(0,10)
     feedLayout.SortOrder = Enum.SortOrder.LayoutOrder; feedLayout.Parent = feed
+    feedLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
+        feed.CanvasSize = UDim2.fromOffset(0, feedLayout.AbsoluteContentSize.Y + 16)
+        feed.CanvasPosition = Vector2.new(0, feed.CanvasSize.Y.Offset)
+    end)
     local feedPad = Instance.new("UIPadding"); feedPad.PaddingTop = UDim.new(0,8); feedPad.PaddingBottom = UDim.new(0,8)
     feedPad.PaddingRight = UDim.new(0,8); feedPad.Parent = feed
 
@@ -298,7 +305,7 @@ function DiscordApp.open()
         content.TextXAlignment = Enum.TextXAlignment.Left; content.TextYAlignment = Enum.TextYAlignment.Top
         content.ZIndex = 5; content.Parent = row
 
-        feed.CanvasPosition = Vector2.new(0, math.max(0, feed.AbsoluteCanvasSize.Y))
+        feed.CanvasPosition = Vector2.new(0, feed.CanvasSize.Y.Offset)
     end
 
     local function clearFeed()
@@ -367,25 +374,25 @@ function DiscordApp.open()
             setDbg("Relay URL not configured.")
             return
         end
-        setDbg("build v5\nHTTP: " .. (Util.hasRequest() and "request() available" or "game:HttpGet only") ..
+        setDbg("build v6\nHTTP: " .. (Util.hasRequest() and "request() available" or "game:HttpGet only") ..
             "\nConnecting to relay…")
         task.spawn(function()
             local url = relayURL() .. "/channels?key=" .. apiKey()
             local ok, body, status = pcall(function() return Util.httpGetH(url, { ["X-API-Key"] = apiKey() }) end)
             if not alive then return end
             if not ok then
-                setDbg("build v5\nRequest THREW an error:\n" .. tostring(body) .. "\n\n" .. url)
+                setDbg("build v6\nRequest THREW an error:\n" .. tostring(body) .. "\n\n" .. url)
                 return
             end
             if not body then
-                setDbg("build v5\nNo response body.\nHTTP: " ..
+                setDbg("build v6\nNo response body.\nHTTP: " ..
                     (Util.hasRequest() and "request()" or "game:HttpGet only") ..
                     "\nstatus = " .. tostring(status) .. "\n\n" .. url)
                 return
             end
             local chans = jdecode(body)
             if type(chans) ~= "table" or chans.error then
-                setDbg("build v5\nRelay replied (status " .. tostring(status) .. "):\n\n" .. tostring(body):sub(1, 220))
+                setDbg("build v6\nRelay replied (status " .. tostring(status) .. "):\n\n" .. tostring(body):sub(1, 220))
                 return
             end
             setDbg("")  -- success: clear the diagnostic
@@ -416,7 +423,7 @@ function DiscordApp.open()
     box.FocusLost:Connect(function(enter) if enter then doSend() end end)
 
     local lok, lerr = pcall(loadChannels)
-    if not lok then setDbg("build v5\nloadChannels error:\n" .. tostring(lerr)) end
+    if not lok then setDbg("build v6\nloadChannels error:\n" .. tostring(lerr)) end
 
     -- poll active channel for new messages
     task.spawn(function()
@@ -431,7 +438,7 @@ function DiscordApp.open()
         end
     end)
   end)
-  if not okAll then setDbg("v5 CRASH:\n" .. tostring(errAll)) end
+  if not okAll then setDbg("v6 CRASH:\n" .. tostring(errAll)) end
 
     return { close = close }
 end
