@@ -694,7 +694,8 @@ function DiscordApp.open()
         local card = Instance.new("TextButton")
         card.Size = UDim2.fromOffset(380, 150); card.AnchorPoint = Vector2.new(0.5, 0.5)
         card.Position = UDim2.fromScale(0.5, 0.5); card.BackgroundColor3 = Color3.fromRGB(30, 31, 34)
-        card.AutoButtonColor = false; card.Text = ""; card.BorderSizePixel = 0; card.ZIndex = 21; card.Parent = pop
+        card.AutoButtonColor = false; card.Text = ""; card.BorderSizePixel = 0; card.ClipsDescendants = true
+        card.ZIndex = 21; card.Parent = pop
         Util.corner(card, 12); Util.stroke(card, Color3.fromRGB(0,0,0), 1, 0.4)
         local title = Instance.new("TextLabel")
         title.Position = UDim2.fromOffset(18, 16); title.Size = UDim2.new(1, -36, 0, 22)
