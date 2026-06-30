@@ -4347,20 +4347,26 @@ end
 -- ---------------------------------------------------------------------------
 -- Relay API
 -- ---------------------------------------------------------------------------
+-- key is passed both as a header and a ?key= query param: executors that fall
+-- back to game:HttpGet can't send headers, so the query param is what works.
 local function getChannels()
-    local body = Util.httpGetH(relayURL() .. "/channels", { ["X-API-Key"] = apiKey() })
-    return body and jdecode(body) or nil
+    local body = Util.httpGetH(relayURL() .. "/channels?key=" .. apiKey(), { ["X-API-Key"] = apiKey() })
+    local t = body and jdecode(body)
+    if type(t) ~= "table" or t.error then return nil end
+    return t
 end
 local function getMessages(channelId, afterId)
-    local url = relayURL() .. "/messages?channel=" .. channelId
+    local url = relayURL() .. "/messages?key=" .. apiKey() .. "&channel=" .. channelId
     if afterId then url = url .. "&after=" .. afterId end
     local body = Util.httpGetH(url, { ["X-API-Key"] = apiKey() })
-    return body and jdecode(body) or nil
+    local t = body and jdecode(body)
+    if type(t) ~= "table" or t.error then return nil end
+    return t
 end
 local function sendMessage(channelId, text)
     local m = me()
     local payload = jencode({ channel = channelId, robloxUserId = m.id, username = m.name, text = text })
-    local ok = Util.httpPost(relayURL() .. "/send", { ["X-API-Key"] = apiKey() }, payload)
+    local ok = Util.httpPost(relayURL() .. "/send?key=" .. apiKey(), { ["X-API-Key"] = apiKey() }, payload)
     return ok
 end
 
@@ -4459,6 +4465,16 @@ function DiscordApp.open()
     side.Position = UDim2.fromOffset(0, TB)
     side.Size = UDim2.new(0, SIDE_W, 1, -TB)
     side.BackgroundColor3 = C.side; side.BorderSizePixel = 0; side.ZIndex = 3; side.Parent = win
+    -- round the outer bottom-left corner to match the window
+    do
+        local c = Instance.new("UICorner")
+        local ok = pcall(function()
+            c.TopLeftRadius = UDim.new(0, 0); c.TopRightRadius = UDim.new(0, 0)
+            c.BottomLeftRadius = UDim.new(0, 12); c.BottomRightRadius = UDim.new(0, 0)
+        end)
+        if not ok then c.CornerRadius = UDim.new(0, 0) end
+        c.Parent = side
+    end
 
     local serverName = Instance.new("TextLabel")
     serverName.Size = UDim2.new(1, -24, 0, 48); serverName.Position = UDim2.fromOffset(16, 0)
@@ -4482,6 +4498,15 @@ function DiscordApp.open()
     local main = Instance.new("Frame")
     main.Position = UDim2.fromOffset(SIDE_W, TB); main.Size = UDim2.new(1, -SIDE_W, 1, -TB)
     main.BackgroundColor3 = C.bg; main.BorderSizePixel = 0; main.ZIndex = 3; main.Parent = win
+    do
+        local c = Instance.new("UICorner")
+        local ok = pcall(function()
+            c.TopLeftRadius = UDim.new(0, 0); c.TopRightRadius = UDim.new(0, 0)
+            c.BottomLeftRadius = UDim.new(0, 0); c.BottomRightRadius = UDim.new(0, 12)
+        end)
+        if not ok then c.CornerRadius = UDim.new(0, 0) end
+        c.Parent = main
+    end
 
     local chHeader = Instance.new("TextLabel")
     chHeader.Size = UDim2.new(1, -24, 0, 48); chHeader.Position = UDim2.fromOffset(16, 0)
