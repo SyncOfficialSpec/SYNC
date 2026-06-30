@@ -50,7 +50,7 @@ function Desktop.start()
             })
         elseif appName == "Cursor" then
             Cursor.open()
-        elseif appName == "Discord" then
+        elseif appName == "Syncord" then
             Discord.open()
         end
     end)

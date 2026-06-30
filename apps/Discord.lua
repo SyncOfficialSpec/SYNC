@@ -233,7 +233,7 @@ function DiscordApp.open()
     end
     local titleLbl = Instance.new("TextLabel")
     titleLbl.Size = UDim2.new(1,0,1,0); titleLbl.BackgroundTransparency = 1
-    titleLbl.Text = "Discord"; titleLbl.Font = Theme.fonts.title; titleLbl.TextSize = 13
+    titleLbl.Text = "Syncord"; titleLbl.Font = Theme.fonts.title; titleLbl.TextSize = 13
     titleLbl.TextColor3 = C.muted; titleLbl.ZIndex = 6; titleLbl.Parent = bar
 
     -- diagnostic label parented straight to the window (renders independently of
