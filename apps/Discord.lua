@@ -6,9 +6,35 @@
 local Players          = game:GetService("Players")
 local RunService       = game:GetService("RunService")
 local HttpService      = game:GetService("HttpService")
+local TextService      = game:GetService("TextService")
 
 local Theme = SYNC.import("core/Theme")
 local Util  = SYNC.import("core/Util")
+
+-- markdown -> Roblox RichText (bold / italic / inline code)
+local function escapeRich(s)
+    return (tostring(s):gsub("&", "&amp;"):gsub("<", "&lt;"):gsub(">", "&gt;"))
+end
+local function mdToRich(s)
+    s = escapeRich(s)
+    s = s:gsub("%*%*(.-)%*%*", "<b>%1</b>")
+    s = s:gsub("__(.-)__", "<b>%1</b>")
+    s = s:gsub("%*(.-)%*", "<i>%1</i>")
+    s = s:gsub("`(.-)`", '<font color="rgb(170,180,195)">%1</font>')
+    return s
+end
+-- ms timestamp -> "h:mm AM/PM" (best effort)
+local function fmtTime(ts)
+    local ok, s = pcall(function() return os.date("%I:%M %p", math.floor((ts or 0) / 1000)) end)
+    if ok and s then return (s:gsub("^0", "")) end
+    return ""
+end
+local function isImageUrl(s)
+    return type(s) == "string" and s:match("^https?://%S+%.[Pp][Nn][Gg]")
+        or (type(s) == "string" and s:match("^https?://%S+%.[Jj][Pp][Ee]?[Gg]"))
+        or (type(s) == "string" and s:match("^https?://%S+%.[Gg][Ii][Ff]"))
+        or (type(s) == "string" and s:match("^https?://%S+%.[Ww][Ee][Bb][Pp]"))
+end
 
 local DiscordApp = {}
 
@@ -22,6 +48,9 @@ local API_KEY   = "CdTt-Mmf25ewBa8Ak9DQujolBQ7HQ9Va76lyV4ulXDnIyc8XOPih2w"
 local function relayURL() local v = Util.load("DiscordRelay"); return (v and v ~= "") and v or RELAY_URL end
 local function apiKey()   local v = Util.load("DiscordKey");   return (v and v ~= "") and v or API_KEY end
 local function configured() return relayURL():sub(1, 8) == "https://" and not relayURL():find("REPLACE") end
+
+-- prewarm the relay at startup so the first open is instant (no cold start)
+task.spawn(function() pcall(function() Util.httpGetH(RELAY_URL .. "/health") end) end)
 
 -- Discord palette
 local C = {
@@ -71,9 +100,12 @@ local function getMessages(channelId, afterId)
     if type(t) ~= "table" or t.error then return nil end
     return t
 end
-local function sendMessage(channelId, text)
+local function sendMessage(channelId, text, replyTo, imageUrl)
     local m = me()
-    local payload = jencode({ channel = channelId, robloxUserId = m.id, username = m.name, text = text })
+    local payload = jencode({
+        channel = channelId, robloxUserId = m.id, username = m.name, text = text,
+        replyTo = replyTo, imageUrl = imageUrl,
+    })
     local ok = Util.httpPost(relayURL() .. "/send?key=" .. apiKey(), { ["X-API-Key"] = apiKey() }, payload)
     return ok
 end
@@ -272,40 +304,129 @@ function DiscordApp.open()
     box.TextSize = 14; box.TextXAlignment = Enum.TextXAlignment.Left; box.ClearTextOnFocus = false
     box.ClipsDescendants = true; box.ZIndex = 5; box.Parent = inputWrap
 
+    -- reply bar (shown above the input when replying)
+    local replyBar = Instance.new("Frame")
+    replyBar.Size = UDim2.new(1, -32, 0, 24); replyBar.Position = UDim2.new(0, 16, 1, -76)
+    replyBar.BackgroundColor3 = Color3.fromRGB(38, 40, 45); replyBar.BorderSizePixel = 0
+    replyBar.Visible = false; replyBar.ZIndex = 4; replyBar.Parent = main
+    Util.corner(replyBar, 6)
+    local replyLbl = Instance.new("TextLabel")
+    replyLbl.Position = UDim2.fromOffset(10, 0); replyLbl.Size = UDim2.new(1, -44, 1, 0)
+    replyLbl.BackgroundTransparency = 1; replyLbl.Font = Theme.fonts.caption; replyLbl.TextSize = 12
+    replyLbl.TextColor3 = C.muted; replyLbl.TextXAlignment = Enum.TextXAlignment.Left
+    replyLbl.TextTruncate = Enum.TextTruncate.AtEnd; replyLbl.ZIndex = 5; replyLbl.Parent = replyBar
+    local replyX = Instance.new("TextButton")
+    replyX.Position = UDim2.new(1, -28, 0.5, -10); replyX.Size = UDim2.fromOffset(20, 20)
+    replyX.BackgroundTransparency = 1; replyX.AutoButtonColor = false; replyX.Text = "✕"
+    replyX.Font = Theme.fonts.body; replyX.TextSize = 13; replyX.TextColor3 = C.muted
+    replyX.ZIndex = 5; replyX.Parent = replyBar
+
     -- ---- state ----
     local activeChannel, activeName
     local lastId
     local renderedIds = {}
+    local replyTarget = nil
+    local showProfile, setReply   -- forward declarations
+
+    local CONTENT_W = (W - SIDE_W) - 78
+    local function measureH(text)
+        if not text or text == "" then return 0 end
+        local ok, v = pcall(function()
+            return TextService:GetTextSize(text, 14, Theme.fonts.body, Vector2.new(CONTENT_W, 100000))
+        end)
+        return (ok and v and v.Y) or 18
+    end
+    local function measureW(text, size, font)
+        local ok, v = pcall(function()
+            return TextService:GetTextSize(text, size, font, Vector2.new(240, size + 6))
+        end)
+        return (ok and v and v.X) or (#tostring(text) * size * 0.5)
+    end
 
     local function addMessage(m)
         if renderedIds[m.id] then return end
         renderedIds[m.id] = true
+
+        local replyH = m.replyTo and 16 or 0
+        local headerH = replyH + 18
+        local contentH = measureH(m.content)
+        local imgCount = m.images and #m.images or 0
+        local imgH = imgCount * 168
+        local total = math.max(42, headerH + contentH + imgH + 6)
+
         local row = Instance.new("Frame")
-        row.Size = UDim2.new(1, 0, 0, 0); row.AutomaticSize = Enum.AutomaticSize.Y
+        row.Size = UDim2.new(1, 0, 0, total)
         row.BackgroundTransparency = 1; row.ZIndex = 4; row.Parent = feed
 
+        -- avatar (clickable -> profile)
         local av = Instance.new("ImageLabel")
-        av.Size = UDim2.fromOffset(36, 36); av.Position = UDim2.fromOffset(4, 2)
+        av.Size = UDim2.fromOffset(36, 36); av.Position = UDim2.fromOffset(4, replyH + 2)
         av.BackgroundColor3 = C.rail; av.BorderSizePixel = 0; av.ZIndex = 5; av.Parent = row
         Util.corner(av, 18)
         if m.avatar and m.avatar ~= "" then av.Image = m.avatar end
+        local avBtn = Instance.new("TextButton")
+        avBtn.Size = UDim2.fromScale(1, 1); avBtn.BackgroundTransparency = 1
+        avBtn.Text = ""; avBtn.AutoButtonColor = false; avBtn.ZIndex = 6; avBtn.Parent = av
+        avBtn.MouseButton1Click:Connect(function() if showProfile then showProfile(m) end end)
 
-        local nameLbl = Instance.new("TextLabel")
-        nameLbl.Position = UDim2.fromOffset(50, 0); nameLbl.Size = UDim2.new(1, -58, 0, 18)
-        nameLbl.BackgroundTransparency = 1; nameLbl.Text = m.author or "Unknown"
-        nameLbl.Font = Theme.fonts.title; nameLbl.TextSize = 14
-        nameLbl.TextColor3 = m.roblox and Color3.fromRGB(120, 200, 255) or C.bright
-        nameLbl.TextXAlignment = Enum.TextXAlignment.Left; nameLbl.ZIndex = 5; nameLbl.Parent = row
+        -- reply context line
+        if m.replyTo then
+            local rl = Instance.new("TextLabel")
+            rl.Position = UDim2.fromOffset(50, 0); rl.Size = UDim2.new(1, -110, 0, 14)
+            rl.BackgroundTransparency = 1
+            rl.Text = "↪ " .. (m.replyTo.author or "") ..
+                ((m.replyTo.content and m.replyTo.content ~= "") and (": " .. m.replyTo.content) or "")
+            rl.Font = Theme.fonts.caption; rl.TextSize = 12; rl.TextColor3 = C.muted
+            rl.TextXAlignment = Enum.TextXAlignment.Left; rl.TextTruncate = Enum.TextTruncate.AtEnd
+            rl.ZIndex = 5; rl.Parent = row
+        end
 
-        local content = Instance.new("TextLabel")
-        content.Position = UDim2.fromOffset(50, 18); content.Size = UDim2.new(1, -58, 0, 0)
-        content.AutomaticSize = Enum.AutomaticSize.Y; content.BackgroundTransparency = 1
-        content.Text = m.content or ""; content.Font = Theme.fonts.body; content.TextSize = 14
-        content.TextColor3 = C.text; content.TextWrapped = true
-        content.TextXAlignment = Enum.TextXAlignment.Left; content.TextYAlignment = Enum.TextYAlignment.Top
-        content.ZIndex = 5; content.Parent = row
+        -- name (clickable) + timestamp
+        local nameBtn = Instance.new("TextButton")
+        nameBtn.Position = UDim2.fromOffset(50, replyH); nameBtn.Size = UDim2.fromOffset(240, 18)
+        nameBtn.BackgroundTransparency = 1; nameBtn.AutoButtonColor = false
+        nameBtn.Text = m.author or "Unknown"; nameBtn.Font = Theme.fonts.title; nameBtn.TextSize = 14
+        nameBtn.TextColor3 = m.roblox and Color3.fromRGB(120, 200, 255) or C.bright
+        nameBtn.TextXAlignment = Enum.TextXAlignment.Left; nameBtn.ZIndex = 5; nameBtn.Parent = row
+        nameBtn.MouseButton1Click:Connect(function() if showProfile then showProfile(m) end end)
 
-        feed.CanvasPosition = Vector2.new(0, feed.CanvasSize.Y.Offset)
+        local nameW = measureW(m.author or "", 14, Theme.fonts.title)
+        local timeLbl = Instance.new("TextLabel")
+        timeLbl.Position = UDim2.fromOffset(56 + nameW, replyH + 3); timeLbl.Size = UDim2.fromOffset(90, 13)
+        timeLbl.BackgroundTransparency = 1; timeLbl.Text = fmtTime(m.ts)
+        timeLbl.Font = Theme.fonts.caption; timeLbl.TextSize = 11; timeLbl.TextColor3 = C.muted
+        timeLbl.TextXAlignment = Enum.TextXAlignment.Left; timeLbl.ZIndex = 5; timeLbl.Parent = row
+
+        -- content (markdown -> rich text)
+        if m.content and m.content ~= "" then
+            local content = Instance.new("TextLabel")
+            content.Position = UDim2.fromOffset(50, headerH); content.Size = UDim2.fromOffset(CONTENT_W, contentH)
+            content.BackgroundTransparency = 1; content.RichText = true; content.Text = mdToRich(m.content)
+            content.Font = Theme.fonts.body; content.TextSize = 14; content.TextColor3 = C.text
+            content.TextWrapped = true; content.TextXAlignment = Enum.TextXAlignment.Left
+            content.TextYAlignment = Enum.TextYAlignment.Top; content.ZIndex = 5; content.Parent = row
+        end
+
+        -- inline images
+        if m.images then
+            for i, url in ipairs(m.images) do
+                local img = Instance.new("ImageLabel")
+                img.Position = UDim2.fromOffset(50, headerH + contentH + (i - 1) * 168 + 4)
+                img.Size = UDim2.fromOffset(280, 158)
+                img.BackgroundColor3 = C.rail; img.BorderSizePixel = 0
+                img.ScaleType = Enum.ScaleType.Fit; img.Image = url
+                img.ZIndex = 5; img.Parent = row
+                Util.corner(img, 8)
+            end
+        end
+
+        -- reply button
+        local rb = Instance.new("TextButton")
+        rb.Position = UDim2.new(1, -54, 0, replyH); rb.Size = UDim2.fromOffset(46, 18)
+        rb.BackgroundTransparency = 1; rb.AutoButtonColor = false
+        rb.Text = "reply"; rb.Font = Theme.fonts.caption; rb.TextSize = 11; rb.TextColor3 = C.muted
+        rb.ZIndex = 6; rb.Parent = row
+        rb.MouseButton1Click:Connect(function() if setReply then setReply(m) end end)
     end
 
     local function clearFeed()
@@ -406,18 +527,67 @@ function DiscordApp.open()
         end)
     end
 
+    -- reply: assign the forward-declared local
+    setReply = function(m)
+        replyTarget = { id = m.id, author = m.author, content = (m.content or ""):sub(1, 80) }
+        replyLbl.Text = "Replying to " .. (m.author or "")
+        replyBar.Visible = true
+        pcall(function() box:CaptureFocus() end)
+    end
+    local function clearReply()
+        replyTarget = nil; replyBar.Visible = false
+    end
+    replyX.MouseButton1Click:Connect(clearReply)
+
+    -- profile popup: assign the forward-declared local
+    showProfile = function(m)
+        local pop = Instance.new("TextButton")  -- full-window dismiss catcher
+        pop.Size = UDim2.fromScale(1, 1); pop.BackgroundColor3 = Color3.fromRGB(0,0,0)
+        pop.BackgroundTransparency = 0.5; pop.AutoButtonColor = false; pop.Text = ""
+        pop.ZIndex = 20; pop.Parent = win
+        local card = Instance.new("Frame")
+        card.Size = UDim2.fromOffset(240, 150); card.AnchorPoint = Vector2.new(0.5, 0.5)
+        card.Position = UDim2.fromScale(0.5, 0.5); card.BackgroundColor3 = Color3.fromRGB(30, 31, 34)
+        card.BorderSizePixel = 0; card.ZIndex = 21; card.Parent = pop
+        Util.corner(card, 12); Util.stroke(card, Color3.fromRGB(0,0,0), 1, 0.4)
+        local banner = Instance.new("Frame")
+        banner.Size = UDim2.new(1, 0, 0, 50); banner.BackgroundColor3 = m.roblox and Color3.fromRGB(70,110,200) or C.blurple
+        banner.BorderSizePixel = 0; banner.ZIndex = 21; banner.Parent = card
+        local bc = Instance.new("UICorner"); bc.CornerRadius = UDim.new(0,12); bc.Parent = banner
+        local pav = Instance.new("ImageLabel")
+        pav.Size = UDim2.fromOffset(64, 64); pav.Position = UDim2.fromOffset(16, 22)
+        pav.BackgroundColor3 = Color3.fromRGB(20,20,22); pav.BorderSizePixel = 0; pav.ZIndex = 22; pav.Parent = card
+        Util.corner(pav, 32); Util.stroke(pav, Color3.fromRGB(30,31,34), 4, 0)
+        if m.avatar and m.avatar ~= "" then pav.Image = m.avatar end
+        local pname = Instance.new("TextLabel")
+        pname.Position = UDim2.fromOffset(16, 92); pname.Size = UDim2.new(1, -32, 0, 22)
+        pname.BackgroundTransparency = 1; pname.Text = m.author or "Unknown"
+        pname.Font = Theme.fonts.title; pname.TextSize = 17; pname.TextColor3 = C.bright
+        pname.TextXAlignment = Enum.TextXAlignment.Left; pname.ZIndex = 22; pname.Parent = card
+        local ptag = Instance.new("TextLabel")
+        ptag.Position = UDim2.fromOffset(16, 116); ptag.Size = UDim2.new(1, -32, 0, 18)
+        ptag.BackgroundTransparency = 1
+        ptag.Text = m.roblox and "Roblox player (via SYNC)" or "Discord member"
+        ptag.Font = Theme.fonts.caption; ptag.TextSize = 12; ptag.TextColor3 = C.muted
+        ptag.TextXAlignment = Enum.TextXAlignment.Left; ptag.ZIndex = 22; ptag.Parent = card
+        pop.MouseButton1Click:Connect(function() pop:Destroy() end)
+    end
+
     -- send
     local function doSend()
-        local text = box.Text
-        if not text or text:gsub("%s", "") == "" then return end
+        local text = box.Text or ""
+        local trimmed = text:gsub("%s", "")
+        if trimmed == "" then return end
         if not activeChannel then return end
         box.Text = ""
+        local rt = replyTarget
+        clearReply()
+        -- if the whole message is an image URL, send it as an image
+        local img = isImageUrl(text:gsub("%s+$", ""):gsub("^%s+", ""))
+        local body = img and "" or text
         task.spawn(function()
-            local ok = sendMessage(activeChannel, text)
-            if not ok then
-                -- transient: show a local hint
-                notice("Message didn't send (rate limited or filtered).")
-            end
+            local ok = sendMessage(activeChannel, body, rt, img and (text:gsub("%s+$", ""):gsub("^%s+", "")) or nil)
+            if not ok then notice("Message didn't send (rate limited or filtered).") end
         end)
     end
     box.FocusLost:Connect(function(enter) if enter then doSend() end end)
