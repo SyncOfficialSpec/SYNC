@@ -4308,7 +4308,7 @@ local DiscordApp = {}
 -- Config -- RELAY_URL is filled in once the relay is deployed. Both can be
 -- overridden at runtime via Util.save("DiscordRelay"/"DiscordKey", ...).
 -- ---------------------------------------------------------------------------
-local RELAY_URL = "https://REPLACE-WITH-RELAY-URL"
+local RELAY_URL = "https://relay-production-a9e3.up.railway.app"
 local API_KEY   = "CdTt-Mmf25ewBa8Ak9DQujolBQ7HQ9Va76lyV4ulXDnIyc8XOPih2w"
 
 local function relayURL() local v = Util.load("DiscordRelay"); return (v and v ~= "") and v or RELAY_URL end
