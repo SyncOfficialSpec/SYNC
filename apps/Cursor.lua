@@ -26,7 +26,7 @@ local RAW = "https://raw.githubusercontent.com/SyncOfficialSpec/SYNC/main/assets
 
 -- Cursor artwork. `tintable` white masters recolour via ImageColor3; the fixed
 -- full-colour `art` pieces render exactly as supplied. aspect = width / height.
-local TIP = Vector2.new(0.14, 0.06)
+local TIP = Vector2.new(0.07, 0.05)
 local SHAPES = {
     { id = "solid",    name = "Solid",   url = RAW .. "arrow_solid.png",   file = "sync_cur_solid.png",   aspect = 256/254, tip = TIP, tintable = true },
     { id = "outline",  name = "Outline", url = RAW .. "arrow_outline.png", file = "sync_cur_outline.png", aspect = 229/256, tip = TIP, tintable = true },
@@ -232,6 +232,9 @@ local function startOverlay()
     -- Util.mount sets DisplayOrder 999999 for every SYNC gui, so app windows
     -- opened later would tie and draw over the cursor. Force this above all.
     pcall(function() overlayGui.DisplayOrder = 2147483647 end)
+    -- Respect the GUI inset so the cursor + click ripple line up with the real
+    -- pointer position returned by GetMouseLocation (which is inset-adjusted).
+    overlayGui.IgnoreGuiInset = false
 
     rippleLayer = Instance.new("Frame")
     rippleLayer.Size = UDim2.fromScale(1, 1)
