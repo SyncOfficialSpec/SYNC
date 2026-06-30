@@ -4335,6 +4335,9 @@ local function escapeRich(s)
     return (tostring(s):gsub("&", "&amp;"):gsub("<", "&lt;"):gsub(">", "&gt;"))
 end
 local function mdToRich(s)
+    s = tostring(s)
+    s = s:gsub("<a?:(%w+):%d+>", ":%1:")             -- custom emoji -> :name:
+    s = s:gsub("<@!?%d+>", "@user"):gsub("<@&%d+>", "@role"):gsub("<#%d+>", "#channel")
     s = escapeRich(s)
     s = s:gsub("%*%*(.-)%*%*", "<b>%1</b>")
     s = s:gsub("__(.-)__", "<b>%1</b>")
@@ -4684,6 +4687,47 @@ function DiscordApp.open()
     replyX.ZIndex = 5; replyX.Parent = replyBar
     drawX(replyX, 11, 2, C.muted)
 
+    -- ---- loading screen (shown until the first channel loads) ----
+    local loadingOverlay = Instance.new("Frame")
+    loadingOverlay.Position = UDim2.fromOffset(0, TB); loadingOverlay.Size = UDim2.new(1, 0, 1, -TB)
+    loadingOverlay.BackgroundColor3 = C.bg; loadingOverlay.BorderSizePixel = 0
+    loadingOverlay.ZIndex = 15; loadingOverlay.Parent = win
+    local ring = Instance.new("Frame")
+    ring.AnchorPoint = Vector2.new(0.5, 0.5); ring.Position = UDim2.fromScale(0.5, 0.44)
+    ring.Size = UDim2.fromOffset(40, 40); ring.BackgroundTransparency = 1; ring.ZIndex = 16; ring.Parent = loadingOverlay
+    Util.corner(ring, 20)
+    local rs = Instance.new("UIStroke"); rs.Thickness = 3; rs.Color = C.blurple; rs.Parent = ring
+    local rg = Instance.new("UIGradient")
+    rg.Transparency = NumberSequence.new({
+        NumberSequenceKeypoint.new(0, 0), NumberSequenceKeypoint.new(0.45, 0.2),
+        NumberSequenceKeypoint.new(0.5, 1), NumberSequenceKeypoint.new(1, 1),
+    })
+    rg.Parent = rs
+    local loadTxt = Instance.new("TextLabel")
+    loadTxt.AnchorPoint = Vector2.new(0.5, 0.5); loadTxt.Position = UDim2.fromScale(0.5, 0.56)
+    loadTxt.Size = UDim2.fromOffset(320, 24); loadTxt.BackgroundTransparency = 1
+    loadTxt.Text = "Loading"; loadTxt.Font = Theme.fonts.title; loadTxt.TextSize = 15
+    loadTxt.TextColor3 = C.muted; loadTxt.ZIndex = 16; loadTxt.Parent = loadingOverlay
+    local spinning = true
+    task.spawn(function()
+        local a, dots = 0, 0
+        while spinning and loadingOverlay and loadingOverlay.Parent do
+            a = (a + 9) % 360; rg.Rotation = a
+            dots = (dots + 1) % 40
+            loadTxt.Text = "Loading" .. string.rep(".", math.floor(dots / 10))
+            task.wait(0.03)
+        end
+    end)
+    local function hideLoading()
+        if not (loadingOverlay and loadingOverlay.Parent) then return end
+        spinning = false
+        Util.tween(loadingOverlay, { BackgroundTransparency = 1 }, 0.25)
+        Util.tween(loadTxt, { TextTransparency = 1 }, 0.2)
+        pcall(function() Util.tween(rs, { Transparency = 1 }, 0.2) end)
+        local lo = loadingOverlay; loadingOverlay = nil
+        task.delay(0.3, function() if lo then lo:Destroy() end end)
+    end
+
     -- ---- state ----
     local activeChannel, activeName
     local lastId
@@ -4692,7 +4736,7 @@ function DiscordApp.open()
     local prevAuthor, prevTs      -- for grouping consecutive messages
     local showProfile, setReply   -- forward declarations
 
-    local CONTENT_W = (W - SIDE_W) - 78
+    local CONTENT_W = (W - SIDE_W) - 96
     local function measureH(text)
         if not text or text == "" then return 0 end
         local ok, v = pcall(function()
@@ -4707,32 +4751,42 @@ function DiscordApp.open()
         return (ok and v and v.X) or (#tostring(text) * size * 0.5)
     end
 
+    local AV_X, AV_SZ, TX = 16, 40, 72
     local function addMessage(m)
         if renderedIds[m.id] then return end
         renderedIds[m.id] = true
 
-        -- group consecutive messages from the same author (within 7 min)
-        local grouped = (not m.replyTo) and prevAuthor ~= nil
+        -- reply preview: native replyTo, or a leading "> " quote from a Roblox reply
+        local replyPreview, bodyText = nil, (m.content or "")
+        if m.replyTo and m.replyTo.author then
+            replyPreview = (m.replyTo.author or "") ..
+                ((m.replyTo.content and m.replyTo.content ~= "") and ("  " .. m.replyTo.content) or "")
+        elseif bodyText:sub(1, 2) == "> " then
+            local first = bodyText:match("^(.-)\n")
+            replyPreview = ((first or bodyText):gsub("^>%s*", ""):gsub("%*%*", ""))
+            bodyText = first and (bodyText:gsub("^.-\n", "", 1)) or ""
+        end
+
+        local grouped = (not replyPreview) and prevAuthor ~= nil
             and prevAuthor == (m.authorId or m.author)
             and prevTs and m.ts and (m.ts - prevTs) < 420000
         prevAuthor = m.authorId or m.author
         if m.ts then prevTs = m.ts end
 
-        local replyH = m.replyTo and 16 or 0
-        local headerH = grouped and 0 or (replyH + 20)
-        local contentH = measureH(m.content)
+        local replyH = replyPreview and 16 or 0
+        local headerH = grouped and 0 or (replyH + 22)
+        local contentH = measureH(bodyText)
         local imgCount = m.images and #m.images or 0
-        local imgH = imgCount * 176
-        local total = math.max(grouped and 22 or 46, headerH + contentH + imgH + (grouped and 2 or 6))
+        local imgH = imgCount * 188
+        local total = math.max(grouped and 24 or 52, headerH + contentH + imgH + (grouped and 3 or 8))
 
         local row = Instance.new("Frame")
         row.Size = UDim2.new(1, 0, 0, total)
         row.BackgroundColor3 = C.hover; row.BackgroundTransparency = 1
         row.BorderSizePixel = 0; row.ZIndex = 4; row.Parent = feed
 
-        -- reply button (revealed on hover)
         local rb = Instance.new("TextButton")
-        rb.Position = UDim2.new(1, -52, 0, 4); rb.Size = UDim2.fromOffset(44, 18)
+        rb.Position = UDim2.new(1, -54, 0, 6); rb.Size = UDim2.fromOffset(44, 18)
         rb.BackgroundTransparency = 1; rb.AutoButtonColor = false
         rb.Text = "reply"; rb.Font = Theme.fonts.caption; rb.TextSize = 11; rb.TextColor3 = C.muted
         rb.Visible = false; rb.ZIndex = 7; rb.Parent = row
@@ -4740,14 +4794,14 @@ function DiscordApp.open()
         local hov = Instance.new("TextButton")
         hov.Size = UDim2.fromScale(1, 1); hov.BackgroundTransparency = 1; hov.Text = ""
         hov.AutoButtonColor = false; hov.ZIndex = 4; hov.Parent = row
-        hov.MouseEnter:Connect(function() row.BackgroundTransparency = 0.95; rb.Visible = true end)
+        hov.MouseEnter:Connect(function() row.BackgroundTransparency = 0.96; rb.Visible = true end)
         hov.MouseLeave:Connect(function() row.BackgroundTransparency = 1; rb.Visible = false end)
 
         if not grouped then
             local av = Instance.new("ImageLabel")
-            av.Size = UDim2.fromOffset(38, 38); av.Position = UDim2.fromOffset(8, replyH + 2)
+            av.Size = UDim2.fromOffset(AV_SZ, AV_SZ); av.Position = UDim2.fromOffset(AV_X, replyH + 2)
             av.BackgroundColor3 = C.rail; av.BorderSizePixel = 0; av.ZIndex = 5; av.Parent = row
-            Util.corner(av, 19)
+            Util.corner(av, AV_SZ / 2)
             loadImg(av, m.avatar, "dcav")
             local avBtn = Instance.new("TextButton")
             avBtn.Size = UDim2.fromScale(1, 1); avBtn.BackgroundTransparency = 1
@@ -4755,7 +4809,7 @@ function DiscordApp.open()
             avBtn.MouseButton1Click:Connect(function() if showProfile then showProfile(m) end end)
 
             local nameBtn = Instance.new("TextButton")
-            nameBtn.Position = UDim2.fromOffset(56, replyH); nameBtn.Size = UDim2.fromOffset(260, 18)
+            nameBtn.Position = UDim2.fromOffset(TX, replyH + 1); nameBtn.Size = UDim2.fromOffset(280, 18)
             nameBtn.BackgroundTransparency = 1; nameBtn.AutoButtonColor = false
             nameBtn.Text = m.author or "Unknown"; nameBtn.Font = Theme.fonts.title; nameBtn.TextSize = 15
             nameBtn.TextColor3 = m.roblox and Color3.fromRGB(120, 200, 255) or C.bright
@@ -4764,31 +4818,29 @@ function DiscordApp.open()
 
             local nameW = measureW(m.author or "", 15, Theme.fonts.title)
             local timeLbl = Instance.new("TextLabel")
-            timeLbl.Position = UDim2.fromOffset(64 + nameW, replyH + 4); timeLbl.Size = UDim2.fromOffset(90, 13)
+            timeLbl.Position = UDim2.fromOffset(TX + nameW + 8, replyH + 5); timeLbl.Size = UDim2.fromOffset(90, 13)
             timeLbl.BackgroundTransparency = 1; timeLbl.Text = fmtTime(m.ts)
             timeLbl.Font = Theme.fonts.caption; timeLbl.TextSize = 11; timeLbl.TextColor3 = C.muted
             timeLbl.TextXAlignment = Enum.TextXAlignment.Left; timeLbl.ZIndex = 5; timeLbl.Parent = row
         end
 
-        if m.replyTo then
+        if replyPreview then
             local bar = Instance.new("Frame")
-            bar.Position = UDim2.fromOffset(56, 3); bar.Size = UDim2.fromOffset(3, 11)
+            bar.Position = UDim2.fromOffset(TX, 4); bar.Size = UDim2.fromOffset(3, 11)
             bar.BackgroundColor3 = C.blurple; bar.BorderSizePixel = 0; bar.ZIndex = 5; bar.Parent = row
             Util.corner(bar, 2)
             local rl = Instance.new("TextLabel")
-            rl.Position = UDim2.fromOffset(66, 0); rl.Size = UDim2.new(1, -130, 0, 14)
-            rl.BackgroundTransparency = 1
-            rl.Text = (m.replyTo.author or "") ..
-                ((m.replyTo.content and m.replyTo.content ~= "") and ("  " .. m.replyTo.content) or "")
+            rl.Position = UDim2.fromOffset(TX + 10, 1); rl.Size = UDim2.new(1, -(TX + 70), 0, 14)
+            rl.BackgroundTransparency = 1; rl.Text = replyPreview
             rl.Font = Theme.fonts.caption; rl.TextSize = 12; rl.TextColor3 = C.muted
             rl.TextXAlignment = Enum.TextXAlignment.Left; rl.TextTruncate = Enum.TextTruncate.AtEnd
             rl.ZIndex = 5; rl.Parent = row
         end
 
-        if m.content and m.content ~= "" then
+        if bodyText and bodyText ~= "" then
             local content = Instance.new("TextLabel")
-            content.Position = UDim2.fromOffset(56, headerH); content.Size = UDim2.fromOffset(CONTENT_W, contentH)
-            content.BackgroundTransparency = 1; content.RichText = true; content.Text = mdToRich(m.content)
+            content.Position = UDim2.fromOffset(TX, headerH); content.Size = UDim2.fromOffset(CONTENT_W, contentH)
+            content.BackgroundTransparency = 1; content.RichText = true; content.Text = mdToRich(bodyText)
             content.Font = Theme.fonts.body; content.TextSize = 15; content.TextColor3 = C.text
             content.TextWrapped = true; content.TextXAlignment = Enum.TextXAlignment.Left
             content.TextYAlignment = Enum.TextYAlignment.Top; content.ZIndex = 5; content.Parent = row
@@ -4797,8 +4849,8 @@ function DiscordApp.open()
         if m.images then
             for i, url in ipairs(m.images) do
                 local img = Instance.new("ImageLabel")
-                img.Position = UDim2.fromOffset(56, headerH + contentH + (i - 1) * 176 + 4)
-                img.Size = UDim2.fromOffset(300, 168)
+                img.Position = UDim2.fromOffset(TX, headerH + contentH + (i - 1) * 188 + 6)
+                img.Size = UDim2.fromOffset(360, 180)
                 img.BackgroundColor3 = C.rail; img.BorderSizePixel = 0
                 img.ScaleType = Enum.ScaleType.Fit; img.ZIndex = 5; img.Parent = row
                 Util.corner(img, 8)
@@ -4832,8 +4884,9 @@ function DiscordApp.open()
             local msgs = getMessages(id)
             if not alive or activeChannel ~= id then return end
             clearFeed()
+            hideLoading()
             if not msgs then notice("Couldn't load #" .. name .. " from the relay.") return end
-            if #msgs == 0 then notice("No messages in #" .. name .. " yet. Say hi 👋") return end
+            if #msgs == 0 then notice("No messages in #" .. name .. " yet. Say hi.") return end
             for _, m in ipairs(msgs) do addMessage(m); lastId = m.id end
         end)
     end
@@ -4870,7 +4923,7 @@ function DiscordApp.open()
     -- and show a clear diagnostic on screen if anything fails.
     local function loadChannels()
         if not configured() then
-            setDbg("Relay URL not configured.")
+            hideLoading(); setDbg("Relay URL not configured.")
             return
         end
         setDbg("Connecting...\nHTTP: " .. (Util.hasRequest() and "request() available" or "game:HttpGet only") ..
@@ -4880,18 +4933,18 @@ function DiscordApp.open()
             local ok, body, status = pcall(function() return Util.httpGetH(url, { ["X-API-Key"] = apiKey() }) end)
             if not alive then return end
             if not ok then
-                setDbg("Request error:\n" .. tostring(body) .. "\n\n" .. url)
+                hideLoading(); setDbg("Request error:\n" .. tostring(body) .. "\n\n" .. url)
                 return
             end
             if not body then
-                setDbg("No response.\nHTTP: " ..
+                hideLoading(); setDbg("No response.\nHTTP: " ..
                     (Util.hasRequest() and "request()" or "game:HttpGet only") ..
                     "\nstatus = " .. tostring(status) .. "\n\n" .. url)
                 return
             end
             local chans = jdecode(body)
             if type(chans) ~= "table" or chans.error then
-                setDbg("Relay replied (status " .. tostring(status) .. "):\n\n" .. tostring(body):sub(1, 220))
+                hideLoading(); setDbg("Relay replied (status " .. tostring(status) .. "):\n\n" .. tostring(body):sub(1, 220))
                 return
             end
             setDbg("")  -- success: clear the diagnostic
@@ -4900,7 +4953,7 @@ function DiscordApp.open()
             if chans[1] then
                 selectChannel(chans[1].id, chans[1].name, function() highlightChannel(chans[1].id) end)
             else
-                setDbg("Connected, but the relay has no channels configured.")
+                hideLoading(); setDbg("Connected, but the relay has no channels configured.")
             end
         end)
     end
@@ -5019,7 +5072,7 @@ function DiscordApp.open()
     box.FocusLost:Connect(function(enter) if enter then doSend() end end)
 
     local lok, lerr = pcall(loadChannels)
-    if not lok then setDbg("Load error:\n" .. tostring(lerr)) end
+    if not lok then hideLoading(); setDbg("Load error:\n" .. tostring(lerr)) end
 
     -- poll active channel for new messages
     task.spawn(function()
