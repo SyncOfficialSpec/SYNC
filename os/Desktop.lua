@@ -8,6 +8,7 @@ local Settings = SYNC.import("os/Settings")
 local MenuBar  = SYNC.import("os/MenuBar")
 local Browser  = SYNC.import("os/Browser")
 local Cursor   = SYNC.import("apps/Cursor")
+local Discord  = SYNC.import("apps/Discord")
 
 local Desktop = {}
 
@@ -49,6 +50,8 @@ function Desktop.start()
             })
         elseif appName == "Cursor" then
             Cursor.open()
+        elseif appName == "Discord" then
+            Discord.open()
         end
     end)
 

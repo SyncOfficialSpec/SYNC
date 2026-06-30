@@ -131,6 +131,32 @@ function Util.httpGet(url)
     return nil
 end
 
+-- GET with custom headers (e.g. an API key). Returns (body, statusCode).
+function Util.httpGetH(url, headers)
+    if not _req then
+        local ok, res = pcall(function() return game:HttpGet(url, true) end)
+        return (ok and res) or nil, ok and 200 or 0
+    end
+    local h = { ["User-Agent"] = UA }
+    if headers then for k, v in pairs(headers) do h[k] = v end end
+    local ok, res = pcall(_req, { Url = url, Method = "GET", Headers = h })
+    if ok and res and res.Body then return res.Body, res.StatusCode or 0 end
+    return nil, 0
+end
+
+-- POST JSON via the executor request API. Returns (ok, statusCode, body).
+-- Needs an executor that exposes request/syn.request (no game:HttpPost fallback
+-- since that requires HttpService:RequestAsync which executors usually block).
+function Util.httpPost(url, headers, body)
+    if not _req then return false, 0, nil end
+    local h = { ["Content-Type"] = "application/json", ["User-Agent"] = UA }
+    if headers then for k, v in pairs(headers) do h[k] = v end end
+    local ok, res = pcall(_req, { Url = url, Method = "POST", Headers = h, Body = body or "" })
+    if not ok or not res then return false, 0, nil end
+    return (res.StatusCode and res.StatusCode >= 200 and res.StatusCode < 300) or false,
+        res.StatusCode or 0, res.Body
+end
+
 -- ---------------------------------------------------------------------------
 -- Remote image: download once and expose via getcustomasset (so we can use
 -- images that aren't uploaded to Roblox). Returns a content id, or nil.
