@@ -8,6 +8,7 @@
 local UserInputService = game:GetService("UserInputService")
 local RunService       = game:GetService("RunService")
 local HttpService      = game:GetService("HttpService")
+local GuiService       = game:GetService("GuiService")
 
 local Theme  = SYNC.import("core/Theme")
 local Util   = SYNC.import("core/Util")
@@ -92,18 +93,10 @@ local function cfg(t)
     }
 end
 
--- The four supplied designs (exact art), plus tintable extras
+-- Overall tab: the two cursors the user supplied (each works as cursor + pointer)
 local GALLERY = {
-    { name = "Snow",     conf = cfg{ shape="art_white", outline=false } },
-    { name = "Graphite", conf = cfg{ shape="art_navy",  outline=false } },
-    { name = "Crimson",  conf = cfg{ shape="art_red",   outline=false } },
-    { name = "Aurora",   conf = cfg{ shape="art_grad",  outline=false } },
-    { name = "Glow",     conf = cfg{ shape="art_glow", outline=false } },
-    { name = "Blue",     conf = cfg{ shape="art_blue", outline=false } },
-    { name = "Mint",     conf = cfg{ shape="solid", color=Color3.fromRGB(90,255,200), glow=0.5 } },
-    { name = "Gold",     conf = cfg{ shape="solid", color=Color3.fromRGB(254,200,70), outline=true, outlineColor=Color3.fromRGB(120,80,0) } },
-    { name = "Rainbow",  conf = cfg{ shape="solid", rainbow=true, glow=0.4 } },
-    { name = "Comet",    conf = cfg{ shape="outline", color=Color3.fromRGB(90,200,255), trail=8, glow=0.6 } },
+    { name = "Glow", conf = cfg{ shape="art_glow", outline=false } },
+    { name = "Blue", conf = cfg{ shape="art_blue", outline=false } },
 }
 
 -- Serialisation (Color3 <-> {r,g,b})
@@ -253,9 +246,10 @@ local function startOverlay()
     -- Util.mount sets DisplayOrder 999999 for every SYNC gui, so app windows
     -- opened later would tie and draw over the cursor. Force this above all.
     pcall(function() overlayGui.DisplayOrder = 2147483647 end)
-    -- Respect the GUI inset so the cursor + click ripple line up with the real
-    -- pointer position returned by GetMouseLocation (which is inset-adjusted).
-    overlayGui.IgnoreGuiInset = false
+    -- Keep IgnoreGuiInset = true (same space as the rest of SYNC's windows) and
+    -- add the GUI inset to GetMouseLocation so the cursor + clicks line up with
+    -- SYNC's UI. Mismatching this is what made taps land in the wrong place.
+    overlayGui.IgnoreGuiInset = true
 
     rippleLayer = Instance.new("Frame")
     rippleLayer.Size = UDim2.fromScale(1, 1)
@@ -276,7 +270,9 @@ local function startOverlay()
     conn = RunService.RenderStepped:Connect(function(dt)
         if not config then return end
         clock = clock + dt
-        local m = UserInputService:GetMouseLocation()
+        local ins = GuiService:GetGuiInset()
+        local ml = UserInputService:GetMouseLocation()
+        local m = Vector2.new(ml.X + ins.X, ml.Y + ins.Y)
 
         local color = config.color
         if config.rainbow then color = Color3.fromHSV((clock * 0.3) % 1, 0.85, 1) end
@@ -315,10 +311,11 @@ local function startOverlay()
         if inp.UserInputType ~= Enum.UserInputType.MouseButton1 then return end
         pressed = true
         if not config.ripple then return end
-        local m = UserInputService:GetMouseLocation()
+        local ins = GuiService:GetGuiInset()
+        local ml = UserInputService:GetMouseLocation()
         local ring = Instance.new("Frame")
         ring.AnchorPoint = Vector2.new(0.5, 0.5)
-        ring.Position = UDim2.fromOffset(m.X, m.Y)
+        ring.Position = UDim2.fromOffset(ml.X + ins.X, ml.Y + ins.Y)
         ring.Size = UDim2.fromOffset(8, 8)
         ring.BackgroundTransparency = 1
         ring.BorderSizePixel = 0
@@ -415,20 +412,16 @@ function CursorApp.open()
     Util.mount(gui)
     CursorApp._gui = gui
 
+    local winConns = {}
     local function close()
         if not CursorApp._gui then return end
         CursorApp._gui = nil
         onChangeCB = nil
+        for _, c in ipairs(winConns) do pcall(function() c:Disconnect() end) end
         gui:Destroy()
     end
-
-    local catcher = Instance.new("TextButton")
-    catcher.Text = ""; catcher.AutoButtonColor = false
-    catcher.Size = UDim2.fromScale(1, 1)
-    catcher.BackgroundTransparency = 1
-    catcher.ZIndex = 1
-    catcher.Parent = gui
-    catcher.MouseButton1Click:Connect(close)
+    -- No full-screen click-catcher: the window closes only via the red button,
+    -- so tapping tabs / the panel / elsewhere never dismisses it.
 
     -- Window
     local TB = 38
@@ -463,6 +456,31 @@ function CursorApp.open()
     end)
     if not okBar then barCorner.CornerRadius = UDim.new(0, 12) end
     barCorner.Parent = bar
+
+    -- Drag the window by its title bar
+    bar.Active = true
+    local dragging, dragStart, startPos
+    bar.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1
+            or input.UserInputType == Enum.UserInputType.Touch then
+            dragging = true
+            dragStart = input.Position
+            startPos = win.Position
+        end
+    end)
+    winConns[#winConns + 1] = UserInputService.InputChanged:Connect(function(input)
+        if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement
+            or input.UserInputType == Enum.UserInputType.Touch) then
+            local d = input.Position - dragStart
+            win.Position = UDim2.fromOffset(startPos.X.Offset + d.X, startPos.Y.Offset + d.Y)
+        end
+    end)
+    winConns[#winConns + 1] = UserInputService.InputEnded:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1
+            or input.UserInputType == Enum.UserInputType.Touch then
+            dragging = false
+        end
+    end)
 
     local hair = Instance.new("Frame")
     hair.Size = UDim2.new(1, 0, 0, 1)
@@ -511,7 +529,7 @@ function CursorApp.open()
     local galleryPage, customPage, packsPage
     local tabButtons = {}
     local function selectTab(name)
-        galleryPage.Visible = (name == "Gallery")
+        galleryPage.Visible = (name == "Overall")
         customPage.Visible  = (name == "Customize")
         if packsPage then packsPage.Visible = (name == "Packs") end
         for _, t in ipairs(tabButtons) do
@@ -521,7 +539,7 @@ function CursorApp.open()
         end
     end
 
-    for i, name in ipairs({ "Gallery", "Customize", "Packs" }) do
+    for i, name in ipairs({ "Overall", "Customize", "Packs" }) do
         local holder = Instance.new("Frame")
         holder.Size = UDim2.fromOffset(110, 38)
         holder.Position = UDim2.fromOffset(14 + (i - 1) * 112, 0)
