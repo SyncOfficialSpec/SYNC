@@ -3014,6 +3014,8 @@ local SHAPES = {
     -- Pack pieces (also valid shapes so shapeDef resolves them)
     { id = "sukuna_cursor",  name = "Sukuna",      url = RAW .. "sukuna_cursor.png",  file = "sync_cur_sukc.png", aspect = 0.707, tip = Vector2.new(0.144, 0.031), tintable = false },
     { id = "sukuna_pointer", name = "Sukuna Hand", url = RAW .. "sukuna_pointer.png", file = "sync_cur_sukp.png", aspect = 0.758, tip = Vector2.new(0.216, 0.047), tintable = false },
+    -- UI icon only (not a cursor): the "no" symbol shown on the Default tile
+    { id = "icon_none", name = "None", url = RAW .. "icon_none.png", file = "sync_icon_none.png", aspect = 1.0, tip = TIP, tintable = true },
 }
 
 -- Cursor packs: a matched cursor (idle) + pointer (shown while pressing)
@@ -3100,7 +3102,7 @@ end
 -- ===========================================================================
 -- Overlay engine (singleton) — image-based, config driven
 -- ===========================================================================
-local overlayGui, root, conn, inputConn, endConn, mouseIconConn
+local overlayGui, root, conn, inputConn, endConn, mouseIconConn, focusConn
 local mainImg, borderImg, glowImg, gradient
 local trailImgs = {}
 local rippleLayer
@@ -3240,10 +3242,10 @@ end
 -- Tear down connections + instance refs WITHOUT restoring the system cursor
 -- (used by the watchdog when rebuilding after a wipe). Safe to call any time.
 local function resetRefs()
-    for _, c in ipairs({ conn, inputConn, endConn, mouseIconConn }) do
+    for _, c in ipairs({ conn, inputConn, endConn, mouseIconConn, focusConn }) do
         if c then pcall(function() c:Disconnect() end) end
     end
-    conn, inputConn, endConn, mouseIconConn = nil, nil, nil, nil
+    conn, inputConn, endConn, mouseIconConn, focusConn = nil, nil, nil, nil, nil
     if overlayGui then pcall(function() overlayGui:Destroy() end) end
     overlayGui, root, mainImg, borderImg, glowImg, gradient, rippleLayer =
         nil, nil, nil, nil, nil, nil, nil
@@ -3310,6 +3312,13 @@ function startOverlay()
         if not (root and root.Parent) then return end  -- wiped; watchdog will rebuild
         clock = clock + dt
         local m = UserInputService:GetMouseLocation()
+
+        -- Every frame: if the system cursor is showing while ours is active, hide
+        -- it. Alt-tabbing away and back re-enables it; this kills it within a
+        -- frame so users never see both cursors at once.
+        if mainImg and mainImg.Image ~= "" and UserInputService.MouseIconEnabled then
+            pcall(function() UserInputService.MouseIconEnabled = false end)
+        end
 
         -- once a second, re-assert state so nothing drifts: if the art failed to
         -- load fall back to the normal cursor (instead of an invisible "none"),
@@ -3395,6 +3404,13 @@ function startOverlay()
         end
     end)
 
+    -- Alt-tabbing back into Roblox re-shows the system cursor; re-hide on focus.
+    focusConn = UserInputService.WindowFocused:Connect(function()
+        if config and assetFor(activeShapeId()) then
+            pcall(function() UserInputService.MouseIconEnabled = false end)
+        end
+    end)
+
     -- hide the system cursor only if our art is ready; the 1s loop keeps this true
     pcall(function() UserInputService.MouseIconEnabled = (assetFor(activeShapeId()) == nil) end)
 
@@ -3406,6 +3422,7 @@ local function stopOverlay()
     if inputConn then inputConn:Disconnect(); inputConn = nil end
     if endConn then endConn:Disconnect(); endConn = nil end
     if mouseIconConn then mouseIconConn:Disconnect(); mouseIconConn = nil end
+    if focusConn then focusConn:Disconnect(); focusConn = nil end
     pressed = false
     if overlayGui then overlayGui:Destroy(); overlayGui = nil end
     root, mainImg, borderImg, glowImg, gradient, rippleLayer = nil, nil, nil, nil, nil, nil
@@ -3681,17 +3698,16 @@ function CursorApp.open()
             Util.stroke(frame, WHITE, 1, 0.9)
 
             if g.default then
-                local glyph = Instance.new("TextLabel")
-                glyph.Size = UDim2.fromOffset(46, 46)
-                glyph.Position = UDim2.fromScale(0.5, 0.42)
-                glyph.AnchorPoint = Vector2.new(0.5, 0.5)
-                glyph.BackgroundTransparency = 1
-                glyph.Font = Enum.Font.GothamBold
-                glyph.Text = "\u{2196}"   -- system arrow glyph
-                glyph.TextSize = 30
-                glyph.TextColor3 = WHITE
-                glyph.ZIndex = 5
-                glyph.Parent = frame
+                local noimg = Instance.new("ImageLabel")
+                noimg.Size = UDim2.fromOffset(42, 42)
+                noimg.Position = UDim2.fromScale(0.5, 0.42)
+                noimg.AnchorPoint = Vector2.new(0.5, 0.5)
+                noimg.BackgroundTransparency = 1
+                noimg.ScaleType = Enum.ScaleType.Fit
+                noimg.Image = assetFor("icon_none") or ""
+                noimg.ImageColor3 = Color3.fromRGB(170, 170, 178)
+                noimg.ZIndex = 5
+                noimg.Parent = frame
             else
                 local prev = Instance.new("ImageLabel")
                 prev.Size = UDim2.fromOffset(46, 46)
