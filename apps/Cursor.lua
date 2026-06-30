@@ -246,10 +246,9 @@ local function startOverlay()
     -- Util.mount sets DisplayOrder 999999 for every SYNC gui, so app windows
     -- opened later would tie and draw over the cursor. Force this above all.
     pcall(function() overlayGui.DisplayOrder = 2147483647 end)
-    -- Keep IgnoreGuiInset = true (same space as the rest of SYNC's windows) and
-    -- add the GUI inset to GetMouseLocation so the cursor + clicks line up with
-    -- SYNC's UI. Mismatching this is what made taps land in the wrong place.
-    overlayGui.IgnoreGuiInset = true
+    -- IgnoreGuiInset = false is the pairing that matches GetMouseLocation 1:1, so
+    -- the cursor sits exactly on the OS pointer and clicks land where you see it.
+    overlayGui.IgnoreGuiInset = false
 
     rippleLayer = Instance.new("Frame")
     rippleLayer.Size = UDim2.fromScale(1, 1)
@@ -267,12 +266,23 @@ local function startOverlay()
     rebuild()
 
     local clock = 0
+    local refreshAcc = 0
     conn = RunService.RenderStepped:Connect(function(dt)
         if not config then return end
         clock = clock + dt
-        local ins = GuiService:GetGuiInset()
-        local ml = UserInputService:GetMouseLocation()
-        local m = Vector2.new(ml.X + ins.X, ml.Y + ins.Y)
+        local m = UserInputService:GetMouseLocation()
+
+        -- once a second, re-assert state so nothing drifts: if the art failed to
+        -- load fall back to the normal cursor (instead of an invisible "none"),
+        -- otherwise keep the system cursor hidden and show ours.
+        refreshAcc = refreshAcc + dt
+        if refreshAcc >= 1 then
+            refreshAcc = 0
+            local id = activeShapeId()
+            local a = assetFor(id)
+            if not a then assetCache[id] = nil end  -- allow a retry next cycle
+            pcall(function() UserInputService.MouseIconEnabled = (a == nil) end)
+        end
 
         local color = config.color
         if config.rainbow then color = Color3.fromHSV((clock * 0.3) % 1, 0.85, 1) end
@@ -311,11 +321,10 @@ local function startOverlay()
         if inp.UserInputType ~= Enum.UserInputType.MouseButton1 then return end
         pressed = true
         if not config.ripple then return end
-        local ins = GuiService:GetGuiInset()
         local ml = UserInputService:GetMouseLocation()
         local ring = Instance.new("Frame")
         ring.AnchorPoint = Vector2.new(0.5, 0.5)
-        ring.Position = UDim2.fromOffset(ml.X + ins.X, ml.Y + ins.Y)
+        ring.Position = UDim2.fromOffset(ml.X, ml.Y)
         ring.Size = UDim2.fromOffset(8, 8)
         ring.BackgroundTransparency = 1
         ring.BorderSizePixel = 0
@@ -330,7 +339,8 @@ local function startOverlay()
         task.delay(0.5, function() ring:Destroy() end)
     end)
 
-    pcall(function() UserInputService.MouseIconEnabled = false end)
+    -- hide the system cursor only if our art is ready; the 1s loop keeps this true
+    pcall(function() UserInputService.MouseIconEnabled = (assetFor(activeShapeId()) == nil) end)
 end
 
 local function stopOverlay()
@@ -593,7 +603,10 @@ function CursorApp.open()
         local CELL_W, CELL_H, PAD = 110, 100, 12
         local COLS = math.max(1, math.floor((W - 24 + PAD) / (CELL_W + PAD)))
         local col, row = 0, 0
-        for _, g in ipairs(GALLERY) do
+        -- "Default" tile first (restores the normal system cursor), then the two
+        local items = { { name = "Default", default = true } }
+        for _, g in ipairs(GALLERY) do items[#items + 1] = g end
+        for _, g in ipairs(items) do
             local x = col * (CELL_W + PAD) + PAD
             local y = row * (CELL_H + PAD) + PAD
             local frame = Instance.new("TextButton")
@@ -608,21 +621,35 @@ function CursorApp.open()
             Util.corner(frame, 10)
             Util.stroke(frame, WHITE, 1, 0.9)
 
-            local prev = Instance.new("ImageLabel")
-            prev.Size = UDim2.fromOffset(46, 46)
-            prev.Position = UDim2.fromScale(0.5, 0.42)
-            prev.AnchorPoint = Vector2.new(0.5, 0.5)
-            prev.BackgroundTransparency = 1
-            prev.ScaleType = Enum.ScaleType.Fit
-            prev.Image = assetFor(g.conf.shape) or ""
-            prev.ImageColor3 = g.conf.gradient and WHITE or g.conf.color
-            prev.ZIndex = 5
-            prev.Parent = frame
-            if g.conf.gradient then
-                local gr = Instance.new("UIGradient")
-                gr.Rotation = 35
-                gr.Color = ColorSequence.new(g.conf.color, g.conf.colorB)
-                gr.Parent = prev
+            if g.default then
+                local glyph = Instance.new("TextLabel")
+                glyph.Size = UDim2.fromOffset(46, 46)
+                glyph.Position = UDim2.fromScale(0.5, 0.42)
+                glyph.AnchorPoint = Vector2.new(0.5, 0.5)
+                glyph.BackgroundTransparency = 1
+                glyph.Font = Enum.Font.GothamBold
+                glyph.Text = "\u{2196}"   -- system arrow glyph
+                glyph.TextSize = 30
+                glyph.TextColor3 = WHITE
+                glyph.ZIndex = 5
+                glyph.Parent = frame
+            else
+                local prev = Instance.new("ImageLabel")
+                prev.Size = UDim2.fromOffset(46, 46)
+                prev.Position = UDim2.fromScale(0.5, 0.42)
+                prev.AnchorPoint = Vector2.new(0.5, 0.5)
+                prev.BackgroundTransparency = 1
+                prev.ScaleType = Enum.ScaleType.Fit
+                prev.Image = assetFor(g.conf.shape) or ""
+                prev.ImageColor3 = g.conf.gradient and WHITE or g.conf.color
+                prev.ZIndex = 5
+                prev.Parent = frame
+                if g.conf.gradient then
+                    local gr = Instance.new("UIGradient")
+                    gr.Rotation = 35
+                    gr.Color = ColorSequence.new(g.conf.color, g.conf.colorB)
+                    gr.Parent = prev
+                end
             end
 
             local nameLbl = Instance.new("TextLabel")
@@ -638,6 +665,12 @@ function CursorApp.open()
             nameLbl.Parent = frame
 
             frame.MouseButton1Click:Connect(function()
+                if g.default then
+                    stopOverlay()
+                    config = nil
+                    Util.save("CursorConfig", "")
+                    return
+                end
                 local c = {}; for k, v in pairs(g.conf) do c[k] = v end
                 setConfig(cfg(c))
                 selectTab("Customize")
