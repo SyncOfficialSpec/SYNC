@@ -4477,6 +4477,7 @@ function DiscordApp.open()
     dbg.ZIndex = 9; dbg.Parent = win
     local function setDbg(t) pcall(function() dbg.Text = t end) end
 
+  local okAll, errAll = pcall(function()
     -- ---- left: channel rail ----
     local SIDE_W = 200
     local side = Instance.new("Frame")
@@ -4724,6 +4725,8 @@ function DiscordApp.open()
             end
         end
     end)
+  end)
+  if not okAll then setDbg("v5 CRASH:\n" .. tostring(errAll)) end
 
     return { close = close }
 end
