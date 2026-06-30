@@ -4365,6 +4365,22 @@ local function loadImg(label, url, prefix)
     end)
 end
 
+-- draw an X icon from two rotated bars (executor fonts often lack ✕ glyphs)
+local function drawX(parent, len, thick, color)
+    for _, rot in ipairs({ 45, -45 }) do
+        local bar = Instance.new("Frame")
+        bar.AnchorPoint = Vector2.new(0.5, 0.5)
+        bar.Position = UDim2.fromScale(0.5, 0.5)
+        bar.Size = UDim2.fromOffset(len, thick)
+        bar.Rotation = rot
+        bar.BackgroundColor3 = color
+        bar.BorderSizePixel = 0
+        bar.ZIndex = (parent.ZIndex or 1) + 1
+        bar.Parent = parent
+        local c = Instance.new("UICorner"); c.CornerRadius = UDim.new(1, 0); c.Parent = bar
+    end
+end
+
 local function isImageUrl(s)
     return type(s) == "string" and s:match("^https?://%S+%.[Pp][Nn][Gg]")
         or (type(s) == "string" and s:match("^https?://%S+%.[Jj][Pp][Ee]?[Gg]"))
@@ -4459,8 +4475,9 @@ DiscordApp._gui = nil
 function DiscordApp.open()
     if DiscordApp._gui then return end
 
-    local W, H = 720, 480
     local vp = Util.viewport()
+    local W = math.floor(math.min(960, math.max(680, vp.X - 80)))
+    local H = math.floor(math.min(640, math.max(460, vp.Y - 100)))
     local cardX, cardY = (vp.X - W) / 2, (vp.Y - H) / 2
 
     local gui = Instance.new("ScreenGui")
@@ -4618,7 +4635,7 @@ function DiscordApp.open()
     feed.BackgroundTransparency = 1; feed.BorderSizePixel = 0; feed.ScrollBarThickness = 4
     feed.ScrollBarImageColor3 = Color3.fromRGB(26,27,30); feed.CanvasSize = UDim2.fromOffset(0,0)
     feed.ZIndex = 4; feed.Parent = main
-    local feedLayout = Instance.new("UIListLayout"); feedLayout.Padding = UDim.new(0,10)
+    local feedLayout = Instance.new("UIListLayout"); feedLayout.Padding = UDim.new(0,3)
     feedLayout.SortOrder = Enum.SortOrder.LayoutOrder; feedLayout.Parent = feed
     feedLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
         feed.CanvasSize = UDim2.fromOffset(0, feedLayout.AbsoluteContentSize.Y + 16)
@@ -4629,13 +4646,23 @@ function DiscordApp.open()
 
     -- input bar
     local inputWrap = Instance.new("Frame")
-    inputWrap.Size = UDim2.new(1, -32, 0, 42); inputWrap.Position = UDim2.new(0, 16, 1, -50)
+    inputWrap.Size = UDim2.new(1, -32, 0, 44); inputWrap.Position = UDim2.new(0, 16, 1, -54)
     inputWrap.BackgroundColor3 = C.input; inputWrap.BorderSizePixel = 0; inputWrap.ZIndex = 4; inputWrap.Parent = main
-    Util.corner(inputWrap, 8)
-    Util.stroke(inputWrap, Color3.fromRGB(0, 0, 0), 1, 0.6)
+    Util.corner(inputWrap, 10)
+    -- attach (+) button, Discord style
+    local attachBtn = Instance.new("TextButton")
+    attachBtn.Size = UDim2.fromOffset(26, 26); attachBtn.Position = UDim2.fromOffset(10, 9)
+    attachBtn.BackgroundColor3 = C.muted; attachBtn.AutoButtonColor = false; attachBtn.Text = ""
+    attachBtn.ZIndex = 5; attachBtn.Parent = inputWrap
+    Util.corner(attachBtn, 13)
+    local plusV = Instance.new("Frame")
+    plusV.AnchorPoint = Vector2.new(0.5,0.5); plusV.Position = UDim2.fromScale(0.5,0.5)
+    plusV.Size = UDim2.fromOffset(2, 12); plusV.BackgroundColor3 = C.input; plusV.BorderSizePixel = 0
+    plusV.ZIndex = 6; plusV.Parent = attachBtn
+    local plusH = plusV:Clone(); plusH.Size = UDim2.fromOffset(12, 2); plusH.Parent = attachBtn
     local box = Instance.new("TextBox")
-    box.Size = UDim2.new(1, -24, 1, 0); box.Position = UDim2.fromOffset(14, 0)
-    box.BackgroundTransparency = 1; box.Text = ""; box.PlaceholderText = "Message  (paste an image URL to send a pic)"
+    box.Size = UDim2.new(1, -56, 1, 0); box.Position = UDim2.fromOffset(46, 0)
+    box.BackgroundTransparency = 1; box.Text = ""; box.PlaceholderText = "Message #general"
     box.PlaceholderColor3 = C.muted; box.TextColor3 = C.text; box.Font = Theme.fonts.body
     box.TextSize = 14; box.TextXAlignment = Enum.TextXAlignment.Left; box.ClearTextOnFocus = false
     box.ClipsDescendants = true; box.ZIndex = 5; box.Parent = inputWrap
@@ -4653,15 +4680,16 @@ function DiscordApp.open()
     replyLbl.TextTruncate = Enum.TextTruncate.AtEnd; replyLbl.ZIndex = 5; replyLbl.Parent = replyBar
     local replyX = Instance.new("TextButton")
     replyX.Position = UDim2.new(1, -28, 0.5, -10); replyX.Size = UDim2.fromOffset(20, 20)
-    replyX.BackgroundTransparency = 1; replyX.AutoButtonColor = false; replyX.Text = "✕"
-    replyX.Font = Theme.fonts.body; replyX.TextSize = 13; replyX.TextColor3 = C.muted
+    replyX.BackgroundTransparency = 1; replyX.AutoButtonColor = false; replyX.Text = ""
     replyX.ZIndex = 5; replyX.Parent = replyBar
+    drawX(replyX, 11, 2, C.muted)
 
     -- ---- state ----
     local activeChannel, activeName
     local lastId
     local renderedIds = {}
     local replyTarget = nil
+    local prevAuthor, prevTs      -- for grouping consecutive messages
     local showProfile, setReply   -- forward declarations
 
     local CONTENT_W = (W - SIDE_W) - 78
@@ -4683,91 +4711,104 @@ function DiscordApp.open()
         if renderedIds[m.id] then return end
         renderedIds[m.id] = true
 
+        -- group consecutive messages from the same author (within 7 min)
+        local grouped = (not m.replyTo) and prevAuthor ~= nil
+            and prevAuthor == (m.authorId or m.author)
+            and prevTs and m.ts and (m.ts - prevTs) < 420000
+        prevAuthor = m.authorId or m.author
+        if m.ts then prevTs = m.ts end
+
         local replyH = m.replyTo and 16 or 0
-        local headerH = replyH + 18
+        local headerH = grouped and 0 or (replyH + 20)
         local contentH = measureH(m.content)
         local imgCount = m.images and #m.images or 0
-        local imgH = imgCount * 168
-        local total = math.max(42, headerH + contentH + imgH + 6)
+        local imgH = imgCount * 176
+        local total = math.max(grouped and 22 or 46, headerH + contentH + imgH + (grouped and 2 or 6))
 
         local row = Instance.new("Frame")
         row.Size = UDim2.new(1, 0, 0, total)
-        row.BackgroundTransparency = 1; row.ZIndex = 4; row.Parent = feed
+        row.BackgroundColor3 = C.hover; row.BackgroundTransparency = 1
+        row.BorderSizePixel = 0; row.ZIndex = 4; row.Parent = feed
 
-        -- avatar (clickable -> profile)
-        local av = Instance.new("ImageLabel")
-        av.Size = UDim2.fromOffset(36, 36); av.Position = UDim2.fromOffset(4, replyH + 2)
-        av.BackgroundColor3 = C.rail; av.BorderSizePixel = 0; av.ZIndex = 5; av.Parent = row
-        Util.corner(av, 18)
-        loadImg(av, m.avatar, "dcav")
-        local avBtn = Instance.new("TextButton")
-        avBtn.Size = UDim2.fromScale(1, 1); avBtn.BackgroundTransparency = 1
-        avBtn.Text = ""; avBtn.AutoButtonColor = false; avBtn.ZIndex = 6; avBtn.Parent = av
-        avBtn.MouseButton1Click:Connect(function() if showProfile then showProfile(m) end end)
+        -- reply button (revealed on hover)
+        local rb = Instance.new("TextButton")
+        rb.Position = UDim2.new(1, -52, 0, 4); rb.Size = UDim2.fromOffset(44, 18)
+        rb.BackgroundTransparency = 1; rb.AutoButtonColor = false
+        rb.Text = "reply"; rb.Font = Theme.fonts.caption; rb.TextSize = 11; rb.TextColor3 = C.muted
+        rb.Visible = false; rb.ZIndex = 7; rb.Parent = row
+        rb.MouseButton1Click:Connect(function() if setReply then setReply(m) end end)
+        local hov = Instance.new("TextButton")
+        hov.Size = UDim2.fromScale(1, 1); hov.BackgroundTransparency = 1; hov.Text = ""
+        hov.AutoButtonColor = false; hov.ZIndex = 4; hov.Parent = row
+        hov.MouseEnter:Connect(function() row.BackgroundTransparency = 0.95; rb.Visible = true end)
+        hov.MouseLeave:Connect(function() row.BackgroundTransparency = 1; rb.Visible = false end)
 
-        -- reply context line
+        if not grouped then
+            local av = Instance.new("ImageLabel")
+            av.Size = UDim2.fromOffset(38, 38); av.Position = UDim2.fromOffset(8, replyH + 2)
+            av.BackgroundColor3 = C.rail; av.BorderSizePixel = 0; av.ZIndex = 5; av.Parent = row
+            Util.corner(av, 19)
+            loadImg(av, m.avatar, "dcav")
+            local avBtn = Instance.new("TextButton")
+            avBtn.Size = UDim2.fromScale(1, 1); avBtn.BackgroundTransparency = 1
+            avBtn.Text = ""; avBtn.AutoButtonColor = false; avBtn.ZIndex = 6; avBtn.Parent = av
+            avBtn.MouseButton1Click:Connect(function() if showProfile then showProfile(m) end end)
+
+            local nameBtn = Instance.new("TextButton")
+            nameBtn.Position = UDim2.fromOffset(56, replyH); nameBtn.Size = UDim2.fromOffset(260, 18)
+            nameBtn.BackgroundTransparency = 1; nameBtn.AutoButtonColor = false
+            nameBtn.Text = m.author or "Unknown"; nameBtn.Font = Theme.fonts.title; nameBtn.TextSize = 15
+            nameBtn.TextColor3 = m.roblox and Color3.fromRGB(120, 200, 255) or C.bright
+            nameBtn.TextXAlignment = Enum.TextXAlignment.Left; nameBtn.ZIndex = 5; nameBtn.Parent = row
+            nameBtn.MouseButton1Click:Connect(function() if showProfile then showProfile(m) end end)
+
+            local nameW = measureW(m.author or "", 15, Theme.fonts.title)
+            local timeLbl = Instance.new("TextLabel")
+            timeLbl.Position = UDim2.fromOffset(64 + nameW, replyH + 4); timeLbl.Size = UDim2.fromOffset(90, 13)
+            timeLbl.BackgroundTransparency = 1; timeLbl.Text = fmtTime(m.ts)
+            timeLbl.Font = Theme.fonts.caption; timeLbl.TextSize = 11; timeLbl.TextColor3 = C.muted
+            timeLbl.TextXAlignment = Enum.TextXAlignment.Left; timeLbl.ZIndex = 5; timeLbl.Parent = row
+        end
+
         if m.replyTo then
+            local bar = Instance.new("Frame")
+            bar.Position = UDim2.fromOffset(56, 3); bar.Size = UDim2.fromOffset(3, 11)
+            bar.BackgroundColor3 = C.blurple; bar.BorderSizePixel = 0; bar.ZIndex = 5; bar.Parent = row
+            Util.corner(bar, 2)
             local rl = Instance.new("TextLabel")
-            rl.Position = UDim2.fromOffset(50, 0); rl.Size = UDim2.new(1, -110, 0, 14)
+            rl.Position = UDim2.fromOffset(66, 0); rl.Size = UDim2.new(1, -130, 0, 14)
             rl.BackgroundTransparency = 1
-            rl.Text = "↪ " .. (m.replyTo.author or "") ..
-                ((m.replyTo.content and m.replyTo.content ~= "") and (": " .. m.replyTo.content) or "")
+            rl.Text = (m.replyTo.author or "") ..
+                ((m.replyTo.content and m.replyTo.content ~= "") and ("  " .. m.replyTo.content) or "")
             rl.Font = Theme.fonts.caption; rl.TextSize = 12; rl.TextColor3 = C.muted
             rl.TextXAlignment = Enum.TextXAlignment.Left; rl.TextTruncate = Enum.TextTruncate.AtEnd
             rl.ZIndex = 5; rl.Parent = row
         end
 
-        -- name (clickable) + timestamp
-        local nameBtn = Instance.new("TextButton")
-        nameBtn.Position = UDim2.fromOffset(50, replyH); nameBtn.Size = UDim2.fromOffset(240, 18)
-        nameBtn.BackgroundTransparency = 1; nameBtn.AutoButtonColor = false
-        nameBtn.Text = m.author or "Unknown"; nameBtn.Font = Theme.fonts.title; nameBtn.TextSize = 14
-        nameBtn.TextColor3 = m.roblox and Color3.fromRGB(120, 200, 255) or C.bright
-        nameBtn.TextXAlignment = Enum.TextXAlignment.Left; nameBtn.ZIndex = 5; nameBtn.Parent = row
-        nameBtn.MouseButton1Click:Connect(function() if showProfile then showProfile(m) end end)
-
-        local nameW = measureW(m.author or "", 14, Theme.fonts.title)
-        local timeLbl = Instance.new("TextLabel")
-        timeLbl.Position = UDim2.fromOffset(56 + nameW, replyH + 3); timeLbl.Size = UDim2.fromOffset(90, 13)
-        timeLbl.BackgroundTransparency = 1; timeLbl.Text = fmtTime(m.ts)
-        timeLbl.Font = Theme.fonts.caption; timeLbl.TextSize = 11; timeLbl.TextColor3 = C.muted
-        timeLbl.TextXAlignment = Enum.TextXAlignment.Left; timeLbl.ZIndex = 5; timeLbl.Parent = row
-
-        -- content (markdown -> rich text)
         if m.content and m.content ~= "" then
             local content = Instance.new("TextLabel")
-            content.Position = UDim2.fromOffset(50, headerH); content.Size = UDim2.fromOffset(CONTENT_W, contentH)
+            content.Position = UDim2.fromOffset(56, headerH); content.Size = UDim2.fromOffset(CONTENT_W, contentH)
             content.BackgroundTransparency = 1; content.RichText = true; content.Text = mdToRich(m.content)
-            content.Font = Theme.fonts.body; content.TextSize = 14; content.TextColor3 = C.text
+            content.Font = Theme.fonts.body; content.TextSize = 15; content.TextColor3 = C.text
             content.TextWrapped = true; content.TextXAlignment = Enum.TextXAlignment.Left
             content.TextYAlignment = Enum.TextYAlignment.Top; content.ZIndex = 5; content.Parent = row
         end
 
-        -- inline images
         if m.images then
             for i, url in ipairs(m.images) do
                 local img = Instance.new("ImageLabel")
-                img.Position = UDim2.fromOffset(50, headerH + contentH + (i - 1) * 168 + 4)
-                img.Size = UDim2.fromOffset(280, 158)
+                img.Position = UDim2.fromOffset(56, headerH + contentH + (i - 1) * 176 + 4)
+                img.Size = UDim2.fromOffset(300, 168)
                 img.BackgroundColor3 = C.rail; img.BorderSizePixel = 0
-                img.ScaleType = Enum.ScaleType.Fit
-                img.ZIndex = 5; img.Parent = row
+                img.ScaleType = Enum.ScaleType.Fit; img.ZIndex = 5; img.Parent = row
                 Util.corner(img, 8)
                 loadImg(img, url, "dcimg")
             end
         end
-
-        -- reply button
-        local rb = Instance.new("TextButton")
-        rb.Position = UDim2.new(1, -54, 0, replyH); rb.Size = UDim2.fromOffset(46, 18)
-        rb.BackgroundTransparency = 1; rb.AutoButtonColor = false
-        rb.Text = "reply"; rb.Font = Theme.fonts.caption; rb.TextSize = 11; rb.TextColor3 = C.muted
-        rb.ZIndex = 6; rb.Parent = row
-        rb.MouseButton1Click:Connect(function() if setReply then setReply(m) end end)
     end
 
     local function clearFeed()
-        renderedIds = {}; lastId = nil
+        renderedIds = {}; lastId = nil; prevAuthor = nil; prevTs = nil
         for _, ch in ipairs(feed:GetChildren()) do
             if ch:IsA("Frame") then ch:Destroy() end
         end
@@ -4909,6 +4950,54 @@ function DiscordApp.open()
         ptag.TextXAlignment = Enum.TextXAlignment.Left; ptag.ZIndex = 22; ptag.Parent = card
         pop.MouseButton1Click:Connect(function() pop:Destroy() end)
     end
+
+    -- attach: paste an image/file URL to send (Roblox can't open a file picker)
+    attachBtn.MouseButton1Click:Connect(function()
+        if not activeChannel then return end
+        local pop = Instance.new("TextButton")
+        pop.Size = UDim2.fromScale(1, 1); pop.BackgroundColor3 = Color3.fromRGB(0,0,0)
+        pop.BackgroundTransparency = 0.5; pop.AutoButtonColor = false; pop.Text = ""; pop.ZIndex = 20; pop.Parent = win
+        local card = Instance.new("TextButton")
+        card.Size = UDim2.fromOffset(380, 150); card.AnchorPoint = Vector2.new(0.5, 0.5)
+        card.Position = UDim2.fromScale(0.5, 0.5); card.BackgroundColor3 = Color3.fromRGB(30, 31, 34)
+        card.AutoButtonColor = false; card.Text = ""; card.BorderSizePixel = 0; card.ZIndex = 21; card.Parent = pop
+        Util.corner(card, 12); Util.stroke(card, Color3.fromRGB(0,0,0), 1, 0.4)
+        local title = Instance.new("TextLabel")
+        title.Position = UDim2.fromOffset(18, 16); title.Size = UDim2.new(1, -36, 0, 22)
+        title.BackgroundTransparency = 1; title.Text = "Send an image"; title.Font = Theme.fonts.title
+        title.TextSize = 16; title.TextColor3 = C.bright; title.TextXAlignment = Enum.TextXAlignment.Left
+        title.ZIndex = 22; title.Parent = card
+        local fieldWrap = Instance.new("Frame")
+        fieldWrap.Position = UDim2.fromOffset(18, 50); fieldWrap.Size = UDim2.new(1, -36, 0, 40)
+        fieldWrap.BackgroundColor3 = C.rail; fieldWrap.BorderSizePixel = 0; fieldWrap.ZIndex = 22; fieldWrap.Parent = card
+        Util.corner(fieldWrap, 8)
+        local field = Instance.new("TextBox")
+        field.Position = UDim2.fromOffset(12, 0); field.Size = UDim2.new(1, -24, 1, 0)
+        field.BackgroundTransparency = 1; field.Text = ""; field.PlaceholderText = "Paste image URL (png / jpg / gif / webp)"
+        field.PlaceholderColor3 = C.muted; field.TextColor3 = C.text; field.Font = Theme.fonts.body
+        field.TextSize = 14; field.TextXAlignment = Enum.TextXAlignment.Left; field.ClearTextOnFocus = false
+        field.ClipsDescendants = true; field.ZIndex = 23; field.Parent = fieldWrap
+        local sendB = Instance.new("TextButton")
+        sendB.Position = UDim2.new(1, -98, 1, -46); sendB.Size = UDim2.fromOffset(80, 32)
+        sendB.BackgroundColor3 = C.blurple; sendB.AutoButtonColor = false; sendB.Text = "Send"
+        sendB.Font = Theme.fonts.title; sendB.TextSize = 14; sendB.TextColor3 = WHITE; sendB.ZIndex = 22; sendB.Parent = card
+        Util.corner(sendB, 8)
+        local function submit()
+            local u = (field.Text or ""):gsub("%s+$", ""):gsub("^%s+", "")
+            if isImageUrl(u) and activeChannel then
+                local rt = replyTarget; clearReply()
+                task.spawn(function() sendMessage(activeChannel, "", rt, u) end)
+                pop:Destroy()
+            else
+                field.PlaceholderText = "That doesn't look like an image URL"
+                field.Text = ""
+            end
+        end
+        sendB.MouseButton1Click:Connect(submit)
+        field.FocusLost:Connect(function(enter) if enter then submit() end end)
+        pop.MouseButton1Click:Connect(function() pop:Destroy() end)
+        pcall(function() field:CaptureFocus() end)
+    end)
 
     -- send
     local function doSend()
