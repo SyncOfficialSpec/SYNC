@@ -34,6 +34,16 @@ local SHAPES = {
     { id = "art_navy",  name = "Graphite", url = RAW .. "art_navy.png",  file = "sync_cur_navy.png",  aspect = 256/256, tip = TIP, tintable = false },
     { id = "art_red",   name = "Crimson",  url = RAW .. "art_red.png",   file = "sync_cur_red.png",   aspect = 256/256, tip = TIP, tintable = false },
     { id = "art_grad",  name = "Aurora",   url = RAW .. "art_grad.png",  file = "sync_cur_grad.png",  aspect = 256/256, tip = TIP, tintable = false },
+    { id = "art_glow",  name = "Glow",     url = RAW .. "art_glow.png",  file = "sync_cur_glow.png",  aspect = 0.828, tip = Vector2.new(0.104, 0.062), tintable = false },
+    { id = "art_blue",  name = "Blue",     url = RAW .. "art_blue.png",  file = "sync_cur_blue.png",  aspect = 1.000, tip = Vector2.new(0.023, 0.062), tintable = false },
+    -- Pack pieces (also valid shapes so shapeDef resolves them)
+    { id = "sukuna_cursor",  name = "Sukuna",      url = RAW .. "sukuna_cursor.png",  file = "sync_cur_sukc.png", aspect = 0.707, tip = Vector2.new(0.144, 0.031), tintable = false },
+    { id = "sukuna_pointer", name = "Sukuna Hand", url = RAW .. "sukuna_pointer.png", file = "sync_cur_sukp.png", aspect = 0.758, tip = Vector2.new(0.216, 0.047), tintable = false },
+}
+
+-- Cursor packs: a matched cursor (idle) + pointer (shown while pressing)
+local PACKS = {
+    { id = "sukuna", name = "Sukuna", cursor = "sukuna_cursor", pointer = "sukuna_pointer" },
 }
 local function shapeDef(id)
     for _, s in ipairs(SHAPES) do if s.id == id then return s end end
@@ -67,6 +77,7 @@ local function cfg(t)
         color = t.color or WHITE,
         gradient = t.gradient or false,
         colorB = t.colorB or Color3.fromRGB(255, 45, 130),
+        pointer = t.pointer or false,   -- pack pointer shape shown while pressing
         outline = t.outline ~= false,
         outlineColor = t.outlineColor or BLACK,
         outlineThickness = t.outlineThickness or 2,
@@ -87,6 +98,8 @@ local GALLERY = {
     { name = "Graphite", conf = cfg{ shape="art_navy",  outline=false } },
     { name = "Crimson",  conf = cfg{ shape="art_red",   outline=false } },
     { name = "Aurora",   conf = cfg{ shape="art_grad",  outline=false } },
+    { name = "Glow",     conf = cfg{ shape="art_glow", outline=false } },
+    { name = "Blue",     conf = cfg{ shape="art_blue", outline=false } },
     { name = "Mint",     conf = cfg{ shape="solid", color=Color3.fromRGB(90,255,200), glow=0.5 } },
     { name = "Gold",     conf = cfg{ shape="solid", color=Color3.fromRGB(254,200,70), outline=true, outlineColor=Color3.fromRGB(120,80,0) } },
     { name = "Rainbow",  conf = cfg{ shape="solid", rainbow=true, glow=0.4 } },
@@ -114,13 +127,20 @@ end
 -- ===========================================================================
 -- Overlay engine (singleton) — image-based, config driven
 -- ===========================================================================
-local overlayGui, root, conn, inputConn
+local overlayGui, root, conn, inputConn, endConn
 local mainImg, borderImg, glowImg, gradient
 local trailImgs = {}
 local rippleLayer
 local history = {}
 local config
+local pressed = false
 local onChangeCB
+
+-- the shape shown right now: pack pointer while pressing, else the base shape
+local function activeShapeId()
+    if pressed and config and config.pointer then return config.pointer end
+    return config and config.shape or "solid"
+end
 
 local function newImg(parent, z)
     local img = Instance.new("ImageLabel")
@@ -182,7 +202,7 @@ local function rebuild()
 end
 
 local function applyVisuals(color, size, rotation, opacity)
-    local def = shapeDef(config.shape)
+    local def = shapeDef(activeShapeId())
     local h = size
     local w = size * def.aspect
     if root then
@@ -191,6 +211,7 @@ local function applyVisuals(color, size, rotation, opacity)
         root.Rotation = rotation
     end
     if mainImg then
+        mainImg.Image = assetFor(activeShapeId()) or mainImg.Image
         -- fixed art keeps its own colours; masters take the live tint/gradient
         if not def.tintable then
             mainImg.ImageColor3 = WHITE
@@ -285,9 +306,15 @@ local function startOverlay()
         end
     end)
 
+    endConn = UserInputService.InputEnded:Connect(function(inp)
+        if inp.UserInputType == Enum.UserInputType.MouseButton1 then pressed = false end
+    end)
+
     inputConn = UserInputService.InputBegan:Connect(function(inp)
-        if not config or not config.ripple then return end
+        if not config then return end
         if inp.UserInputType ~= Enum.UserInputType.MouseButton1 then return end
+        pressed = true
+        if not config.ripple then return end
         local m = UserInputService:GetMouseLocation()
         local ring = Instance.new("Frame")
         ring.AnchorPoint = Vector2.new(0.5, 0.5)
@@ -312,6 +339,8 @@ end
 local function stopOverlay()
     if conn then conn:Disconnect(); conn = nil end
     if inputConn then inputConn:Disconnect(); inputConn = nil end
+    if endConn then endConn:Disconnect(); endConn = nil end
+    pressed = false
     if overlayGui then overlayGui:Destroy(); overlayGui = nil end
     root, mainImg, borderImg, glowImg, gradient, rippleLayer = nil, nil, nil, nil, nil, nil
     trailImgs, history = {}, {}
@@ -479,11 +508,12 @@ function CursorApp.open()
     local contentY = TB + 38
     local contentH = H - contentY
 
-    local galleryPage, customPage
+    local galleryPage, customPage, packsPage
     local tabButtons = {}
     local function selectTab(name)
         galleryPage.Visible = (name == "Gallery")
         customPage.Visible  = (name == "Customize")
+        if packsPage then packsPage.Visible = (name == "Packs") end
         for _, t in ipairs(tabButtons) do
             local on = t.name == name
             Util.tween(t.under, { BackgroundTransparency = on and 0 or 1 }, 0.15)
@@ -491,7 +521,7 @@ function CursorApp.open()
         end
     end
 
-    for i, name in ipairs({ "Gallery", "Customize" }) do
+    for i, name in ipairs({ "Gallery", "Customize", "Packs" }) do
         local holder = Instance.new("Frame")
         holder.Size = UDim2.fromOffset(110, 38)
         holder.Position = UDim2.fromOffset(14 + (i - 1) * 112, 0)
@@ -600,6 +630,121 @@ function CursorApp.open()
         end
         local totalRows = row + (col > 0 and 1 or 0)
         galleryPage.CanvasSize = UDim2.fromOffset(0, totalRows * (CELL_H + PAD) + PAD)
+    end
+
+    -- =======================================================================
+    -- PACKS  (matched cursor + pointer; pointer shows while the mouse is held)
+    -- =======================================================================
+    packsPage = Instance.new("ScrollingFrame")
+    packsPage.Size = UDim2.fromOffset(W, contentH)
+    packsPage.Position = UDim2.fromOffset(0, contentY)
+    packsPage.Visible = false
+    packsPage.BackgroundTransparency = 1
+    packsPage.BorderSizePixel = 0
+    packsPage.ScrollBarThickness = 4
+    packsPage.ScrollBarImageColor3 = Color3.fromRGB(120, 120, 128)
+    packsPage.ScrollBarImageTransparency = 0.4
+    packsPage.CanvasSize = UDim2.fromOffset(0, 0)
+    packsPage.AutomaticCanvasSize = Enum.AutomaticCanvasSize.Y
+    packsPage.ZIndex = 3
+    packsPage.Parent = win
+    do
+        local play = Instance.new("UIListLayout")
+        play.Padding = UDim.new(0, 12)
+        play.SortOrder = Enum.SortOrder.LayoutOrder
+        play.Parent = packsPage
+        local ppad = Instance.new("UIPadding")
+        ppad.PaddingTop = UDim.new(0, 14); ppad.PaddingLeft = UDim.new(0, 14)
+        ppad.PaddingRight = UDim.new(0, 14); ppad.PaddingBottom = UDim.new(0, 14)
+        ppad.Parent = packsPage
+
+        local hint = Instance.new("TextLabel")
+        hint.Size = UDim2.new(1, 0, 0, 16)
+        hint.BackgroundTransparency = 1
+        hint.Text = "A pack pairs a cursor with a pointer shown while you hold click."
+        hint.Font = Theme.fonts.caption
+        hint.TextSize = 11
+        hint.TextColor3 = DIM
+        hint.TextXAlignment = Enum.TextXAlignment.Left
+        hint.LayoutOrder = 0
+        hint.ZIndex = 3
+        hint.Parent = packsPage
+
+        for pi, pack in ipairs(PACKS) do
+            local card = Instance.new("TextButton")
+            card.Text = ""; card.AutoButtonColor = false
+            card.Size = UDim2.new(1, 0, 0, 92)
+            card.BackgroundColor3 = PANEL
+            card.BackgroundTransparency = 0.12
+            card.BorderSizePixel = 0
+            card.LayoutOrder = pi
+            card.ZIndex = 3
+            card.Parent = packsPage
+            Util.corner(card, 12)
+            Util.stroke(card, WHITE, 1, 0.9)
+
+            local nm = Instance.new("TextLabel")
+            nm.Size = UDim2.new(0, 200, 0, 22)
+            nm.Position = UDim2.fromOffset(16, 14)
+            nm.BackgroundTransparency = 1
+            nm.Text = pack.name
+            nm.Font = Theme.fonts.title
+            nm.TextSize = 16
+            nm.TextColor3 = WHITE
+            nm.TextXAlignment = Enum.TextXAlignment.Left
+            nm.ZIndex = 4
+            nm.Parent = card
+
+            local sub = Instance.new("TextLabel")
+            sub.Size = UDim2.new(0, 220, 0, 16)
+            sub.Position = UDim2.fromOffset(16, 40)
+            sub.BackgroundTransparency = 1
+            sub.Text = "Cursor + Pointer"
+            sub.Font = Theme.fonts.caption
+            sub.TextSize = 11
+            sub.TextColor3 = DIM
+            sub.TextXAlignment = Enum.TextXAlignment.Left
+            sub.ZIndex = 4
+            sub.Parent = card
+
+            -- two preview tiles on the right
+            local function tile(xoff, shapeId, label)
+                local t = Instance.new("Frame")
+                t.Size = UDim2.fromOffset(64, 64)
+                t.Position = UDim2.new(1, xoff, 0.5, -32)
+                t.BackgroundColor3 = Color3.fromRGB(24, 24, 27)
+                t.BackgroundTransparency = 0.2
+                t.BorderSizePixel = 0
+                t.ZIndex = 4
+                t.Parent = card
+                Util.corner(t, 8)
+                local im = Instance.new("ImageLabel")
+                im.Size = UDim2.fromOffset(40, 40)
+                im.Position = UDim2.fromScale(0.5, 0.46)
+                im.AnchorPoint = Vector2.new(0.5, 0.5)
+                im.BackgroundTransparency = 1
+                im.ScaleType = Enum.ScaleType.Fit
+                im.Image = assetFor(shapeId) or ""
+                im.ZIndex = 5
+                im.Parent = t
+                local lb = Instance.new("TextLabel")
+                lb.Size = UDim2.new(1, 0, 0, 12)
+                lb.Position = UDim2.new(0, 0, 1, -13)
+                lb.BackgroundTransparency = 1
+                lb.Text = label
+                lb.Font = Theme.fonts.caption
+                lb.TextSize = 9
+                lb.TextColor3 = DIM
+                lb.ZIndex = 5
+                lb.Parent = t
+            end
+            tile(-152, pack.cursor, "Cursor")
+            tile(-80, pack.pointer, "Pointer")
+
+            card.MouseButton1Click:Connect(function()
+                setConfig(cfg{ shape = pack.cursor, pointer = pack.pointer, outline = false })
+            end)
+        end
     end
 
     -- =======================================================================
