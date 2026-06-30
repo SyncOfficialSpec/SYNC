@@ -4348,6 +4348,23 @@ local function fmtTime(ts)
     if ok and s then return (s:gsub("^0", "")) end
     return ""
 end
+-- Roblox ImageLabels can't load external URLs directly, so download via the
+-- executor (Util.remoteImage -> getcustomasset) and set the resulting asset id.
+-- Cached by a hash of the URL so repeats are instant.
+local function urlKey(url)
+    local h = 5381
+    for i = 1, #url do h = (h * 33 + string.byte(url, i)) % 2147483647 end
+    return tostring(h)
+end
+local function loadImg(label, url, prefix)
+    if not url or url == "" or not label then return end
+    task.spawn(function()
+        local fn = (prefix or "dc") .. "_" .. urlKey(url) .. ".png"
+        local ok, id = pcall(Util.remoteImage, url, fn)
+        if ok and id and label and label.Parent then label.Image = id end
+    end)
+end
+
 local function isImageUrl(s)
     return type(s) == "string" and s:match("^https?://%S+%.[Pp][Nn][Gg]")
         or (type(s) == "string" and s:match("^https?://%S+%.[Jj][Pp][Ee]?[Gg]"))
@@ -4618,7 +4635,7 @@ function DiscordApp.open()
     Util.stroke(inputWrap, Color3.fromRGB(0, 0, 0), 1, 0.6)
     local box = Instance.new("TextBox")
     box.Size = UDim2.new(1, -24, 1, 0); box.Position = UDim2.fromOffset(14, 0)
-    box.BackgroundTransparency = 1; box.Text = ""; box.PlaceholderText = "Message"
+    box.BackgroundTransparency = 1; box.Text = ""; box.PlaceholderText = "Message  (paste an image URL to send a pic)"
     box.PlaceholderColor3 = C.muted; box.TextColor3 = C.text; box.Font = Theme.fonts.body
     box.TextSize = 14; box.TextXAlignment = Enum.TextXAlignment.Left; box.ClearTextOnFocus = false
     box.ClipsDescendants = true; box.ZIndex = 5; box.Parent = inputWrap
@@ -4682,7 +4699,7 @@ function DiscordApp.open()
         av.Size = UDim2.fromOffset(36, 36); av.Position = UDim2.fromOffset(4, replyH + 2)
         av.BackgroundColor3 = C.rail; av.BorderSizePixel = 0; av.ZIndex = 5; av.Parent = row
         Util.corner(av, 18)
-        if m.avatar and m.avatar ~= "" then av.Image = m.avatar end
+        loadImg(av, m.avatar, "dcav")
         local avBtn = Instance.new("TextButton")
         avBtn.Size = UDim2.fromScale(1, 1); avBtn.BackgroundTransparency = 1
         avBtn.Text = ""; avBtn.AutoButtonColor = false; avBtn.ZIndex = 6; avBtn.Parent = av
@@ -4733,9 +4750,10 @@ function DiscordApp.open()
                 img.Position = UDim2.fromOffset(50, headerH + contentH + (i - 1) * 168 + 4)
                 img.Size = UDim2.fromOffset(280, 158)
                 img.BackgroundColor3 = C.rail; img.BorderSizePixel = 0
-                img.ScaleType = Enum.ScaleType.Fit; img.Image = url
+                img.ScaleType = Enum.ScaleType.Fit
                 img.ZIndex = 5; img.Parent = row
                 Util.corner(img, 8)
+                loadImg(img, url, "dcimg")
             end
         end
 
@@ -4865,19 +4883,19 @@ function DiscordApp.open()
         pop.BackgroundTransparency = 0.5; pop.AutoButtonColor = false; pop.Text = ""
         pop.ZIndex = 20; pop.Parent = win
         local card = Instance.new("Frame")
-        card.Size = UDim2.fromOffset(240, 150); card.AnchorPoint = Vector2.new(0.5, 0.5)
+        card.Size = UDim2.fromOffset(260, 160); card.AnchorPoint = Vector2.new(0.5, 0.5)
         card.Position = UDim2.fromScale(0.5, 0.5); card.BackgroundColor3 = Color3.fromRGB(30, 31, 34)
-        card.BorderSizePixel = 0; card.ZIndex = 21; card.Parent = pop
-        Util.corner(card, 12); Util.stroke(card, Color3.fromRGB(0,0,0), 1, 0.4)
+        card.BorderSizePixel = 0; card.ClipsDescendants = true; card.ZIndex = 21; card.Parent = pop
+        Util.corner(card, 12)
+        Util.stroke(card, Color3.fromRGB(0,0,0), 1, 0.4)
         local banner = Instance.new("Frame")
-        banner.Size = UDim2.new(1, 0, 0, 50); banner.BackgroundColor3 = m.roblox and Color3.fromRGB(70,110,200) or C.blurple
+        banner.Size = UDim2.new(1, 0, 0, 52); banner.BackgroundColor3 = m.roblox and Color3.fromRGB(70,110,200) or C.blurple
         banner.BorderSizePixel = 0; banner.ZIndex = 21; banner.Parent = card
-        local bc = Instance.new("UICorner"); bc.CornerRadius = UDim.new(0,12); bc.Parent = banner
         local pav = Instance.new("ImageLabel")
-        pav.Size = UDim2.fromOffset(64, 64); pav.Position = UDim2.fromOffset(16, 22)
+        pav.Size = UDim2.fromOffset(68, 68); pav.Position = UDim2.fromOffset(16, 22)
         pav.BackgroundColor3 = Color3.fromRGB(20,20,22); pav.BorderSizePixel = 0; pav.ZIndex = 22; pav.Parent = card
-        Util.corner(pav, 32); Util.stroke(pav, Color3.fromRGB(30,31,34), 4, 0)
-        if m.avatar and m.avatar ~= "" then pav.Image = m.avatar end
+        Util.corner(pav, 34); Util.stroke(pav, Color3.fromRGB(30,31,34), 5, 0)
+        loadImg(pav, m.avatar, "dcav")
         local pname = Instance.new("TextLabel")
         pname.Position = UDim2.fromOffset(16, 92); pname.Size = UDim2.new(1, -32, 0, 22)
         pname.BackgroundTransparency = 1; pname.Text = m.author or "Unknown"
