@@ -70,6 +70,18 @@ local function getSites()
     local t = b and jdecode(b)
     return (type(t) == "table") and t or nil
 end
+-- fetch the raw executable script for a result (rscripts/roscripts/scriptblox)
+local function getRaw(s)
+    if s.script and s.script ~= "" then return s.script end
+    local url = RELAY_URL .. "/scripts/raw?key=" .. API_KEY .. "&site=" .. (s.siteId or "")
+    if s.slug and s.slug ~= "" then url = url .. "&slug=" .. HttpService:UrlEncode(s.slug) end
+    if s.rawUrl and s.rawUrl ~= "" then url = url .. "&rawurl=" .. HttpService:UrlEncode(s.rawUrl) end
+    if s.detailUrl and s.detailUrl ~= "" then url = url .. "&detailurl=" .. HttpService:UrlEncode(s.detailUrl) end
+    local b = Util.httpGetH(url, { ["X-API-Key"] = API_KEY })
+    local t = b and jdecode(b)
+    return (t and t.script) or ""
+end
+
 local function getScripts(q, siteId)
     local url = RELAY_URL .. "/scripts?key=" .. API_KEY
     if siteId and siteId ~= "" then
@@ -299,6 +311,7 @@ function ScriptingApp.open()
         end
 
         local hasScript = s.script and s.script ~= ""
+        local canRaw = hasScript or (s.slug and s.slug ~= "") or (s.rawUrl and s.rawUrl ~= "") or (s.detailUrl and s.detailUrl ~= "")
         local codeTop = hasDesc and 248 or 210
         local box = Instance.new("Frame")
         box.Position = UDim2.fromOffset(18, codeTop); box.Size = UDim2.new(1, -36, 0, CH - codeTop - 56)
@@ -310,7 +323,7 @@ function ScriptingApp.open()
         codeScroll.CanvasSize = UDim2.fromOffset(0, 3000); codeScroll.ZIndex = 33; codeScroll.Parent = box
         local code = Instance.new("TextLabel")
         code.Size = UDim2.new(1, -6, 0, 3000); code.BackgroundTransparency = 1
-        code.Text = hasScript and s.script or ("This source doesn't expose the raw script.\nUse Copy Link and open it on " .. (s.site or "the site") .. ":\n\n" .. (s.url or ""))
+        code.Text = hasScript and s.script or (canRaw and "Loading script..." or ("This source has no raw script.\nCopy Link and open on " .. (s.site or "the site") .. ":\n\n" .. (s.url or "")))
         code.Font = Enum.Font.Code; code.TextSize = 12; code.TextColor3 = hasScript and C.text or C.muted
         code.TextXAlignment = Enum.TextXAlignment.Left; code.TextYAlignment = Enum.TextYAlignment.Top
         code.TextWrapped = true; code.ZIndex = 33; code.Parent = codeScroll
@@ -324,24 +337,42 @@ function ScriptingApp.open()
             Util.corner(b, 8)
             return b
         end
-        local copyBtn = actionBtn(-118, 106, hasScript and "Copy Script" or "Copy Link", C.card2)
+        local copyBtn = actionBtn(-118, 106, "Copy Script", C.card2)
         copyBtn.TextColor3 = C.text
-        copyBtn.MouseButton1Click:Connect(function()
-            setClip(hasScript and s.script or (s.url or ""))
-            copyBtn.Text = "Copied!"; copyBtn.BackgroundColor3 = C.green; copyBtn.TextColor3 = WHITE
-        end)
-        if hasScript then
-            local execBtn = actionBtn(-232, 108, "Execute", C.green)
-            execBtn.MouseButton1Click:Connect(function()
-                execBtn.Text = "Running..."
-                task.spawn(function()
-                    local ok, err = execute(s.script)
-                    execBtn.Text = ok and "Executed" or "Failed"
-                    execBtn.BackgroundColor3 = ok and C.green or Color3.fromRGB(210, 80, 80)
-                    if not ok then pcall(function() code.Text = "Execution error:\n" .. tostring(err) .. "\n\n" .. s.script end) end
-                end)
+        local execBtn = actionBtn(-232, 108, "Execute", C.green)
+        if not canRaw then execBtn.Visible = false; copyBtn.Text = "Copy Link" end
+
+        -- fetch raw on-demand so Execute/Copy work for every source
+        local scriptText = hasScript and s.script or nil
+        if canRaw and not scriptText then
+            task.spawn(function()
+                local raw = getRaw(s)
+                if raw and raw ~= "" then
+                    scriptText = raw; s.script = raw
+                    pcall(function() code.Text = raw; code.TextColor3 = C.text end)
+                else
+                    pcall(function() code.Text = "Couldn't load the raw script.\nCopy Link:\n\n" .. (s.url or "") end)
+                    execBtn.Visible = false; copyBtn.Text = "Copy Link"
+                end
             end)
         end
+
+        copyBtn.MouseButton1Click:Connect(function()
+            setClip(scriptText or s.url or "")
+            copyBtn.Text = "Copied!"; copyBtn.BackgroundColor3 = C.green; copyBtn.TextColor3 = WHITE
+        end)
+        execBtn.MouseButton1Click:Connect(function()
+            execBtn.Text = "Running..."
+            task.spawn(function()
+                local src = scriptText or getRaw(s)
+                if not src or src == "" then execBtn.Text = "No script"; return end
+                scriptText = src
+                local ok, err = execute(src)
+                execBtn.Text = ok and "Executed" or "Failed"
+                execBtn.BackgroundColor3 = ok and C.green or Color3.fromRGB(210, 80, 80)
+                if not ok then pcall(function() code.Text = "Execution error:\n" .. tostring(err) end) end
+            end)
+        end)
         pop.MouseButton1Click:Connect(function() pop:Destroy() end)
     end
 
