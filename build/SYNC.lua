@@ -5136,6 +5136,16 @@ local function setClip(t)
     local f = setclipboard or toclipboard or (syn and syn.write_clipboard) or writeclipboard
     if f then pcall(f, t) end
 end
+-- run a script string with the executor (loadstring). Returns ok, err.
+local function execute(src)
+    if not src or src == "" then return false, "no script" end
+    local ls = loadstring or (getgenv and getgenv().loadstring)
+    if not ls then return false, "loadstring unavailable" end
+    local fn, cerr = ls(src)
+    if not fn then return false, tostring(cerr) end
+    local ok, rerr = pcall(fn)
+    return ok, rerr
+end
 
 -- external images -> getcustomasset (Roblox can't load URLs directly)
 local function urlKey(u) local h = 5381; for i = 1, #u do h = (h * 33 + string.byte(u, i)) % 2147483647 end return tostring(h) end
@@ -5310,52 +5320,131 @@ function ScriptingApp.open()
     -- ----- detail popup (script + copy) -----
     local function showDetail(s)
         local pop = Instance.new("TextButton")
-        pop.Size = UDim2.fromScale(1, 1); pop.BackgroundColor3 = BLACK; pop.BackgroundTransparency = 0.5
+        pop.Size = UDim2.fromScale(1, 1); pop.BackgroundColor3 = BLACK; pop.BackgroundTransparency = 0.55
         pop.AutoButtonColor = false; pop.Text = ""; pop.ZIndex = 30; pop.Parent = win
+        local CW = math.min(600, W - 60)
+        local CH = math.min(500, H - 50)
         local card = Instance.new("TextButton")
-        card.Size = UDim2.fromOffset(math.min(560, W - 80), math.min(420, H - 80))
-        card.AnchorPoint = Vector2.new(0.5, 0.5); card.Position = UDim2.fromScale(0.5, 0.5)
-        card.BackgroundColor3 = C.header; card.AutoButtonColor = false; card.Text = ""
-        card.BorderSizePixel = 0; card.ClipsDescendants = true; card.ZIndex = 31; card.Parent = pop
-        Util.corner(card, 12); Util.stroke(card, BLACK, 1, 0.4)
+        card.Size = UDim2.fromOffset(CW, CH); card.AnchorPoint = Vector2.new(0.5, 0.5)
+        card.Position = UDim2.fromScale(0.5, 0.5); card.BackgroundColor3 = C.header
+        card.AutoButtonColor = false; card.Text = ""; card.BorderSizePixel = 0; card.ClipsDescendants = true
+        card.ZIndex = 31; card.Parent = pop
+        Util.corner(card, 14); Util.stroke(card, BLACK, 1, 0.4)
+
+        -- banner image + dark gradient
+        local banner = Instance.new("ImageLabel")
+        banner.Size = UDim2.new(1, 0, 0, 150); banner.BackgroundColor3 = Color3.fromRGB(18, 19, 22)
+        banner.BorderSizePixel = 0; banner.ScaleType = Enum.ScaleType.Crop; banner.ZIndex = 31; banner.Parent = card
+        loadImg(banner, s.thumbnail)
+        local shade = Instance.new("Frame")
+        shade.Size = UDim2.new(1, 0, 0, 90); shade.Position = UDim2.new(0, 0, 0, 60)
+        shade.BackgroundColor3 = BLACK; shade.BorderSizePixel = 0; shade.ZIndex = 32; shade.Parent = banner
+        local sg = Instance.new("UIGradient")
+        sg.Rotation = 90
+        sg.Transparency = NumberSequence.new({ NumberSequenceKeypoint.new(0, 1), NumberSequenceKeypoint.new(1, 0.15) })
+        sg.Parent = shade
         local t = Instance.new("TextLabel")
-        t.Position = UDim2.fromOffset(18, 14); t.Size = UDim2.new(1, -36, 0, 24)
+        t.Position = UDim2.fromOffset(18, 116); t.Size = UDim2.new(1, -36, 0, 28)
         t.BackgroundTransparency = 1; t.Text = s.title or "Script"; t.Font = Theme.fonts.title
-        t.TextSize = 16; t.TextColor3 = C.text; t.TextXAlignment = Enum.TextXAlignment.Left
-        t.TextTruncate = Enum.TextTruncate.AtEnd; t.ZIndex = 32; t.Parent = card
+        t.TextSize = 18; t.TextColor3 = WHITE; t.TextXAlignment = Enum.TextXAlignment.Left
+        t.TextTruncate = Enum.TextTruncate.AtEnd; t.ZIndex = 33; t.Parent = banner
+        local siteTag = Instance.new("TextLabel")
+        siteTag.Position = UDim2.fromOffset(12, 10); siteTag.Size = UDim2.fromOffset(#(s.site or "") * 7 + 18, 20)
+        siteTag.BackgroundColor3 = BLACK; siteTag.BackgroundTransparency = 0.3; siteTag.Text = s.site or ""
+        siteTag.Font = Theme.fonts.caption; siteTag.TextSize = 11; siteTag.TextColor3 = WHITE
+        siteTag.ZIndex = 33; siteTag.Parent = banner; Util.corner(siteTag, 5)
+        -- close X
+        local xb = Instance.new("TextButton")
+        xb.Position = UDim2.new(1, -34, 0, 10); xb.Size = UDim2.fromOffset(24, 24)
+        xb.BackgroundColor3 = BLACK; xb.BackgroundTransparency = 0.3; xb.AutoButtonColor = false; xb.Text = ""
+        xb.ZIndex = 33; xb.Parent = banner; Util.corner(xb, 12)
+        for _, rot in ipairs({ 45, -45 }) do
+            local ln = Instance.new("Frame"); ln.AnchorPoint = Vector2.new(0.5, 0.5)
+            ln.Position = UDim2.fromScale(0.5, 0.5); ln.Size = UDim2.fromOffset(11, 2); ln.Rotation = rot
+            ln.BackgroundColor3 = WHITE; ln.BorderSizePixel = 0; ln.ZIndex = 34; ln.Parent = xb
+            local cc = Instance.new("UICorner"); cc.CornerRadius = UDim.new(1, 0); cc.Parent = ln
+        end
+        xb.MouseButton1Click:Connect(function() pop:Destroy() end)
+
+        -- badges row
+        local bx = 18
+        local function pill(text, col)
+            local p = Instance.new("TextLabel")
+            p.Position = UDim2.fromOffset(bx, 160); p.Size = UDim2.fromOffset(#text * 7 + 18, 20)
+            p.BackgroundColor3 = col; p.BackgroundTransparency = 0.82; p.Text = text
+            p.Font = Theme.fonts.caption; p.TextSize = 11; p.TextColor3 = col; p.ZIndex = 32; p.Parent = card
+            Util.corner(p, 5); Util.stroke(p, col, 1, 0.5)
+            bx = bx + p.Size.X.Offset + 6
+        end
+        if s.verified then pill("Verified", C.green) end
+        if s.keySystem then pill("Key System", Color3.fromRGB(240, 190, 70)) end
+        if s.patched then pill("Patched", Color3.fromRGB(240, 90, 90)) end
+        if s.universal then pill("Universal", Color3.fromRGB(110, 160, 255)) end
+
+        -- meta
         local meta = Instance.new("TextLabel")
-        meta.Position = UDim2.fromOffset(18, 40); meta.Size = UDim2.new(1, -36, 0, 16)
+        meta.Position = UDim2.fromOffset(18, 186); meta.Size = UDim2.new(1, -36, 0, 16)
         meta.BackgroundTransparency = 1
-        meta.Text = (s.site or "") .. (s.game ~= "" and ("  -  " .. s.game) or "") .. "   " .. tostring(s.views or 0) .. " views"
+        meta.Text = (s.game ~= "" and (s.game .. "   ") or "") .. tostring(s.views or 0) .. " views" ..
+            ((s.likes and s.likes > 0) and ("   " .. s.likes .. " likes") or "")
         meta.Font = Theme.fonts.caption; meta.TextSize = 12; meta.TextColor3 = C.muted
         meta.TextXAlignment = Enum.TextXAlignment.Left; meta.ZIndex = 32; meta.Parent = card
 
+        -- description (if present and not just the game name)
+        local hasDesc = s.desc and s.desc ~= "" and s.desc ~= s.game
+        if hasDesc then
+            local d = Instance.new("TextLabel")
+            d.Position = UDim2.fromOffset(18, 208); d.Size = UDim2.new(1, -36, 0, 34)
+            d.BackgroundTransparency = 1; d.Text = s.desc; d.Font = Theme.fonts.body; d.TextSize = 13
+            d.TextColor3 = C.text; d.TextWrapped = true; d.TextXAlignment = Enum.TextXAlignment.Left
+            d.TextYAlignment = Enum.TextYAlignment.Top; d.TextTruncate = Enum.TextTruncate.AtEnd
+            d.ZIndex = 32; d.Parent = card
+        end
+
         local hasScript = s.script and s.script ~= ""
+        local codeTop = hasDesc and 248 or 210
         local box = Instance.new("Frame")
-        box.Position = UDim2.fromOffset(18, 66); box.Size = UDim2.new(1, -36, 1, -122)
+        box.Position = UDim2.fromOffset(18, codeTop); box.Size = UDim2.new(1, -36, 0, CH - codeTop - 56)
         box.BackgroundColor3 = C.bg; box.BorderSizePixel = 0; box.ZIndex = 32; box.Parent = card
         Util.corner(box, 8)
         local codeScroll = Instance.new("ScrollingFrame")
         codeScroll.Size = UDim2.new(1, -8, 1, -8); codeScroll.Position = UDim2.fromOffset(8, 4)
         codeScroll.BackgroundTransparency = 1; codeScroll.BorderSizePixel = 0; codeScroll.ScrollBarThickness = 4
-        codeScroll.CanvasSize = UDim2.fromOffset(0, 0); codeScroll.ZIndex = 33; codeScroll.Parent = box
+        codeScroll.CanvasSize = UDim2.fromOffset(0, 3000); codeScroll.ZIndex = 33; codeScroll.Parent = box
         local code = Instance.new("TextLabel")
-        code.Size = UDim2.new(1, -8, 0, 2000); code.BackgroundTransparency = 1
-        code.Text = hasScript and s.script or ("No inline script.\n\nOpen on the site:\n" .. (s.url or ""))
-        code.Font = Enum.Font.Code; code.TextSize = 12; code.TextColor3 = C.text
+        code.Size = UDim2.new(1, -6, 0, 3000); code.BackgroundTransparency = 1
+        code.Text = hasScript and s.script or ("This source doesn't expose the raw script.\nUse Copy Link and open it on " .. (s.site or "the site") .. ":\n\n" .. (s.url or ""))
+        code.Font = Enum.Font.Code; code.TextSize = 12; code.TextColor3 = hasScript and C.text or C.muted
         code.TextXAlignment = Enum.TextXAlignment.Left; code.TextYAlignment = Enum.TextYAlignment.Top
         code.TextWrapped = true; code.ZIndex = 33; code.Parent = codeScroll
 
-        local copyBtn = Instance.new("TextButton")
-        copyBtn.Position = UDim2.new(1, -128, 1, -44); copyBtn.Size = UDim2.fromOffset(112, 32)
-        copyBtn.BackgroundColor3 = C.accent; copyBtn.AutoButtonColor = false
-        copyBtn.Text = hasScript and "Copy Script" or "Copy Link"; copyBtn.Font = Theme.fonts.title
-        copyBtn.TextSize = 13; copyBtn.TextColor3 = WHITE; copyBtn.ZIndex = 32; copyBtn.Parent = card
-        Util.corner(copyBtn, 8)
+        -- action buttons
+        local function actionBtn(rightOffset, w, label, col)
+            local b = Instance.new("TextButton")
+            b.Position = UDim2.new(1, rightOffset, 1, -44); b.Size = UDim2.fromOffset(w, 32)
+            b.BackgroundColor3 = col; b.AutoButtonColor = false; b.Text = label
+            b.Font = Theme.fonts.title; b.TextSize = 13; b.TextColor3 = WHITE; b.ZIndex = 32; b.Parent = card
+            Util.corner(b, 8)
+            return b
+        end
+        local copyBtn = actionBtn(-118, 106, hasScript and "Copy Script" or "Copy Link", C.card2)
+        copyBtn.TextColor3 = C.text
         copyBtn.MouseButton1Click:Connect(function()
             setClip(hasScript and s.script or (s.url or ""))
-            copyBtn.Text = "Copied!"; copyBtn.BackgroundColor3 = C.green
+            copyBtn.Text = "Copied!"; copyBtn.BackgroundColor3 = C.green; copyBtn.TextColor3 = WHITE
         end)
+        if hasScript then
+            local execBtn = actionBtn(-232, 108, "Execute", C.green)
+            execBtn.MouseButton1Click:Connect(function()
+                execBtn.Text = "Running..."
+                task.spawn(function()
+                    local ok, err = execute(s.script)
+                    execBtn.Text = ok and "Executed" or "Failed"
+                    execBtn.BackgroundColor3 = ok and C.green or Color3.fromRGB(210, 80, 80)
+                    if not ok then pcall(function() code.Text = "Execution error:\n" .. tostring(err) .. "\n\n" .. s.script end) end
+                end)
+            end)
+        end
         pop.MouseButton1Click:Connect(function() pop:Destroy() end)
     end
 
