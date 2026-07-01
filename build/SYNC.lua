@@ -5163,10 +5163,14 @@ local function getSites()
     local t = b and jdecode(b)
     return (type(t) == "table") and t or nil
 end
-local function getScripts(q)
+local function getScripts(q, siteId)
     local url = RELAY_URL .. "/scripts?key=" .. API_KEY
-    local csv = enabledCsv()
-    if csv ~= "" then url = url .. "&sites=" .. csv end
+    if siteId and siteId ~= "" then
+        url = url .. "&sites=" .. siteId          -- a specific site tab
+    else
+        local csv = enabledCsv()
+        if csv ~= "" then url = url .. "&sites=" .. csv end   -- All (enabled)
+    end
     if q and q ~= "" then url = url .. "&q=" .. HttpService:UrlEncode(q) end
     local b = Util.httpGetH(url, { ["X-API-Key"] = API_KEY })
     local t = b and jdecode(b)
@@ -5280,9 +5284,19 @@ function ScriptingApp.open()
     searchBtn.ZIndex = 6; searchBtn.Parent = searchWrap
     Util.corner(searchBtn, 7)
 
+    -- site tabs (scriptblox.com, rscripts.net, ...)
+    local tabBar = Instance.new("ScrollingFrame")
+    tabBar.Position = UDim2.fromOffset(24, TB + 90); tabBar.Size = UDim2.new(1, -48, 0, 34)
+    tabBar.BackgroundTransparency = 1; tabBar.BorderSizePixel = 0
+    tabBar.ScrollBarThickness = 0; tabBar.ScrollingDirection = Enum.ScrollingDirection.X
+    tabBar.CanvasSize = UDim2.fromOffset(0, 0); tabBar.ZIndex = 4; tabBar.Parent = win
+    local tabLay = Instance.new("UIListLayout")
+    tabLay.FillDirection = Enum.FillDirection.Horizontal; tabLay.Padding = UDim.new(0, 8)
+    tabLay.VerticalAlignment = Enum.VerticalAlignment.Center; tabLay.Parent = tabBar
+
     -- grid
     local grid = Instance.new("ScrollingFrame")
-    grid.Position = UDim2.fromOffset(20, TB + 94); grid.Size = UDim2.new(1, -40, 1, -(TB + 104))
+    grid.Position = UDim2.fromOffset(20, TB + 132); grid.Size = UDim2.new(1, -40, 1, -(TB + 142))
     grid.BackgroundTransparency = 1; grid.BorderSizePixel = 0; grid.ScrollBarThickness = 5
     grid.ScrollBarImageColor3 = Color3.fromRGB(90, 92, 98); grid.ScrollBarImageTransparency = 0.35
     grid.CanvasSize = UDim2.fromOffset(0, 0); grid.ZIndex = 4; grid.Parent = win
@@ -5406,18 +5420,54 @@ function ScriptingApp.open()
         grid.CanvasSize = UDim2.fromOffset(0, rows * (CARD_H + PAD) + PAD)
     end
 
+    local currentSite = nil   -- nil = All
     local function load(q)
         status.Parent = grid; status.Text = "Loading..."
         for _, ch in ipairs(grid:GetChildren()) do if ch:IsA("TextButton") or ch:IsA("Frame") then ch:Destroy() end end
         status.Parent = grid
         task.spawn(function()
-            local list = getScripts(q)
+            local list = getScripts(q, currentSite)
             if alive then renderCards(list) end
         end)
     end
 
     searchBtn.MouseButton1Click:Connect(function() load(search.Text) end)
     search.FocusLost:Connect(function(enter) if enter then load(search.Text) end end)
+
+    -- build the tab bar (All + each enabled site's domain)
+    local tabButtons = {}
+    local function highlightTab(id)
+        for _, tb in ipairs(tabButtons) do
+            local on = tb.id == id
+            tb.bg.BackgroundColor3 = on and C.accent or C.card
+            tb.lbl.TextColor3 = on and WHITE or C.muted
+        end
+    end
+    local function addTab(id, label)
+        local w = #label * 8 + 26
+        local bg = Instance.new("TextButton")
+        bg.Size = UDim2.fromOffset(w, 28); bg.BackgroundColor3 = C.card; bg.AutoButtonColor = false
+        bg.Text = ""; bg.BorderSizePixel = 0; bg.ZIndex = 5; bg.Parent = tabBar
+        Util.corner(bg, 8)
+        local lbl = Instance.new("TextLabel")
+        lbl.Size = UDim2.fromScale(1, 1); lbl.BackgroundTransparency = 1; lbl.Text = label
+        lbl.Font = Theme.fonts.body; lbl.TextSize = 13; lbl.TextColor3 = C.muted; lbl.ZIndex = 6; lbl.Parent = bg
+        bg.MouseButton1Click:Connect(function()
+            currentSite = id; highlightTab(id); search.Text = ""; load(nil)
+        end)
+        tabButtons[#tabButtons + 1] = { id = id, bg = bg, lbl = lbl }
+        return w
+    end
+    local function buildTabs(sites)
+        for _, tb in ipairs(tabButtons) do tb.bg:Destroy() end
+        tabButtons = {}
+        local total = addTab(nil, "All") + 8
+        for _, s in ipairs(sites) do
+            if isEnabled(s.id) then total = total + addTab(s.id, s.host or s.name) + 8 end
+        end
+        tabBar.CanvasSize = UDim2.fromOffset(total + 10, 0)
+        highlightTab(currentSite)
+    end
 
     -- ----- settings popup (per-site toggles) -----
     gear.MouseButton1Click:Connect(function()
@@ -5462,6 +5512,9 @@ function ScriptingApp.open()
                 for _, s in ipairs(sites) do if set[s.id] then ids[#ids + 1] = s.id end end
                 -- if all enabled, store "" (means all); else the csv
                 Util.save("ScriptSites", (#ids == #sites) and "" or table.concat(ids, ","))
+                -- reflect changes in the tab bar + results
+                if currentSite and not isEnabled(currentSite) then currentSite = nil end
+                buildTabs(sites); load(nil)
             end
 
             for _, s in ipairs(sites) do
@@ -5495,8 +5548,13 @@ function ScriptingApp.open()
         end)
     end)
 
-    -- initial load (home = latest). small delay so grid has a measured size.
-    task.defer(function() load(nil) end)
+    -- initial: fetch sites, build tabs, load home (latest across enabled sites)
+    task.spawn(function()
+        local sites = getSites() or {}
+        if not alive then return end
+        buildTabs(sites)
+        load(nil)
+    end)
 
     return { close = close }
 end
