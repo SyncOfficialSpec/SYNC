@@ -82,7 +82,7 @@ local function getRaw(s)
     return (t and t.script) or ""
 end
 
-local function getScripts(q, siteId)
+local function getScripts(q, siteId, page)
     local url = RELAY_URL .. "/scripts?key=" .. API_KEY
     if siteId and siteId ~= "" then
         url = url .. "&sites=" .. siteId          -- a specific site tab
@@ -91,6 +91,7 @@ local function getScripts(q, siteId)
         if csv ~= "" then url = url .. "&sites=" .. csv end   -- All (enabled)
     end
     if q and q ~= "" then url = url .. "&q=" .. HttpService:UrlEncode(q) end
+    if page and page > 1 then url = url .. "&page=" .. page end
     local b = Util.httpGetH(url, { ["X-API-Key"] = API_KEY })
     local t = b and jdecode(b)
     return (type(t) == "table" and not t.error) and t or nil
@@ -213,9 +214,17 @@ function ScriptingApp.open()
     tabLay.FillDirection = Enum.FillDirection.Horizontal; tabLay.Padding = UDim.new(0, 8)
     tabLay.VerticalAlignment = Enum.VerticalAlignment.Center; tabLay.Parent = tabBar
 
+    -- filter chips
+    local filterRow = Instance.new("Frame")
+    filterRow.Position = UDim2.fromOffset(24, TB + 128); filterRow.Size = UDim2.new(1, -48, 0, 26)
+    filterRow.BackgroundTransparency = 1; filterRow.ZIndex = 4; filterRow.Parent = win
+    local filterLay = Instance.new("UIListLayout")
+    filterLay.FillDirection = Enum.FillDirection.Horizontal; filterLay.Padding = UDim.new(0, 8)
+    filterLay.VerticalAlignment = Enum.VerticalAlignment.Center; filterLay.Parent = filterRow
+
     -- grid
     local grid = Instance.new("ScrollingFrame")
-    grid.Position = UDim2.fromOffset(20, TB + 132); grid.Size = UDim2.new(1, -40, 1, -(TB + 142))
+    grid.Position = UDim2.fromOffset(20, TB + 162); grid.Size = UDim2.new(1, -40, 1, -(TB + 172))
     grid.BackgroundTransparency = 1; grid.BorderSizePixel = 0; grid.ScrollBarThickness = 5
     grid.ScrollBarImageColor3 = Color3.fromRGB(90, 92, 98); grid.ScrollBarImageTransparency = 0.35
     grid.CanvasSize = UDim2.fromOffset(0, 0); grid.ZIndex = 4; grid.Parent = win
@@ -377,12 +386,85 @@ function ScriptingApp.open()
     end
 
     -- ----- render cards -----
-    local CARD_W, CARD_H, PAD = 210, 176, 14
-    local function renderCards(list)
+    local CARD_W, CARD_H, PAD = 210, 182, 14
+    local allResults = {}
+    local filterMode = "all"
+    local currentSite = nil       -- nil = All
+    local curQuery = nil
+    local curPage = 1
+    local loadingMore = false
+    local loadMoreBtn
+    local loadMore                 -- forward decl
+
+    local function passFilter(s)
+        if filterMode == "verified" then return s.verified == true end
+        if filterMode == "key" then return s.keySystem == true end
+        if filterMode == "nokey" then return not s.keySystem end
+        return true
+    end
+
+    local function makeCard(s, x, y)
+        local cardBtn = Instance.new("TextButton")
+        cardBtn.Size = UDim2.fromOffset(CARD_W, CARD_H); cardBtn.Position = UDim2.fromOffset(x, y)
+        cardBtn.BackgroundColor3 = C.card; cardBtn.AutoButtonColor = false; cardBtn.Text = ""
+        cardBtn.BorderSizePixel = 0; cardBtn.ClipsDescendants = true; cardBtn.ZIndex = 5; cardBtn.Parent = grid
+        Util.corner(cardBtn, 10)
+        cardBtn.MouseEnter:Connect(function() cardBtn.BackgroundColor3 = C.card2 end)
+        cardBtn.MouseLeave:Connect(function() cardBtn.BackgroundColor3 = C.card end)
+
+        local thumb = Instance.new("ImageLabel")
+        thumb.Size = UDim2.new(1, 0, 0, 100); thumb.BackgroundColor3 = Color3.fromRGB(20, 21, 24)
+        thumb.BorderSizePixel = 0; thumb.ScaleType = Enum.ScaleType.Crop; thumb.ZIndex = 5; thumb.Parent = cardBtn
+        loadImg(thumb, s.thumbnail)
+
+        local badge = Instance.new("TextLabel")
+        badge.Position = UDim2.fromOffset(8, 8); badge.Size = UDim2.fromOffset(#(s.site or "") * 7 + 16, 18)
+        badge.BackgroundColor3 = BLACK; badge.BackgroundTransparency = 0.35; badge.Text = s.site or ""
+        badge.Font = Theme.fonts.caption; badge.TextSize = 11; badge.TextColor3 = WHITE
+        badge.ZIndex = 6; badge.Parent = thumb
+        Util.corner(badge, 5)
+
+        -- corner tags (key system / verified)
+        local tx = 8
+        local function tag(text, col)
+            local p = Instance.new("TextLabel")
+            p.AnchorPoint = Vector2.new(1, 1); p.Position = UDim2.new(1, -tx, 1, -8)
+            p.Size = UDim2.fromOffset(#text * 7 + 12, 17); p.BackgroundColor3 = col
+            p.BackgroundTransparency = 0.15; p.Text = text; p.Font = Theme.fonts.caption
+            p.TextSize = 10; p.TextColor3 = WHITE; p.ZIndex = 6; p.Parent = thumb
+            Util.corner(p, 4); tx = tx + p.Size.X.Offset + 5
+        end
+        if s.keySystem then tag("KEY", Color3.fromRGB(200, 150, 40)) end
+        if s.verified then tag("VERIFIED", C.green) end
+
+        local ttl = Instance.new("TextLabel")
+        ttl.Position = UDim2.fromOffset(10, 106); ttl.Size = UDim2.new(1, -20, 0, 36)
+        ttl.BackgroundTransparency = 1; ttl.Text = s.title or "Untitled"; ttl.Font = Theme.fonts.title
+        ttl.TextSize = 13; ttl.TextColor3 = C.text; ttl.TextWrapped = true
+        ttl.TextXAlignment = Enum.TextXAlignment.Left; ttl.TextYAlignment = Enum.TextYAlignment.Top
+        ttl.ZIndex = 5; ttl.Parent = cardBtn
+
+        local sub = Instance.new("TextLabel")
+        sub.Position = UDim2.fromOffset(10, 156); sub.Size = UDim2.new(1, -20, 0, 16)
+        sub.BackgroundTransparency = 1
+        sub.Text = (s.game ~= "" and s.game or s.desc or "") .. "   " .. tostring(s.views or 0) .. " views"
+        sub.Font = Theme.fonts.caption; sub.TextSize = 11; sub.TextColor3 = C.muted
+        sub.TextXAlignment = Enum.TextXAlignment.Left; sub.TextTruncate = Enum.TextTruncate.AtEnd
+        sub.ZIndex = 5; sub.Parent = cardBtn
+
+        cardBtn.MouseButton1Click:Connect(function() showDetail(s) end)
+    end
+
+    local function renderCards(errored)
         for _, ch in ipairs(grid:GetChildren()) do if ch:IsA("TextButton") or ch:IsA("Frame") then ch:Destroy() end end
+        loadMoreBtn = nil
         status.Parent = grid
-        if not list then status.Text = "Couldn't reach the relay."; return end
-        if #list == 0 then status.Text = "No scripts found."; return end
+        if errored then status.Text = "Couldn't reach the relay."; return end
+        if #allResults == 0 then status.Text = "No scripts found."; return end
+
+        local list = {}
+        for _, s in ipairs(allResults) do if passFilter(s) then list[#list + 1] = s end end
+        if #list == 0 then status.Text = "Nothing matches this filter."; return end
         status.Parent = nil
 
         local gridW = grid.AbsoluteSize.X
@@ -390,66 +472,82 @@ function ScriptingApp.open()
         local cols = math.max(1, math.floor((gridW + PAD) / (CARD_W + PAD)))
         local col, row = 0, 0
         for _, s in ipairs(list) do
-            local x = col * (CARD_W + PAD)
-            local y = row * (CARD_H + PAD)
-            local cardBtn = Instance.new("TextButton")
-            cardBtn.Size = UDim2.fromOffset(CARD_W, CARD_H); cardBtn.Position = UDim2.fromOffset(x, y)
-            cardBtn.BackgroundColor3 = C.card; cardBtn.AutoButtonColor = false; cardBtn.Text = ""
-            cardBtn.BorderSizePixel = 0; cardBtn.ClipsDescendants = true; cardBtn.ZIndex = 5; cardBtn.Parent = grid
-            Util.corner(cardBtn, 10)
-            cardBtn.MouseEnter:Connect(function() cardBtn.BackgroundColor3 = C.card2 end)
-            cardBtn.MouseLeave:Connect(function() cardBtn.BackgroundColor3 = C.card end)
-
-            local thumb = Instance.new("ImageLabel")
-            thumb.Size = UDim2.new(1, 0, 0, 100); thumb.BackgroundColor3 = Color3.fromRGB(20, 21, 24)
-            thumb.BorderSizePixel = 0; thumb.ScaleType = Enum.ScaleType.Crop; thumb.ZIndex = 5; thumb.Parent = cardBtn
-            loadImg(thumb, s.thumbnail)
-
-            local badge = Instance.new("TextLabel")
-            badge.Position = UDim2.fromOffset(8, 8); badge.Size = UDim2.fromOffset(#(s.site or "") * 7 + 16, 18)
-            badge.BackgroundColor3 = BLACK
-            badge.BackgroundTransparency = 0.35; badge.Text = s.site or ""
-            badge.Font = Theme.fonts.caption; badge.TextSize = 11; badge.TextColor3 = WHITE
-            badge.ZIndex = 6; badge.Parent = thumb
-            Util.corner(badge, 5)
-
-            local ttl = Instance.new("TextLabel")
-            ttl.Position = UDim2.fromOffset(10, 106); ttl.Size = UDim2.new(1, -20, 0, 36)
-            ttl.BackgroundTransparency = 1; ttl.Text = s.title or "Untitled"; ttl.Font = Theme.fonts.body
-            ttl.TextSize = 13; ttl.TextColor3 = C.text; ttl.TextWrapped = true
-            ttl.TextXAlignment = Enum.TextXAlignment.Left; ttl.TextYAlignment = Enum.TextYAlignment.Top
-            ttl.ZIndex = 5; ttl.Parent = cardBtn
-
-            local sub = Instance.new("TextLabel")
-            sub.Position = UDim2.fromOffset(10, 150); sub.Size = UDim2.new(1, -20, 0, 16)
-            sub.BackgroundTransparency = 1
-            sub.Text = (s.game ~= "" and s.game or s.desc or "") .. "   " .. tostring(s.views or 0) .. " views"
-            sub.Font = Theme.fonts.caption; sub.TextSize = 11; sub.TextColor3 = C.muted
-            sub.TextXAlignment = Enum.TextXAlignment.Left; sub.TextTruncate = Enum.TextTruncate.AtEnd
-            sub.ZIndex = 5; sub.Parent = cardBtn
-
-            cardBtn.MouseButton1Click:Connect(function() showDetail(s) end)
-
+            makeCard(s, col * (CARD_W + PAD), row * (CARD_H + PAD))
             col = col + 1
             if col >= cols then col = 0; row = row + 1 end
         end
         local rows = row + (col > 0 and 1 or 0)
-        grid.CanvasSize = UDim2.fromOffset(0, rows * (CARD_H + PAD) + PAD)
+        local moreY = rows * (CARD_H + PAD)
+        loadMoreBtn = Instance.new("TextButton")
+        loadMoreBtn.Position = UDim2.fromOffset(0, moreY); loadMoreBtn.Size = UDim2.new(1, -8, 0, 40)
+        loadMoreBtn.BackgroundColor3 = C.card; loadMoreBtn.AutoButtonColor = false; loadMoreBtn.Text = "Load more"
+        loadMoreBtn.Font = Theme.fonts.title; loadMoreBtn.TextSize = 14; loadMoreBtn.TextColor3 = C.text
+        loadMoreBtn.ZIndex = 5; loadMoreBtn.Parent = grid
+        Util.corner(loadMoreBtn, 8)
+        loadMoreBtn.MouseButton1Click:Connect(function() if loadMore then loadMore() end end)
+        grid.CanvasSize = UDim2.fromOffset(0, moreY + 52)
     end
 
-    local currentSite = nil   -- nil = All
     local function load(q)
-        status.Parent = grid; status.Text = "Loading..."
+        curQuery = q; curPage = 1; allResults = {}
         for _, ch in ipairs(grid:GetChildren()) do if ch:IsA("TextButton") or ch:IsA("Frame") then ch:Destroy() end end
-        status.Parent = grid
+        status.Parent = grid; status.Text = "Loading..."
         task.spawn(function()
-            local list = getScripts(q, currentSite)
-            if alive then renderCards(list) end
+            local list = getScripts(q, currentSite, 1)
+            if not alive then return end
+            allResults = list or {}
+            renderCards(list == nil)
+        end)
+    end
+
+    loadMore = function()
+        if loadingMore then return end
+        loadingMore = true
+        if loadMoreBtn then loadMoreBtn.Text = "Loading..." end
+        curPage = curPage + 1
+        task.spawn(function()
+            local more = getScripts(curQuery, currentSite, curPage)
+            loadingMore = false
+            if not alive then return end
+            if more and #more > 0 then
+                local seen = {}
+                for _, s in ipairs(allResults) do seen[s.url or s.title] = true end
+                local added = 0
+                for _, s in ipairs(more) do
+                    if not seen[s.url or s.title] then allResults[#allResults + 1] = s; added = added + 1 end
+                end
+                if added > 0 then renderCards() elseif loadMoreBtn then loadMoreBtn.Text = "No more results" end
+            elseif loadMoreBtn then loadMoreBtn.Text = "No more results" end
         end)
     end
 
     searchBtn.MouseButton1Click:Connect(function() load(search.Text) end)
     search.FocusLost:Connect(function(enter) if enter then load(search.Text) end end)
+
+    -- filter chips
+    local filterChips = {}
+    local function setFilter(mode)
+        filterMode = mode
+        for _, fc in ipairs(filterChips) do
+            local on = fc.mode == mode
+            fc.bg.BackgroundColor3 = on and C.accent or C.card
+            fc.lbl.TextColor3 = on and WHITE or C.muted
+        end
+        renderCards()
+    end
+    for _, f in ipairs({ { "all", "All" }, { "verified", "Verified" }, { "key", "Key System" }, { "nokey", "No Key" } }) do
+        local w = #f[2] * 7 + 22
+        local bg = Instance.new("TextButton")
+        bg.Size = UDim2.fromOffset(w, 24); bg.BackgroundColor3 = C.card; bg.AutoButtonColor = false
+        bg.Text = ""; bg.BorderSizePixel = 0; bg.ZIndex = 5; bg.Parent = filterRow
+        Util.corner(bg, 12)
+        local lbl = Instance.new("TextLabel")
+        lbl.Size = UDim2.fromScale(1, 1); lbl.BackgroundTransparency = 1; lbl.Text = f[2]
+        lbl.Font = Theme.fonts.caption; lbl.TextSize = 12; lbl.TextColor3 = C.muted; lbl.ZIndex = 6; lbl.Parent = bg
+        bg.MouseButton1Click:Connect(function() setFilter(f[1]) end)
+        filterChips[#filterChips + 1] = { mode = f[1], bg = bg, lbl = lbl }
+    end
+    setFilter("all")
 
     -- build the tab bar (All + each enabled site's domain)
     local tabButtons = {}
