@@ -850,6 +850,8 @@ SYNC.define("os/Boot", function()
 -- pre-rendered PNGs served from the repo (rainbow bloom ring with a smoked-glass
 -- interior, porthole-clipped mono character, radial halo, star sparkles) because
 -- baked images render reliably everywhere, unlike stroke gradients / font glyphs.
+-- Open/close are fully choreographed: staggered rises in, reverse slide-out, and
+-- a crossfade handoff (next screen builds under the black veil while it lifts).
 -- Layout scales with the viewport. Boot.run(onDone) plays, fades out, calls onDone().
 
 local RunService = game:GetService("RunService")
@@ -897,33 +899,50 @@ function Boot.run(onDone)
     screen.BorderSizePixel = 0
     screen.BackgroundTransparency = 1
     screen.Parent = gui
-    Util.tween(screen, { BackgroundTransparency = 0 }, 0.4)
+    Util.tween(screen, { BackgroundTransparency = 0 }, 0.55, Enum.EasingStyle.Sine)
 
-    local alive = true
-    local fadeOuts = {} -- inst -> tween props for the exit
+    local alive   = true  -- kills RenderStepped loops on destroy
+    local closing = false -- stops decorative loops from fighting the exit tweens
 
     -- -----------------------------------------------------------------------
-    -- Corner brackets
+    -- Corner brackets: slide out of the corners on open, retract on close.
     -- -----------------------------------------------------------------------
-    local inset, blen = px(34), px(30)
-    for _, c in ipairs({ {0,0}, {1,0}, {0,1}, {1,1} }) do
+    local bracketBars = {} -- { inst, finalPos, retractPos }
+    for ci, c in ipairs({ {0,0}, {1,0}, {0,1}, {1,1} }) do
         local ax, ay = c[1], c[2]
+        local inset, blen = px(34), px(30)
+        local ox = ax == 0 and inset or -inset
+        local oy = ay == 0 and inset or -inset
+        -- retracted = pushed 16px deeper into the corner
+        local rx = ax == 0 and inset - px(16) or -(inset - px(16))
+        local ry = ay == 0 and inset - px(16) or -(inset - px(16))
         for _, bar in ipairs({ { blen, 2 }, { 2, blen } }) do
             local f = Instance.new("Frame")
             f.Size = UDim2.fromOffset(bar[1], bar[2])
             f.AnchorPoint = Vector2.new(ax, ay)
-            f.Position = UDim2.new(ax, ax == 0 and inset or -inset, ay, ay == 0 and inset or -inset)
+            f.Position = UDim2.new(ax, rx, ay, ry) -- start retracted
             f.BackgroundColor3 = WHITE
-            f.BackgroundTransparency = 0.45
+            f.BackgroundTransparency = 1
             f.BorderSizePixel = 0
             f.Parent = screen
-            fadeOuts[f] = { BackgroundTransparency = 1 }
+            bracketBars[#bracketBars + 1] = {
+                inst = f,
+                finalPos = UDim2.new(ax, ox, ay, oy),
+                retractPos = UDim2.new(ax, rx, ay, ry),
+            }
+            task.delay(0.15 + ci * 0.05, function()
+                if alive and not closing then
+                    Util.tween(f, { Position = UDim2.new(ax, ox, ay, oy), BackgroundTransparency = 0.45 },
+                        0.6, Enum.EasingStyle.Quint, Enum.EasingDirection.Out)
+                end
+            end)
         end
     end
 
     -- -----------------------------------------------------------------------
     -- Right stage: halo -> rainbow ring (rotating) -> porthole character.
-    -- The stage frame carries the idle float bob and the exit zoom.
+    -- The stage frame carries the idle float bob, an entrance settle and the
+    -- exit zoom.
     -- -----------------------------------------------------------------------
     local stage = Instance.new("Frame")
     stage.Size = UDim2.fromOffset(px(760), px(760))
@@ -932,9 +951,12 @@ function Boot.run(onDone)
     stage.BackgroundTransparency = 1
     stage.Parent = screen
     local stageScale = Instance.new("UIScale")
+    stageScale.Scale = 0.94
     stageScale.Parent = stage
+    Util.tween(stageScale, { Scale = 1 }, 1.3, Enum.EasingStyle.Quint, Enum.EasingDirection.Out)
 
-    local ringLabel -- set when loaded; rotated every frame
+    local ringLabel, haloLabel, charLabel -- filled in as assets load
+    local stars = {}
 
     local function addImage(id, size, z, yOff)
         local img = Instance.new("ImageLabel")
@@ -947,21 +969,20 @@ function Boot.run(onDone)
         img.ImageTransparency = 1
         img.ZIndex = z
         img.Parent = stage
-        fadeOuts[img] = { ImageTransparency = 1 }
         return img
     end
 
     task.spawn(function()
         local haloId = Util.remoteImage(ASSETS.halo.url, ASSETS.halo.file)
-        if haloId and alive then
-            local halo = addImage(haloId, px(760), 1)
-            Util.tween(halo, { ImageTransparency = 0 }, 1.2, Enum.EasingStyle.Sine)
+        if haloId and alive and not closing then
+            haloLabel = addImage(haloId, px(760), 1)
+            Util.tween(haloLabel, { ImageTransparency = 0 }, 1.2, Enum.EasingStyle.Sine)
         end
     end)
 
     task.spawn(function()
         local ringId = Util.remoteImage(ASSETS.ring.url, ASSETS.ring.file)
-        if ringId and alive then
+        if ringId and alive and not closing then
             ringLabel = addImage(ringId, px(640), 2)
             local sc = Instance.new("UIScale")
             sc.Scale = 0.92
@@ -973,7 +994,7 @@ function Boot.run(onDone)
 
     task.spawn(function()
         local charId = Util.remoteImage(ASSETS.char.url, ASSETS.char.file)
-        if not (charId and alive) then return end
+        if not (charId and alive) or closing then return end
         local ch = px(520)
         local cw = math.floor(ch * CHAR_ASPECT + 0.5)
 
@@ -997,22 +1018,21 @@ function Boot.run(onDone)
             ghosts[#ghosts + 1] = { inst = gh, dir = g.dir }
         end
 
-        local char = Instance.new("ImageLabel")
-        char.Size = UDim2.fromOffset(cw, ch)
-        char.Position = UDim2.new(0.5, 0, 0.5, -px(10))
-        char.AnchorPoint = Vector2.new(0.5, 0.5)
-        char.BackgroundTransparency = 1
-        char.Image = charId
-        char.ScaleType = Enum.ScaleType.Fit
-        char.ImageTransparency = 1
-        char.ZIndex = 4
-        char.Parent = stage
-        fadeOuts[char] = { ImageTransparency = 1 }
-        Util.tween(char, { ImageTransparency = 0 }, 0.55, Enum.EasingStyle.Sine)
+        charLabel = Instance.new("ImageLabel")
+        charLabel.Size = UDim2.fromOffset(cw, ch)
+        charLabel.Position = UDim2.new(0.5, 0, 0.5, -px(10))
+        charLabel.AnchorPoint = Vector2.new(0.5, 0.5)
+        charLabel.BackgroundTransparency = 1
+        charLabel.Image = charId
+        charLabel.ScaleType = Enum.ScaleType.Fit
+        charLabel.ImageTransparency = 1
+        charLabel.ZIndex = 4
+        charLabel.Parent = stage
+        Util.tween(charLabel, { ImageTransparency = 0 }, 0.55, Enum.EasingStyle.Sine)
 
         -- jitter ~0.5s, then snap together and vanish
         for _ = 1, 9 do
-            if not alive then break end
+            if not alive or closing then break end
             for _, g in ipairs(ghosts) do
                 g.inst.Position = UDim2.new(
                     0.5, g.dir * math.random(px(3), px(10)),
@@ -1029,7 +1049,8 @@ function Boot.run(onDone)
         end
     end)
 
-    -- ring rotation + stage float bob
+    -- ring rotation + stage float bob (runs through the exit too; the bob makes
+    -- the fade-out feel alive rather than frozen)
     task.spawn(function()
         local t = 0
         while alive do
@@ -1042,6 +1063,7 @@ function Boot.run(onDone)
 
     -- -----------------------------------------------------------------------
     -- Left block: kicker (typed on), gradient SYNC, tagline, progress row.
+    -- Each element rises ~16px while fading in, staggered top to bottom.
     -- -----------------------------------------------------------------------
     local block = Instance.new("Frame")
     block.Size = UDim2.fromOffset(px(700), px(300))
@@ -1053,7 +1075,7 @@ function Boot.run(onDone)
     local function textLabel(y, h, size, font, color)
         local l = Instance.new("TextLabel")
         l.Size = UDim2.new(1, 0, 0, px(h))
-        l.Position = UDim2.fromOffset(0, px(y))
+        l.Position = UDim2.fromOffset(0, px(y) + px(16)) -- start low, rise in
         l.BackgroundTransparency = 1
         l.Font = font
         l.TextSize = px(size)
@@ -1061,66 +1083,68 @@ function Boot.run(onDone)
         l.TextXAlignment = Enum.TextXAlignment.Left
         l.TextTransparency = 1
         l.Parent = block
-        fadeOuts[l] = { TextTransparency = 1 }
-        return l
+        return l, UDim2.fromOffset(0, px(y))
     end
 
-    local kicker = textLabel(0, 24, 20, Theme.fonts.caption, WHITE)
+    local function riseIn(label, finalPos, delay, dur)
+        task.delay(delay, function()
+            if alive and not closing then
+                Util.tween(label, { Position = finalPos, TextTransparency = 0 },
+                    dur or 0.6, Enum.EasingStyle.Quint, Enum.EasingDirection.Out)
+            end
+        end)
+    end
+
+    local kicker, kickerPos = textLabel(0, 24, 20, Theme.fonts.caption, WHITE)
     kicker.Text = ""
 
-    local title = textLabel(26, 160, 150, Theme.fonts.title, Color3.fromRGB(255, 255, 255))
+    local title, titlePos = textLabel(26, 160, 150, Theme.fonts.title, Color3.fromRGB(255, 255, 255))
     title.Text = "SYNC"
     local titleGrad = Instance.new("UIGradient")
     titleGrad.Color = GOOGLE
     titleGrad.Parent = title
 
-    local tagline = textLabel(196, 26, 24, Theme.fonts.body, Theme.c.textSecondary)
+    local tagline, taglinePos = textLabel(196, 26, 24, Theme.fonts.body, Theme.c.textSecondary)
     tagline.Text = "your desktop, reimagined"
 
-    -- staggered entrances
-    task.delay(0.25, function()
-        if not alive then return end
-        -- type the kicker on, letter by letter
-        Util.tween(kicker, { TextTransparency = 0 }, 0.2)
+    riseIn(kicker, kickerPos, 0.25, 0.5)
+    task.delay(0.3, function()
+        -- type the kicker on, letter by letter, while it rises
         local spaced = "W E L C O M E   T O"
         for i = 1, #spaced do
-            if not alive then return end
+            if not alive or closing then return end
             kicker.Text = string.sub(spaced, 1, i)
             task.wait(0.022)
         end
     end)
-    task.delay(0.45, function()
-        if not alive then return end
-        Util.tween(title, { TextTransparency = 0 }, 0.7, Enum.EasingStyle.Sine)
+
+    riseIn(title, titlePos, 0.45, 0.7)
+    task.delay(0.5, function()
         -- shine sweep on the wordmark
-        task.spawn(function()
-            while alive and title.Parent do
-                Util.tween(titleGrad, { Offset = Vector2.new(0.25, 0) }, 1.6,
-                    Enum.EasingStyle.Sine, Enum.EasingDirection.InOut)
-                task.wait(1.65)
-                if not (alive and title.Parent) then break end
-                Util.tween(titleGrad, { Offset = Vector2.new(-0.25, 0) }, 1.6,
-                    Enum.EasingStyle.Sine, Enum.EasingDirection.InOut)
-                task.wait(1.65)
-            end
-        end)
+        while alive and not closing and title.Parent do
+            Util.tween(titleGrad, { Offset = Vector2.new(0.25, 0) }, 1.6,
+                Enum.EasingStyle.Sine, Enum.EasingDirection.InOut)
+            task.wait(1.65)
+            if not alive or closing or not title.Parent then break end
+            Util.tween(titleGrad, { Offset = Vector2.new(-0.25, 0) }, 1.6,
+                Enum.EasingStyle.Sine, Enum.EasingDirection.InOut)
+            task.wait(1.65)
+        end
     end)
-    task.delay(0.65, function()
-        if alive then Util.tween(tagline, { TextTransparency = 0 }, 0.6, Enum.EasingStyle.Sine) end
-    end)
+
+    riseIn(tagline, taglinePos, 0.62, 0.6)
 
     -- progress row: reveal-style fill so the gradient is unveiled, not squished
     local trackW, trackH = px(420), math.max(px(5), 3)
+    local trackY = px(256)
     local track = Instance.new("Frame")
     track.Size = UDim2.fromOffset(trackW, trackH)
-    track.Position = UDim2.fromOffset(0, px(256))
+    track.Position = UDim2.fromOffset(0, trackY + px(14)) -- rises in with the row
     track.BackgroundColor3 = Color3.fromRGB(58, 58, 62)
     track.BackgroundTransparency = 1
     track.BorderSizePixel = 0
     track.Parent = block
     Util.corner(track, trackH)
-    Util.tween(track, { BackgroundTransparency = 0.35 }, 0.5)
-    fadeOuts[track] = { BackgroundTransparency = 1 }
 
     local reveal = Instance.new("Frame")
     reveal.Size = UDim2.new(0, 0, 1, 0)
@@ -1142,7 +1166,7 @@ function Boot.run(onDone)
 
     local pct = Instance.new("TextLabel")
     pct.Size = UDim2.fromOffset(px(70), px(20))
-    pct.Position = UDim2.fromOffset(trackW + px(16), px(256) - px(8))
+    pct.Position = UDim2.fromOffset(trackW + px(16), trackY - px(8) + px(14))
     pct.BackgroundTransparency = 1
     pct.Font = Enum.Font.Code
     pct.TextSize = px(15)
@@ -1151,12 +1175,10 @@ function Boot.run(onDone)
     pct.Text = "0%"
     pct.TextTransparency = 1
     pct.Parent = block
-    Util.tween(pct, { TextTransparency = 0 }, 0.5)
-    fadeOuts[pct] = { TextTransparency = 1 }
 
     local bootlog = Instance.new("TextLabel")
     bootlog.Size = UDim2.new(1, 0, 0, px(18))
-    bootlog.Position = UDim2.fromOffset(0, px(276))
+    bootlog.Position = UDim2.fromOffset(0, px(276) + px(14))
     bootlog.BackgroundTransparency = 1
     bootlog.Font = Enum.Font.Code
     bootlog.TextSize = px(14)
@@ -1165,8 +1187,17 @@ function Boot.run(onDone)
     bootlog.Text = ""
     bootlog.TextTransparency = 1
     bootlog.Parent = block
-    Util.tween(bootlog, { TextTransparency = 0 }, 0.5)
-    fadeOuts[bootlog] = { TextTransparency = 1 }
+
+    -- the whole progress row rises in together, after the tagline
+    task.delay(0.8, function()
+        if not alive or closing then return end
+        Util.tween(track, { Position = UDim2.fromOffset(0, trackY), BackgroundTransparency = 0.35 },
+            0.6, Enum.EasingStyle.Quint, Enum.EasingDirection.Out)
+        Util.tween(pct, { Position = UDim2.fromOffset(trackW + px(16), trackY - px(8)), TextTransparency = 0 },
+            0.6, Enum.EasingStyle.Quint, Enum.EasingDirection.Out)
+        Util.tween(bootlog, { Position = UDim2.fromOffset(0, px(276)), TextTransparency = 0 },
+            0.6, Enum.EasingStyle.Quint, Enum.EasingDirection.Out)
+    end)
 
     -- live percent readout from the reveal width
     task.spawn(function()
@@ -1182,7 +1213,7 @@ function Boot.run(onDone)
     -- -----------------------------------------------------------------------
     task.spawn(function()
         local starId = Util.remoteImage(ASSETS.star.url, ASSETS.star.file)
-        if not (starId and alive) then return end
+        if not (starId and alive) or closing then return end
         local spots = {
             { 0.545, 0.27, 34 }, { 0.80, 0.22, 24 }, { 0.585, 0.72, 26 },
             { 0.79, 0.76, 40 }, { 0.51, 0.50, 18 }, { 0.735, 0.135, 20 },
@@ -1196,12 +1227,12 @@ function Boot.run(onDone)
             star.Image = starId
             star.ImageTransparency = 1
             star.Parent = screen
-            fadeOuts[star] = { ImageTransparency = 1 }
+            stars[#stars + 1] = star
             task.delay(0.3 + i * 0.14, function()
-                while alive and star.Parent do
+                while alive and not closing and star.Parent do
                     Util.tween(star, { ImageTransparency = 0.1, Rotation = 12 }, 0.7, Enum.EasingStyle.Sine)
                     task.wait(0.75)
-                    if not (alive and star.Parent) then break end
+                    if not alive or closing or not star.Parent then break end
                     Util.tween(star, { ImageTransparency = 0.85, Rotation = -12 }, 0.95, Enum.EasingStyle.Sine)
                     task.wait(1.0)
                 end
@@ -1210,9 +1241,10 @@ function Boot.run(onDone)
     end)
 
     -- -----------------------------------------------------------------------
-    -- Boot cadence -> exit
+    -- Boot cadence -> choreographed exit (reverse of the entrance) -> crossfade
     -- -----------------------------------------------------------------------
     task.spawn(function()
+        task.wait(0.85) -- let the progress row land before it starts filling
         local steps = {
             { p = 0.24, t = 0.60, hold = 0.22, log = "> mounting dock…" },
             { p = 0.47, t = 0.70, hold = 0.30, log = "> loading apps…" },
@@ -1226,18 +1258,62 @@ function Boot.run(onDone)
                 Enum.EasingStyle.Sine, Enum.EasingDirection.InOut)
             task.wait(s.t + s.hold)
         end
-        task.wait(0.45)
+        task.wait(0.5)
 
-        -- cinematic release: slight zoom on the stage while everything fades
-        Util.tween(stageScale, { Scale = 1.06 }, 0.7, Enum.EasingStyle.Sine)
-        for inst, props in pairs(fadeOuts) do
-            if inst and inst.Parent then Util.tween(inst, props, 0.5) end
+        -- ---- exit choreography ----
+        closing = true
+        local IN = Enum.EasingDirection.In
+
+        -- 1. progress row drops away
+        Util.tween(track, { Position = UDim2.fromOffset(0, trackY + px(10)), BackgroundTransparency = 1 },
+            0.35, Enum.EasingStyle.Quad, IN)
+        Util.tween(pct, { Position = UDim2.fromOffset(trackW + px(16), trackY + px(2)), TextTransparency = 1 },
+            0.35, Enum.EasingStyle.Quad, IN)
+        Util.tween(bootlog, { Position = UDim2.fromOffset(0, px(286)), TextTransparency = 1 },
+            0.35, Enum.EasingStyle.Quad, IN)
+        task.wait(0.07)
+
+        -- 2. texts slide out left, bottom-up (reverse of the entrance)
+        Util.tween(tagline, { Position = taglinePos - UDim2.fromOffset(px(20), 0), TextTransparency = 1 },
+            0.35, Enum.EasingStyle.Quad, IN)
+        task.wait(0.07)
+        Util.tween(title, { Position = titlePos - UDim2.fromOffset(px(24), 0), TextTransparency = 1 },
+            0.4, Enum.EasingStyle.Quad, IN)
+        task.wait(0.07)
+        Util.tween(kicker, { Position = kickerPos - UDim2.fromOffset(px(16), 0), TextTransparency = 1 },
+            0.35, Enum.EasingStyle.Quad, IN)
+
+        -- 3. stage release: char drifts down and out first, ring follows, halo
+        --    lingers longest so the glow is the last thing to leave
+        Util.tween(stageScale, { Scale = 1.07 }, 0.9, Enum.EasingStyle.Sine)
+        if charLabel then
+            Util.tween(charLabel, {
+                Position = UDim2.new(0.5, 0, 0.5, px(4)),
+                ImageTransparency = 1,
+            }, 0.55, Enum.EasingStyle.Quad, IN)
         end
-        Util.tween(screen, { BackgroundTransparency = 1 }, 0.65)
-        task.wait(0.75)
+        if ringLabel then Util.tween(ringLabel, { ImageTransparency = 1 }, 0.65, Enum.EasingStyle.Sine) end
+        if haloLabel then Util.tween(haloLabel, { ImageTransparency = 1 }, 0.9, Enum.EasingStyle.Sine) end
+        for _, star in ipairs(stars) do
+            if star.Parent then Util.tween(star, { ImageTransparency = 1 }, 0.3) end
+        end
+
+        -- 4. brackets retract into the corners
+        for _, b in ipairs(bracketBars) do
+            Util.tween(b.inst, { Position = b.retractPos, BackgroundTransparency = 1 },
+                0.4, Enum.EasingStyle.Quad, IN)
+        end
+
+        -- 5. crossfade handoff: raise the veil above everything, start the next
+        --    screen beneath it, then lift the black
+        task.wait(0.3)
+        gui.DisplayOrder = 1000000
+        if onDone then task.spawn(onDone) end
+        Util.tween(screen, { BackgroundTransparency = 1 }, 0.85,
+            Enum.EasingStyle.Sine, Enum.EasingDirection.InOut)
+        task.wait(0.95)
         alive = false
         gui:Destroy()
-        if onDone then onDone() end
     end)
 
     return gui
