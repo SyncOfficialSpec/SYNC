@@ -51,6 +51,23 @@ function Slider.create(parent, initial, onChange)
     Util.stroke(knob, Color3.fromRGB(0, 0, 0), 1, 0.86)
     Util.shadow(knob, { blur = 8, transparency = 0.55, offset = UDim2.fromOffset(0, 1) })
 
+    -- Value bubble above the knob, shown while dragging
+    local bubble = Instance.new("TextLabel")
+    bubble.Text = "0%"
+    bubble.Font = Enum.Font.GothamBold
+    bubble.TextSize = 11
+    bubble.TextColor3 = WHITE
+    bubble.TextTransparency = 1
+    bubble.BackgroundColor3 = Color3.fromRGB(20, 21, 24)
+    bubble.BackgroundTransparency = 1
+    bubble.AnchorPoint = Vector2.new(0.5, 1)
+    bubble.Position = UDim2.new(value, 0, 0.5, -16)
+    bubble.Size = UDim2.fromOffset(38, 18)
+    bubble.ZIndex = baseZ + 3
+    bubble.Parent = track
+    Util.corner(bubble, 6)
+    local bubbleStroke = Util.stroke(bubble, WHITE, 1, 1)
+
     -- Transparent hit area for press + drag
     local hit = Instance.new("TextButton")
     hit.Text = ""
@@ -65,6 +82,8 @@ function Slider.create(parent, initial, onChange)
     local function apply()
         fill.Size = UDim2.new(value, 0, 1, 0)
         knob.Position = UDim2.new(value, 0, 0.5, 0)
+        bubble.Position = UDim2.new(value, 0, 0.5, -16)
+        bubble.Text = math.floor(value * 100 + 0.5) .. "%"
     end
 
     local function setFromX(px)
@@ -77,8 +96,13 @@ function Slider.create(parent, initial, onChange)
 
     local dragging = false
     local conns = {}
+    local function showBubble(on)
+        Util.tween(bubble, { TextTransparency = on and 0 or 1, BackgroundTransparency = on and 0.05 or 1 }, 0.12)
+        Util.tween(bubbleStroke, { Transparency = on and 0.85 or 1 }, 0.12)
+    end
     hit.MouseButton1Down:Connect(function()
         dragging = true
+        showBubble(true)
         setFromX(UserInputService:GetMouseLocation().X)
     end)
     conns[#conns + 1] = UserInputService.InputChanged:Connect(function(input)
@@ -90,6 +114,7 @@ function Slider.create(parent, initial, onChange)
     conns[#conns + 1] = UserInputService.InputEnded:Connect(function(input)
         if input.UserInputType == Enum.UserInputType.MouseButton1
             or input.UserInputType == Enum.UserInputType.Touch then
+            if dragging then showBubble(false) end
             dragging = false
         end
     end)
