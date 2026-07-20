@@ -6,10 +6,7 @@ local Util     = SYNC.import("core/Util")
 local Dock     = SYNC.import("os/Dock")
 local Settings = SYNC.import("os/Settings")
 local MenuBar  = SYNC.import("os/MenuBar")
-local Browser  = SYNC.import("os/Browser")
-local Cursor   = SYNC.import("apps/Cursor")
-local Discord  = SYNC.import("apps/Discord")
-local Scripting = SYNC.import("apps/Scripting")
+local Home     = SYNC.import("apps/Home")
 
 local Desktop = {}
 
@@ -24,8 +21,8 @@ function Desktop.start()
 
     local dock
     dock = Dock.create(gui, function(appName)
-        if appName == "Sense Browser" then
-            Browser.open()
+        if appName == "Home" then
+            Home.open()
         elseif appName == "Settings" then
             Settings.open({
                 position = dock.getPosition(),
@@ -49,16 +46,8 @@ function Desktop.start()
                     Util.save("DockSizeFrac", tostring(f))
                 end,
             })
-        elseif appName == "Cursor" then
-            Cursor.open()
-        elseif appName == "Syncord" then
-            Discord.open()
-        elseif appName == "Scripting" then
-            Scripting.open()
         end
     end)
-
-    Cursor.restore()
 
     return {
         gui = gui,

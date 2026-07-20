@@ -27,22 +27,8 @@ local REVEAL_PX    = 4
 local TOP_INSET    = 30   -- leave room for the menu bar (vertical docks)
 
 local APPS = {
-    { name = "Finder",    icon = "folder",         top = Color3.fromRGB(70, 170, 255),  bot = Color3.fromRGB(20, 110, 230) },
-    { name = "Sense Browser", icon = "orbit",      top = Color3.fromRGB(90, 200, 255),  bot = Color3.fromRGB(20, 120, 235) },
-    { name = "Messages",  icon = "message-circle", top = Color3.fromRGB(90, 220, 110),  bot = Color3.fromRGB(40, 180, 70) },
-    { name = "Mail",      icon = "mail",           top = Color3.fromRGB(80, 180, 255),  bot = Color3.fromRGB(30, 120, 240) },
-    { name = "Maps",      icon = "map",            top = Color3.fromRGB(120, 215, 130), bot = Color3.fromRGB(70, 175, 90) },
-    { name = "Photos",    icon = "image",          top = Color3.fromRGB(255, 120, 160), bot = Color3.fromRGB(255, 175, 70) },
-    { name = "Music",     icon = "music",          top = Color3.fromRGB(255, 110, 130), bot = Color3.fromRGB(230, 40, 90) },
-    { name = "Calendar",  icon = "calendar",       top = Color3.fromRGB(255, 255, 255), bot = Color3.fromRGB(235, 235, 240), dark = true },
-    { name = "Notes",     icon = "file-text",      top = Color3.fromRGB(255, 225, 120), bot = Color3.fromRGB(245, 195, 60), dark = true },
-    { name = "Terminal",  icon = "terminal",       top = Color3.fromRGB(70, 72, 78),    bot = Color3.fromRGB(30, 32, 36) },
-    { name = "Cursor",    icon = "compass",         top = Color3.fromRGB(200, 140, 255), bot = Color3.fromRGB(130, 70, 210) },
-    { name = "Syncord",   icon = "message-circle",  top = Color3.fromRGB(120, 134, 255), bot = Color3.fromRGB(76, 90, 235) },
-    { name = "Scripting", icon = "terminal",            top = Color3.fromRGB(120, 200, 140), bot = Color3.fromRGB(50, 160, 110) },
+    { name = "Home",      icon = "app-window",     top = Color3.fromRGB(96, 170, 255),  bot = Color3.fromRGB(28, 110, 230) },
     { name = "Settings",  icon = "settings",       top = Color3.fromRGB(150, 152, 158), bot = Color3.fromRGB(90, 92, 98) },
-    { name = "Test",      icon = "gamepad-2",      top = Color3.fromRGB(180, 130, 255), bot = Color3.fromRGB(120, 70, 230) },
-    { name = "Test 2",    icon = "sparkles",       top = Color3.fromRGB(120, 200, 255), bot = Color3.fromRGB(160, 130, 255) },
 }
 
 local function buildIcon(parent, app)
