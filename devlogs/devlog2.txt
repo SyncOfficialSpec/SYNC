@@ -24,5 +24,6 @@ Improvements:
 Hovering a banner makes it grow smoothly with a soft shine sweeping across the art, and it never covers the cards next to it.
 Cards fade and settle in one after another when the grid loads.
 Executing a script pulses the card green on success and red on failure, with the result written in the status line.
+Broken scripts no longer fail silently. A lot of uploads out there point at dead links, and when one crashes the status line turns red with the actual error so you always know whether a script really ran.
 The last loaded list is remembered, so reopening the app paints instantly instead of showing a loading screen.
 The scrollbar is hidden for a cleaner look.
