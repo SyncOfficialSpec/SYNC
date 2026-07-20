@@ -267,9 +267,48 @@ function Scripts.open()
     status.TextXAlignment = Enum.TextXAlignment.Left
     status.BackgroundTransparency = 1
     status.Position = UDim2.fromOffset(PAD + 6, TB + 140)
-    status.Size = UDim2.new(1, -PAD * 2, 0, 16)
+    status.Size = UDim2.new(1, -PAD * 2 - 110, 0, 16)
     status.ZIndex = 3
     status.Parent = win
+
+    -- Sort chip (cycles Recent / Popular / Top rated), right of the status row
+    local sortChip = Instance.new("TextButton")
+    sortChip.AutoButtonColor = false
+    sortChip.Text = ""
+    sortChip.AnchorPoint = Vector2.new(1, 0.5)
+    sortChip.Position = UDim2.new(1, -PAD, 0, TB + 148)
+    sortChip.Size = UDim2.fromOffset(104, 24)
+    sortChip.BackgroundColor3 = FIELD
+    sortChip.BackgroundTransparency = 0.15
+    sortChip.ZIndex = 4
+    sortChip.Parent = win
+    Util.corner(sortChip, 8)
+    Util.stroke(sortChip, WHITE, 1, 0.9)
+    local sortIconImg = Instance.new("ImageLabel")
+    sortIconImg.Size = UDim2.fromOffset(13, 13)
+    sortIconImg.AnchorPoint = Vector2.new(0, 0.5)
+    sortIconImg.Position = UDim2.new(0, 9, 0.5, 0)
+    sortIconImg.BackgroundTransparency = 1
+    sortIconImg.ZIndex = 5
+    sortIconImg.Parent = sortChip
+    Icons.apply(sortIconImg, "sliders-horizontal", SUB)
+    local sortChipLabel = Instance.new("TextLabel")
+    sortChipLabel.Text = "Recent"
+    sortChipLabel.Font = BODY_BOLD
+    sortChipLabel.TextSize = 12
+    sortChipLabel.TextColor3 = Color3.fromRGB(210, 210, 216)
+    sortChipLabel.TextXAlignment = Enum.TextXAlignment.Left
+    sortChipLabel.BackgroundTransparency = 1
+    sortChipLabel.Position = UDim2.fromOffset(28, 0)
+    sortChipLabel.Size = UDim2.new(1, -32, 1, 0)
+    sortChipLabel.ZIndex = 5
+    sortChipLabel.Parent = sortChip
+    sortChip.MouseEnter:Connect(function()
+        Util.tween(sortChip, { BackgroundTransparency = 0 }, 0.12)
+    end)
+    sortChip.MouseLeave:Connect(function()
+        Util.tween(sortChip, { BackgroundTransparency = 0.15 }, 0.12)
+    end)
 
     -- Grid
     local gridY = TB + 164
@@ -345,11 +384,20 @@ function Scripts.open()
     local loadingMore = false
     local itemCount = 0
 
+    -- Sort modes cycled by the sort chip
+    local SORTS = {
+        { key = "date",  label = "Recent",    heading = "Recent uploads" },
+        { key = "views", label = "Popular",   heading = "Most viewed" },
+        { key = "likes", label = "Top rated", heading = "Top rated" },
+    }
+    local sortIdx = 1
+    local function curSort() return SORTS[sortIdx] end
+
     local function statusDefault()
         if curQuery and curQuery ~= "" then
             return "Results for \"" .. curQuery .. "\" · Powered by RScripts.io"
         end
-        return "Recent uploads · Powered by RScripts.io"
+        return curSort().heading .. " · Powered by RScripts.io"
     end
 
     local function buildCard(s, index)
@@ -654,7 +702,7 @@ function Scripts.open()
     end
 
     local function requestPage(q, page)
-        local url = API .. "/scripts?page=" .. page .. "&orderBy=date&sort=desc"
+        local url = API .. "/scripts?page=" .. page .. "&orderBy=" .. curSort().key .. "&sort=desc"
         if q and q ~= "" then url = url .. "&q=" .. HttpService:UrlEncode(q) end
         local body = Util.httpGet(url)
         if not body then return nil end
@@ -686,7 +734,8 @@ function Scripts.open()
             maxPages = (data.info and tonumber(data.info.maxPages)) or 1
             renderList(data.scripts, false)
             status.Text = statusDefault()
-            if not curQuery then
+            -- only the default view (recent, no query) seeds the reopen cache
+            if not curQuery and curSort().key == "date" then
                 Scripts._cache = data.scripts
             end
         end)
@@ -739,6 +788,14 @@ function Scripts.open()
         searchBox.Text = ""
         searchVersion += 1
         fetchScripts(nil)
+    end)
+
+    -- Sort chip cycles the order and refetches the current query
+    sortChip.MouseButton1Click:Connect(function()
+        sortIdx = sortIdx % #SORTS + 1
+        sortChipLabel.Text = curSort().label
+        searchVersion += 1
+        fetchScripts(curQuery)
     end)
 
     -- Cached list paints instantly on reopen, then refreshes in the background
