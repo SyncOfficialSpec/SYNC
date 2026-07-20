@@ -261,6 +261,34 @@ function Home.open()
     userName.ZIndex = 3
     userName.Parent = profileView
 
+    -- Click the avatar to copy your profile link (brief confirmation on @name)
+    local avatarBtn = Instance.new("TextButton")
+    avatarBtn.Text = ""
+    avatarBtn.AutoButtonColor = false
+    avatarBtn.BackgroundTransparency = 1
+    avatarBtn.Size = UDim2.fromScale(1, 1)
+    avatarBtn.ZIndex = 5
+    avatarBtn.Parent = avatarHolder
+    Util.corner(avatarBtn, 62)
+    local copyResetAt = 0
+    avatarBtn.MouseButton1Click:Connect(function()
+        local ok = pcall(function()
+            setclipboard(("https://www.roblox.com/users/%d/profile"):format(lp.UserId))
+        end)
+        if ok then
+            userName.Text = "Profile link copied"
+            userName.TextColor3 = GREEN
+            local myStamp = os.clock()
+            copyResetAt = myStamp
+            task.delay(1.4, function()
+                if userName.Parent and copyResetAt == myStamp then
+                    userName.Text = lp.Name
+                    userName.TextColor3 = SUB
+                end
+            end)
+        end
+    end)
+
     -- Bottom stats row: joined / friends joined / friends online
     local statsRowY = contentH - 150
     local statCells = {}
