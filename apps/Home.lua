@@ -879,7 +879,7 @@ function Home.open()
     -- overlapping friend chips that expand green on hover
     -- -----------------------------------------------------------------------
     local faCard = makeCard(PAD + COL1 + GAPX, contentY, COL2, contentH)
-    cardTitle(faCard, "Friend Activity")
+    local faTitle = cardTitle(faCard, "Friend Activity")
 
     local faEmpty = Instance.new("TextLabel")
     faEmpty.Text = "Your friends will appear here when they're in-game."
@@ -1033,6 +1033,11 @@ function Home.open()
         faEmpty.Visible = #games == 0
         faEmptyIcon.Visible = #games == 0
         faScroll.CanvasSize = UDim2.fromOffset(0, #games * ENTRY_H + 8)
+
+        -- title count: total friends across the games shown
+        local playing = 0
+        for _, g in ipairs(games) do playing += #g.friends end
+        faTitle.Text = playing > 0 and ("Friend Activity · " .. playing) or "Friend Activity"
 
         for gi, g in ipairs(games) do
             local y = (gi - 1) * ENTRY_H
