@@ -59,6 +59,7 @@ function Settings.open(opts)
     catcher.ZIndex = 1
     catcher.Parent = gui
     catcher.MouseButton1Click:Connect(close)
+    Util.closeOnEscape(gui, close)
 
     -- Window (TextButton so clicks inside are absorbed)
     local win = Instance.new("TextButton")

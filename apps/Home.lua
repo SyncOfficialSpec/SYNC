@@ -98,6 +98,7 @@ function Home.open()
     catcher.ZIndex = 1
     catcher.Parent = gui
     catcher.MouseButton1Click:Connect(close)
+    Util.closeOnEscape(gui, close)
 
     -- Window
     local win = Instance.new("TextButton")

@@ -97,6 +97,7 @@ function Scripts.open()
     catcher.ZIndex = 1
     catcher.Parent = gui
     catcher.MouseButton1Click:Connect(close)
+    Util.closeOnEscape(gui, close)
 
     local win = Instance.new("TextButton")
     win.Text = ""

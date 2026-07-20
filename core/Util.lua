@@ -272,6 +272,23 @@ function Util.shadow(target, opts)
     return ok and sh or nil
 end
 
+-- Close a window when Escape is pressed. Ignores the keystroke while a TextBox
+-- is focused (so typing Escape in search/chat doesn't nuke the window), and
+-- disconnects itself once the gui is gone.
+function Util.closeOnEscape(gui, closeFn)
+    local UIS = game:GetService("UserInputService")
+    local conn
+    conn = UIS.InputBegan:Connect(function(input, processed)
+        if input.KeyCode == Enum.KeyCode.Escape and not UIS:GetFocusedTextBox() then
+            closeFn()
+        end
+    end)
+    gui.Destroying:Connect(function()
+        if conn then conn:Disconnect() end
+    end)
+    return conn
+end
+
 -- Make a window draggable by its title bar (mouse + touch). Cleans up its
 -- global input connection when the window is destroyed.
 function Util.draggable(frame, handle)
