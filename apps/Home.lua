@@ -1077,7 +1077,7 @@ function Home.open()
     end
 
     -- Hop (random server) + rejoin buttons, orca's shuffle/retry pair
-    local function serverButton(y, iconName, cb)
+    local function serverButton(y, iconName, tip, cb)
         local b = Instance.new("TextButton")
         b.Text = ""
         b.AutoButtonColor = false
@@ -1098,17 +1098,40 @@ function Home.open()
         g.ZIndex = 5
         g.Parent = b
         Icons.apply(g, iconName, SUB)
+
+        -- tooltip: floats to the left of the button on hover
+        local tipLabel = Instance.new("TextLabel")
+        tipLabel.Text = "  " .. tip .. "  "
+        tipLabel.Font = BODY_BOLD
+        tipLabel.TextSize = 12
+        tipLabel.TextColor3 = WHITE
+        tipLabel.TextTransparency = 1
+        tipLabel.BackgroundColor3 = Color3.fromRGB(10, 11, 13)
+        tipLabel.BackgroundTransparency = 1
+        tipLabel.AutomaticSize = Enum.AutomaticSize.X
+        tipLabel.AnchorPoint = Vector2.new(1, 0.5)
+        tipLabel.Position = UDim2.new(1, -60, 0, y + 25)
+        tipLabel.Size = UDim2.fromOffset(0, 24)
+        tipLabel.ZIndex = 8
+        tipLabel.Parent = serverCard
+        Util.corner(tipLabel, 7)
+        local tipStroke = Util.stroke(tipLabel, WHITE, 1, 1)
+
         local bScale = Instance.new("UIScale")
         bScale.Parent = b
         b.MouseEnter:Connect(function()
             Util.tween(b, { BackgroundTransparency = 0 }, 0.12)
             Util.tween(bScale, { Scale = 1.06 }, 0.12)
             g.ImageColor3 = WHITE
+            Util.tween(tipLabel, { TextTransparency = 0, BackgroundTransparency = 0.05 }, 0.14)
+            Util.tween(tipStroke, { Transparency = 0.85 }, 0.14)
         end)
         b.MouseLeave:Connect(function()
             Util.tween(b, { BackgroundTransparency = 0.25 }, 0.12)
             Util.tween(bScale, { Scale = 1 }, 0.12)
             g.ImageColor3 = SUB
+            Util.tween(tipLabel, { TextTransparency = 1, BackgroundTransparency = 1 }, 0.14)
+            Util.tween(tipStroke, { Transparency = 1 }, 0.14)
         end)
         b.MouseButton1Down:Connect(function()
             Util.tween(bScale, { Scale = 0.92 }, 0.08)
@@ -1120,10 +1143,10 @@ function Home.open()
         return b
     end
 
-    serverButton(58, "orbit", function()
+    serverButton(58, "orbit", "Server hop", function()
         pcall(function() TeleportService:Teleport(game.PlaceId, lp) end)
     end)
-    serverButton(120, "power", function()
+    serverButton(120, "power", "Rejoin", function()
         pcall(function() TeleportService:TeleportToPlaceInstance(game.PlaceId, game.JobId, lp) end)
     end)
 
