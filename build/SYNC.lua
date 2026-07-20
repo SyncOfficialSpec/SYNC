@@ -3903,7 +3903,8 @@ function Scripts.open()
         c.Text = ""
         c.AutoButtonColor = false
         c.Size = UDim2.fromOffset(CARD_W, CARD_H)
-        c.Position = UDim2.fromOffset(col * (CARD_W + 14), row * (CARD_H + 14))
+        -- 2px inset so the UIStroke isn't clipped by the scroll frame edges
+        c.Position = UDim2.fromOffset(2 + col * (CARD_W + 14), 2 + row * (CARD_H + 14))
         c.BackgroundColor3 = CARD
         c.ClipsDescendants = true
         c.ZIndex = 4
@@ -3981,11 +3982,15 @@ function Scripts.open()
             Util.corner(pill, 6)
         end
 
+        local cScale = Instance.new("UIScale")
+        cScale.Parent = c
         c.MouseEnter:Connect(function()
             Util.tween(cStroke, { Transparency = 0.6 }, 0.12)
+            Util.tween(cScale, { Scale = 1.015 }, 0.12)
         end)
         c.MouseLeave:Connect(function()
             Util.tween(cStroke, { Transparency = 0.9 }, 0.12)
+            Util.tween(cScale, { Scale = 1 }, 0.12)
         end)
         c.MouseButton1Click:Connect(function()
             if not s.rawScript then
@@ -4020,7 +4025,7 @@ function Scripts.open()
         for _, child in ipairs(grid:GetChildren()) do child:Destroy() end
         for i, s in ipairs(list) do buildCard(s, i) end
         local rows = math.ceil(#list / 2)
-        grid.CanvasSize = UDim2.fromOffset(0, rows * (CARD_H + 14) + 8)
+        grid.CanvasSize = UDim2.fromOffset(0, rows * (CARD_H + 14) + 12)
     end
 
     local function fetchScripts(q)
