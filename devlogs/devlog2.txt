@@ -2,11 +2,14 @@ SYNC
 
 Devlog 2 • July 21, 2026
 
-This batch introduces the Scripts app, a script browser that lives right on the SYNC dock.
+This batch introduces the Scripts app, a script browser with its own in game executor built right into SYNC.
 
 New Elements:
 Scripts App
-A draggable macOS style window with a search field and a two column grid of script banners, powered by RScripts. Every card shows the script name, the game it is for and wallpaper art behind a soft dark fade, and clicking a card downloads the script and runs it instantly.
+A draggable macOS style window with a search field and a two column grid of script banners, powered by RScripts. Every card shows the script name, the game it is for and wallpaper art behind a soft dark fade.
+
+In Game Executor
+SYNC runs scripts itself. Clicking a card fetches the script and executes it instantly right there, no copying and no pasting into anything. If a fetch gets blocked it quietly retries until it gets the real script.
 
 Search
 Type in the search field and results appear on their own after a short pause, no button needed. Pressing enter searches instantly and the status line always tells you what you are looking at.
@@ -23,7 +26,7 @@ Right clicking any card copies a ready loadstring to your clipboard, handy for s
 Improvements:
 Hovering a banner makes it grow smoothly with a soft shine sweeping across the art, and it never covers the cards next to it.
 Cards fade and settle in one after another when the grid loads.
-Executing a script pulses the card green on success and red on failure, with the result written in the status line.
-Broken scripts no longer fail silently. A lot of uploads out there point at dead links, and when one crashes the status line turns red with the actual error so you always know whether a script really ran.
+Running a script pulses the card green when it works and red when it does not, with the result written in the status line.
+Dead scripts now tell you the truth. A lot of uploads point at hosts that got taken down, and instead of a confusing error the status line says the uploader's link is offline so you know it is the script, not you.
 The last loaded list is remembered, so reopening the app paints instantly instead of showing a loading screen.
 The scrollbar is hidden for a cleaner look.
