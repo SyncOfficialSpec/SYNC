@@ -461,6 +461,45 @@ function Util.shadow(target, opts)
     return ok and sh or nil
 end
 
+-- Make a window draggable by its title bar (mouse + touch). Cleans up its
+-- global input connection when the window is destroyed.
+function Util.draggable(frame, handle)
+    local UIS = game:GetService("UserInputService")
+    local dragging = false
+    local dragInput, dragStart, startPos
+
+    handle.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1
+            or input.UserInputType == Enum.UserInputType.Touch then
+            dragging = true
+            dragStart = input.Position
+            startPos = frame.Position
+            input.Changed:Connect(function()
+                if input.UserInputState == Enum.UserInputState.End then dragging = false end
+            end)
+        end
+    end)
+    handle.InputChanged:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseMovement
+            or input.UserInputType == Enum.UserInputType.Touch then
+            dragInput = input
+        end
+    end)
+
+    local moveConn = UIS.InputChanged:Connect(function(input)
+        if dragging and input == dragInput then
+            local delta = input.Position - dragStart
+            frame.Position = UDim2.new(
+                startPos.X.Scale, startPos.X.Offset + delta.X,
+                startPos.Y.Scale, startPos.Y.Offset + delta.Y
+            )
+        end
+    end)
+    frame.Destroying:Connect(function()
+        if moveConn then moveConn:Disconnect() end
+    end)
+end
+
 -- Standard SYNC tween. props is a table of properties to animate.
 function Util.tween(inst, props, time, style, dir)
     local info = TweenInfo.new(
@@ -2432,6 +2471,8 @@ function Settings.open(opts)
         if i == 1 then dot.MouseButton1Click:Connect(close) end
     end
 
+    Util.draggable(win, bar)
+
     local title = Instance.new("TextLabel")
     title.Size = UDim2.new(1, 0, 1, 0)
     title.BackgroundTransparency = 1
@@ -2723,6 +2764,8 @@ function Home.open()
         Util.corner(dot, 6)
         if i == 1 then dot.MouseButton1Click:Connect(close) end
     end
+
+    Util.draggable(win, bar)
 
     local barTitle = Instance.new("TextLabel")
     barTitle.Size = UDim2.new(1, 0, 1, 0)
@@ -3912,12 +3955,21 @@ function Scripts.open()
     Scripts._gui = gui
 
     local alive = true
+    local winRef, scaleRef
 
+    local closing = false
     local function close()
-        if not Scripts._gui then return end
+        if not Scripts._gui or closing then return end
+        closing = true
         Scripts._gui = nil
         alive = false
-        gui:Destroy()
+        if winRef and scaleRef then
+            Util.tween(scaleRef, { Scale = 0.94 }, 0.15)
+            Util.tween(winRef, { BackgroundTransparency = 1 }, 0.15)
+            task.delay(0.17, function() gui:Destroy() end)
+        else
+            gui:Destroy()
+        end
     end
 
     local catcher = Instance.new("TextButton")
@@ -3950,6 +4002,7 @@ function Scripts.open()
     win.BackgroundTransparency = 1
     Util.tween(scaleFx, { Scale = 1 }, 0.22, Enum.EasingStyle.Back)
     Util.tween(win, { BackgroundTransparency = 0 }, 0.18)
+    winRef, scaleRef = win, scaleFx
 
     -- Title bar
     local bar = Instance.new("Frame")
@@ -3982,6 +4035,8 @@ function Scripts.open()
         Util.corner(dot, 6)
         if i == 1 then dot.MouseButton1Click:Connect(close) end
     end
+
+    Util.draggable(win, bar)
 
     local barTitle = Instance.new("TextLabel")
     barTitle.Size = UDim2.new(1, 0, 1, 0)

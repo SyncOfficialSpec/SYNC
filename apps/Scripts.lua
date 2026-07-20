@@ -60,12 +60,21 @@ function Scripts.open()
     Scripts._gui = gui
 
     local alive = true
+    local winRef, scaleRef
 
+    local closing = false
     local function close()
-        if not Scripts._gui then return end
+        if not Scripts._gui or closing then return end
+        closing = true
         Scripts._gui = nil
         alive = false
-        gui:Destroy()
+        if winRef and scaleRef then
+            Util.tween(scaleRef, { Scale = 0.94 }, 0.15)
+            Util.tween(winRef, { BackgroundTransparency = 1 }, 0.15)
+            task.delay(0.17, function() gui:Destroy() end)
+        else
+            gui:Destroy()
+        end
     end
 
     local catcher = Instance.new("TextButton")
@@ -98,6 +107,7 @@ function Scripts.open()
     win.BackgroundTransparency = 1
     Util.tween(scaleFx, { Scale = 1 }, 0.22, Enum.EasingStyle.Back)
     Util.tween(win, { BackgroundTransparency = 0 }, 0.18)
+    winRef, scaleRef = win, scaleFx
 
     -- Title bar
     local bar = Instance.new("Frame")
@@ -130,6 +140,8 @@ function Scripts.open()
         Util.corner(dot, 6)
         if i == 1 then dot.MouseButton1Click:Connect(close) end
     end
+
+    Util.draggable(win, bar)
 
     local barTitle = Instance.new("TextLabel")
     barTitle.Size = UDim2.new(1, 0, 1, 0)

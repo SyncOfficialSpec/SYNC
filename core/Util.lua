@@ -272,6 +272,45 @@ function Util.shadow(target, opts)
     return ok and sh or nil
 end
 
+-- Make a window draggable by its title bar (mouse + touch). Cleans up its
+-- global input connection when the window is destroyed.
+function Util.draggable(frame, handle)
+    local UIS = game:GetService("UserInputService")
+    local dragging = false
+    local dragInput, dragStart, startPos
+
+    handle.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1
+            or input.UserInputType == Enum.UserInputType.Touch then
+            dragging = true
+            dragStart = input.Position
+            startPos = frame.Position
+            input.Changed:Connect(function()
+                if input.UserInputState == Enum.UserInputState.End then dragging = false end
+            end)
+        end
+    end)
+    handle.InputChanged:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseMovement
+            or input.UserInputType == Enum.UserInputType.Touch then
+            dragInput = input
+        end
+    end)
+
+    local moveConn = UIS.InputChanged:Connect(function(input)
+        if dragging and input == dragInput then
+            local delta = input.Position - dragStart
+            frame.Position = UDim2.new(
+                startPos.X.Scale, startPos.X.Offset + delta.X,
+                startPos.Y.Scale, startPos.Y.Offset + delta.Y
+            )
+        end
+    end)
+    frame.Destroying:Connect(function()
+        if moveConn then moveConn:Disconnect() end
+    end)
+end
+
 -- Standard SYNC tween. props is a table of properties to animate.
 function Util.tween(inst, props, time, style, dir)
     local info = TweenInfo.new(

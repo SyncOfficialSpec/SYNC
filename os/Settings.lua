@@ -110,6 +110,8 @@ function Settings.open(opts)
         if i == 1 then dot.MouseButton1Click:Connect(close) end
     end
 
+    Util.draggable(win, bar)
+
     local title = Instance.new("TextLabel")
     title.Size = UDim2.new(1, 0, 1, 0)
     title.BackgroundTransparency = 1
