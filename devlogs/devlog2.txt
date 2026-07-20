@@ -1,0 +1,28 @@
+SYNC
+
+Devlog 2 • July 21, 2026
+
+This batch introduces the Scripts app, a script browser that lives right on the SYNC dock.
+
+New Elements:
+Scripts App
+A draggable macOS style window with a search field and a two column grid of script banners, powered by RScripts. Every card shows the script name, the game it is for and wallpaper art behind a soft dark fade, and clicking a card downloads the script and runs it instantly.
+
+Search
+Type in the search field and results appear on their own after a short pause, no button needed. Pressing enter searches instantly and the status line always tells you what you are looking at.
+
+Infinite Scroll
+Reaching the bottom of the grid quietly loads the next page of scripts, so you can keep scrolling through the whole catalog without ever pressing load more.
+
+Card Badges
+Verified creators get a blue VERIFIED pill on their banner and scripts locked behind a key system get an orange KEY pill, so you know what you are getting before you click.
+
+Quick Copy
+Right clicking any card copies a ready loadstring to your clipboard, handy for sharing a script or running it somewhere else.
+
+Improvements:
+Hovering a banner makes it grow smoothly with a soft shine sweeping across the art, and it never covers the cards next to it.
+Cards fade and settle in one after another when the grid loads.
+Executing a script pulses the card green on success and red on failure, with the result written in the status line.
+The last loaded list is remembered, so reopening the app paints instantly instead of showing a loading screen.
+The scrollbar is hidden for a cleaner look.
