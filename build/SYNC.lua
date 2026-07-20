@@ -3884,14 +3884,16 @@ function Scripts.open()
     grid.Size = UDim2.new(1, -PAD * 2 + 8, 1, -gridY - 16)
     grid.BackgroundTransparency = 1
     grid.BorderSizePixel = 0
-    grid.ScrollBarThickness = 3
-    grid.ScrollBarImageColor3 = SUB
-    grid.ScrollBarImageTransparency = 0.6
+    grid.ScrollBarThickness = 0
+    grid.ScrollBarImageTransparency = 1
     grid.CanvasSize = UDim2.new()
     grid.ZIndex = 3
     grid.Parent = win
 
-    local CARD_W = math.floor((winW - PAD * 2 - 14) / 2)
+    -- 12px inset all around gives the orca hover-grow room inside the scroll clip
+    local INSET = 12
+    local GROW = 24
+    local CARD_W = math.floor((winW - PAD * 2 - 14 - INSET * 2) / 2)
     local CARD_H = 150
     local reqToken = 0
 
@@ -3899,18 +3901,28 @@ function Scripts.open()
         local col = (index - 1) % 2
         local row = math.floor((index - 1) / 2)
 
+        -- Input cell stays fixed in the grid; the body inside grows on hover
+        -- (orca ScriptCard: +48px centered spring, shine sweep, press cancels)
         local c = Instance.new("TextButton")
         c.Text = ""
         c.AutoButtonColor = false
         c.Size = UDim2.fromOffset(CARD_W, CARD_H)
-        -- 2px inset so the UIStroke isn't clipped by the scroll frame edges
-        c.Position = UDim2.fromOffset(2 + col * (CARD_W + 14), 2 + row * (CARD_H + 14))
-        c.BackgroundColor3 = CARD
-        c.ClipsDescendants = true
+        c.Position = UDim2.fromOffset(INSET + col * (CARD_W + 14), INSET + row * (CARD_H + 14))
+        c.BackgroundTransparency = 1
         c.ZIndex = 4
         c.Parent = grid
-        Util.corner(c, 12)
-        local cStroke = Util.stroke(c, WHITE, 1, 0.9)
+
+        local body = Instance.new("Frame")
+        body.AnchorPoint = Vector2.new(0.5, 0.5)
+        body.Position = UDim2.fromScale(0.5, 0.5)
+        body.Size = UDim2.fromOffset(CARD_W, CARD_H)
+        body.BackgroundColor3 = CARD
+        body.BorderSizePixel = 0
+        body.ClipsDescendants = true
+        body.ZIndex = 4
+        body.Parent = c
+        Util.corner(body, 12)
+        local cStroke = Util.stroke(body, WHITE, 1, 0.85)
 
         local art = Instance.new("ImageLabel")
         art.Image = BANNERS[hashStr(s.title or tostring(index)) % #BANNERS + 1]
@@ -3918,7 +3930,7 @@ function Scripts.open()
         art.Size = UDim2.fromScale(1, 1)
         art.BackgroundTransparency = 1
         art.ZIndex = 4
-        art.Parent = c
+        art.Parent = body
         Util.corner(art, 12)
 
         -- dark fade so the text reads over the art
@@ -3927,7 +3939,7 @@ function Scripts.open()
         fade.BackgroundColor3 = Color3.new(0, 0, 0)
         fade.BorderSizePixel = 0
         fade.ZIndex = 5
-        fade.Parent = c
+        fade.Parent = body
         Util.corner(fade, 12)
         local fg = Instance.new("UIGradient")
         fg.Rotation = 90
@@ -3950,7 +3962,7 @@ function Scripts.open()
         title.Position = UDim2.new(0, 18, 1, gameName and -52 or -34)
         title.Size = UDim2.new(1, -36, 0, 20)
         title.ZIndex = 6
-        title.Parent = c
+        title.Parent = body
 
         if gameName then
             local sub = Instance.new("TextLabel")
@@ -3964,7 +3976,7 @@ function Scripts.open()
             sub.Position = UDim2.new(0, 18, 1, -30)
             sub.Size = UDim2.new(1, -36, 0, 16)
             sub.ZIndex = 6
-            sub.Parent = c
+            sub.Parent = body
         end
 
         if s.user and s.user.verified then
@@ -3978,19 +3990,67 @@ function Scripts.open()
             pill.Position = UDim2.new(1, -10, 0, 10)
             pill.Size = UDim2.fromOffset(64, 20)
             pill.ZIndex = 6
-            pill.Parent = c
+            pill.Parent = body
             Util.corner(pill, 6)
         end
 
-        local cScale = Instance.new("UIScale")
-        cScale.Parent = c
+        -- Shine sweep (orca: white diagonal gradient sliding in on hover)
+        local shine = Instance.new("Frame")
+        shine.Size = UDim2.fromScale(1, 1)
+        shine.BackgroundColor3 = WHITE
+        shine.BackgroundTransparency = 1
+        shine.BorderSizePixel = 0
+        shine.ZIndex = 7
+        shine.Parent = body
+        Util.corner(shine, 12)
+        local shineGrad = Instance.new("UIGradient")
+        shineGrad.Rotation = 45
+        shineGrad.Transparency = NumberSequence.new(0.75, 1)
+        shineGrad.Offset = Vector2.new(-1, -1)
+        shineGrad.Parent = shine
+
+        local shineStroke = Util.stroke(body, WHITE, 3, 1)
+        local shineStrokeGrad = Instance.new("UIGradient")
+        shineStrokeGrad.Rotation = 45
+        shineStrokeGrad.Transparency = NumberSequence.new(0.7, 0.9)
+        shineStrokeGrad.Offset = Vector2.new(-1, -1)
+        shineStrokeGrad.Parent = shineStroke
+
+        local hovered, pressed = false, false
+        local function updateBody()
+            local grow = hovered and not pressed
+            Util.tween(body, { Size = grow and UDim2.fromOffset(CARD_W + GROW, CARD_H + GROW)
+                or UDim2.fromOffset(CARD_W, CARD_H) }, 0.22, Enum.EasingStyle.Quad)
+        end
+
         c.MouseEnter:Connect(function()
-            Util.tween(cStroke, { Transparency = 0.6 }, 0.12)
-            Util.tween(cScale, { Scale = 1.015 }, 0.12)
+            hovered = true
+            c.ZIndex = 20
+            updateBody()
+            Util.tween(shine, { BackgroundTransparency = 0 }, 0.25)
+            Util.tween(shineGrad, { Offset = Vector2.new(0, 0) }, 0.25)
+            Util.tween(shineStroke, { Transparency = 0 }, 0.25)
+            Util.tween(shineStrokeGrad, { Offset = Vector2.new(0, 0) }, 0.25)
+            Util.tween(cStroke, { Transparency = 1 }, 0.25)
         end)
         c.MouseLeave:Connect(function()
-            Util.tween(cStroke, { Transparency = 0.9 }, 0.12)
-            Util.tween(cScale, { Scale = 1 }, 0.12)
+            hovered = false
+            pressed = false
+            c.ZIndex = 4
+            updateBody()
+            Util.tween(shine, { BackgroundTransparency = 1 }, 0.25)
+            Util.tween(shineGrad, { Offset = Vector2.new(-1, -1) }, 0.25)
+            Util.tween(shineStroke, { Transparency = 1 }, 0.25)
+            Util.tween(shineStrokeGrad, { Offset = Vector2.new(-1, -1) }, 0.25)
+            Util.tween(cStroke, { Transparency = 0.85 }, 0.25)
+        end)
+        c.MouseButton1Down:Connect(function()
+            pressed = true
+            updateBody()
+        end)
+        c.MouseButton1Up:Connect(function()
+            pressed = false
+            updateBody()
         end)
         c.MouseButton1Click:Connect(function()
             if not s.rawScript then
@@ -4025,7 +4085,7 @@ function Scripts.open()
         for _, child in ipairs(grid:GetChildren()) do child:Destroy() end
         for i, s in ipairs(list) do buildCard(s, i) end
         local rows = math.ceil(#list / 2)
-        grid.CanvasSize = UDim2.fromOffset(0, rows * (CARD_H + 14) + 12)
+        grid.CanvasSize = UDim2.fromOffset(0, rows * (CARD_H + 14) + INSET * 2)
     end
 
     local function fetchScripts(q)
