@@ -323,6 +323,42 @@ function Scripts.open()
     grid.ZIndex = 3
     grid.Parent = win
 
+    -- Scroll-to-top button (floats bottom-right, appears once scrolled down)
+    local toTop = Instance.new("TextButton")
+    toTop.Text = ""
+    toTop.AutoButtonColor = false
+    toTop.Size = UDim2.fromOffset(36, 36)
+    toTop.AnchorPoint = Vector2.new(1, 1)
+    toTop.Position = UDim2.new(1, -PAD - 4, 1, -PAD)
+    toTop.BackgroundColor3 = FIELD
+    toTop.BackgroundTransparency = 1
+    toTop.Visible = false
+    toTop.ZIndex = 30
+    toTop.Parent = win
+    Util.corner(toTop, 18)
+    Util.stroke(toTop, WHITE, 1, 1)
+    local toTopGlyph = Instance.new("ImageLabel")
+    toTopGlyph.Size = UDim2.fromOffset(18, 18)
+    toTopGlyph.AnchorPoint = Vector2.new(0.5, 0.5)
+    toTopGlyph.Position = UDim2.fromScale(0.5, 0.5)
+    toTopGlyph.BackgroundTransparency = 1
+    toTopGlyph.ImageTransparency = 1
+    toTopGlyph.ZIndex = 31
+    toTopGlyph.Parent = toTop
+    Icons.apply(toTopGlyph, "chevron-up", WHITE)
+    local toTopShown = false
+    local function setToTop(show)
+        if show == toTopShown then return end
+        toTopShown = show
+        toTop.Visible = true
+        Util.tween(toTop, { BackgroundTransparency = show and 0.05 or 1 }, 0.15)
+        Util.tween(toTopGlyph, { ImageTransparency = show and 0 or 1 }, 0.15)
+        if not show then task.delay(0.16, function() if not toTopShown then toTop.Visible = false end end) end
+    end
+    toTop.MouseButton1Click:Connect(function()
+        Util.tween(grid, { CanvasPosition = Vector2.new(0, 0) }, 0.35, Enum.EasingStyle.Quint)
+    end)
+
     -- Empty state (shown when a search returns nothing)
     local emptyState = Instance.new("Frame")
     emptyState.Size = UDim2.fromScale(1, 1)
@@ -743,6 +779,7 @@ function Scripts.open()
 
     -- Infinite scroll: pull the next page when close to the bottom
     grid:GetPropertyChangedSignal("CanvasPosition"):Connect(function()
+        setToTop(grid.CanvasPosition.Y > 260)
         if loadingMore or curPage >= maxPages or itemCount == 0 then return end
         local bottom = grid.CanvasPosition.Y + grid.AbsoluteWindowSize.Y
         if bottom < grid.AbsoluteCanvasSize.Y - 220 then return end
