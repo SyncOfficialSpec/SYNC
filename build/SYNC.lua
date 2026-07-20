@@ -2593,8 +2593,9 @@ function Settings.open(opts)
     opts = opts or {}
     if Settings._gui then return end
 
-    local cardW, cardH = 440, 278
+    local cardW, cardH = 440, 316
     local TB = 40 -- title bar height
+    local VERSION = "SYNC 1.0"
 
     local gui = Instance.new("ScreenGui")
     gui.Name = "SYNC_Settings"
@@ -2823,6 +2824,42 @@ function Settings.open(opts)
     Slider.create(sizeHolder, opts.dockSize or 0.4, function(f)
         if opts.onDockSize then opts.onDockSize(f) end
     end)
+
+    -- About footer: version left, tagline right
+    local aboutY = TB + 34 + rowH * 4 + 14
+    local hairline = Instance.new("Frame")
+    hairline.Size = UDim2.new(1, -32, 0, 1)
+    hairline.Position = UDim2.fromOffset(16, aboutY)
+    hairline.BackgroundColor3 = HAIR
+    hairline.BackgroundTransparency = 0.85
+    hairline.BorderSizePixel = 0
+    hairline.ZIndex = 3
+    hairline.Parent = win
+
+    local verLabel = Instance.new("TextLabel")
+    verLabel.Text = VERSION
+    verLabel.Font = Theme.fonts.title
+    verLabel.TextSize = 13
+    verLabel.TextColor3 = WHITE
+    verLabel.TextXAlignment = Enum.TextXAlignment.Left
+    verLabel.BackgroundTransparency = 1
+    verLabel.Position = UDim2.fromOffset(20, aboutY + 10)
+    verLabel.Size = UDim2.fromOffset(200, 16)
+    verLabel.ZIndex = 3
+    verLabel.Parent = win
+
+    local taglineLabel = Instance.new("TextLabel")
+    taglineLabel.Text = "Desktop OS for Roblox"
+    taglineLabel.Font = Theme.fonts.caption
+    taglineLabel.TextSize = 12
+    taglineLabel.TextColor3 = SUB
+    taglineLabel.TextXAlignment = Enum.TextXAlignment.Right
+    taglineLabel.BackgroundTransparency = 1
+    taglineLabel.AnchorPoint = Vector2.new(1, 0)
+    taglineLabel.Position = UDim2.new(1, -20, 0, aboutY + 11)
+    taglineLabel.Size = UDim2.fromOffset(220, 14)
+    taglineLabel.ZIndex = 3
+    taglineLabel.Parent = win
 
     return { close = close }
 end
