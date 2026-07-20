@@ -56,16 +56,24 @@ function Switch.create(parent, initial, onChange)
     Util.shadow(knob, { blur = 7, transparency = 0.55, offset = UDim2.fromOffset(0, 1) }) -- drop shadow
     Util.shadow(knob, { blur = 12, transparency = 0.6, offset = UDim2.fromOffset(0, 0), color = Color3.fromRGB(255, 255, 255) }) -- soft glow
 
+    -- squash pulse on toggle (iOS-style tactile bounce)
+    local kscale = Instance.new("UIScale")
+    kscale.Parent = knob
+
     local function render(animate)
         local kp = { Position = UDim2.new(0, knobX(value), 0.5, 0), BackgroundColor3 = value and KNOB_ON or KNOB_OFF }
         local tp = { BackgroundColor3 = value and TRACK_ON or TRACK_OFF }
         if animate then
             Util.tween(knob, kp, 0.18, Enum.EasingStyle.Quart)
             Util.tween(track, tp, 0.18)
+            kscale.Scale = 1
+            Util.tween(kscale, { Scale = 1.12 }, 0.09)
+            task.delay(0.1, function() Util.tween(kscale, { Scale = 1 }, 0.12, Enum.EasingStyle.Back) end)
         else
             knob.Position = kp.Position
             knob.BackgroundColor3 = kp.BackgroundColor3
             track.BackgroundColor3 = tp.BackgroundColor3
+            kscale.Scale = 1
         end
     end
 
