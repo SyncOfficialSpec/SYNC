@@ -3302,9 +3302,30 @@ function Home.open()
     chatBox.TextXAlignment = Enum.TextXAlignment.Left
     chatBox.BackgroundTransparency = 1
     chatBox.Position = UDim2.fromOffset(16, 0)
-    chatBox.Size = UDim2.new(1, -26, 1, 0)
+    chatBox.Size = UDim2.new(1, -58, 1, 0)
     chatBox.ZIndex = 5
     chatBox.Parent = chatInputHolder
+
+    -- Send button (tap to send, same as pressing enter)
+    local sendBtn = Instance.new("TextButton")
+    sendBtn.Text = ""
+    sendBtn.AutoButtonColor = false
+    sendBtn.Size = UDim2.fromOffset(32, 32)
+    sendBtn.AnchorPoint = Vector2.new(1, 0.5)
+    sendBtn.Position = UDim2.new(1, -7, 0.5, 0)
+    sendBtn.BackgroundColor3 = ACCENT
+    sendBtn.BackgroundTransparency = 0.5
+    sendBtn.ZIndex = 6
+    sendBtn.Parent = chatInputHolder
+    Util.corner(sendBtn, 10)
+    local sendGlyph = Instance.new("ImageLabel")
+    sendGlyph.Size = UDim2.fromOffset(16, 16)
+    sendGlyph.AnchorPoint = Vector2.new(0.5, 0.5)
+    sendGlyph.Position = UDim2.fromScale(0.5, 0.5)
+    sendGlyph.BackgroundTransparency = 1
+    sendGlyph.ZIndex = 7
+    sendGlyph.Parent = sendBtn
+    Icons.apply(sendGlyph, "chevron-right", WHITE)
 
     chatPill.MouseButton1Click:Connect(function()
         profileView.Visible = false
@@ -3604,13 +3625,24 @@ function Home.open()
         end)
     end
 
-    chatBox.FocusLost:Connect(function(enterPressed)
-        if not enterPressed then return end
+    local function submitChat()
         local text = chatBox.Text
         if text:gsub("%s", "") == "" then return end
         chatBox.Text = ""
         if activeTab == "universal" then sendUniversal(text) else sendServer(text) end
+    end
+
+    chatBox.FocusLost:Connect(function(enterPressed)
+        if enterPressed then submitChat() end
     end)
+
+    sendBtn.MouseEnter:Connect(function()
+        Util.tween(sendBtn, { BackgroundTransparency = 0 }, 0.12)
+    end)
+    sendBtn.MouseLeave:Connect(function()
+        Util.tween(sendBtn, { BackgroundTransparency = 0.5 }, 0.12)
+    end)
+    sendBtn.MouseButton1Click:Connect(submitChat)
 
     -- -----------------------------------------------------------------------
     -- Friend Activity card (col 2) — orca look: full-bleed thumbnails with
