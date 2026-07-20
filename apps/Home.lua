@@ -1,8 +1,11 @@
 -- SYNC / apps / Home
--- Home hub window: welcome header with live clock, session stats
--- (players / ping / uptime), profile card with in-game chat, and Friend
--- Activity ported from orca (github.com/richie0866/orca): online friends
--- grouped by the game they're playing, click a friend to join their server.
+-- Orca-style home dashboard (look ported from github.com/richie0866/orca):
+-- profile card (gradient avatar ring + joined/friends stats), server card
+-- (players / elapsed / ping + hop & rejoin buttons), clock pill, and Friend
+-- Activity with full-bleed game thumbnails and expanding join chips.
+-- Chat panel has two channels: Server (game chat) and Universal — a Discord
+-- channel bridged through the SYNC relay so in-game players and Discord
+-- members talk in one room.
 
 local Players            = game:GetService("Players")
 local StatsService       = game:GetService("Stats")
@@ -18,14 +21,25 @@ local Icons = SYNC.import("core/Icons")
 
 local Home = {}
 
-local WHITE  = Color3.fromRGB(255, 255, 255)
-local SUB    = Color3.fromRGB(150, 150, 158)
-local WIN    = Color3.fromRGB(24, 25, 29)
-local BAR    = Color3.fromRGB(38, 38, 44)
-local CARD   = Color3.fromRGB(34, 35, 40)
-local FIELD  = Color3.fromRGB(46, 47, 53)
-local ACCENT = Theme.accent
-local GREEN  = Color3.fromRGB(52, 199, 89)
+local WHITE   = Color3.fromRGB(255, 255, 255)
+local SUB     = Color3.fromRGB(142, 142, 147)
+local WIN     = Color3.fromRGB(14, 15, 17)
+local CARD    = Color3.fromRGB(22, 23, 26)
+local FIELD   = Color3.fromRGB(36, 37, 42)
+local ACCENT  = Theme.accent
+local GREEN   = Color3.fromRGB(62, 209, 148)   -- orca join green
+local BLURPLE = Color3.fromRGB(88, 101, 242)   -- discord names
+local RINGA   = Color3.fromRGB(168, 85, 247)   -- avatar ring gradient (purple)
+local RINGB   = Color3.fromRGB(59, 130, 246)   -- avatar ring gradient (blue)
+
+-- Universal chat bridge (same relay as the old Discord app; key is a
+-- speed-bump only, the bot token stays server-side)
+local RELAY_URL    = "https://relay-production-a9e3.up.railway.app"
+local API_KEY      = "CdTt-Mmf25ewBa8Ak9DQujolBQ7HQ9Va76lyV4ulXDnIyc8XOPih2w"
+local UNIVERSAL_ID = "1528867061428654201"
+
+local TITLE_FONT = Enum.Font.GothamBlack
+local BODY_BOLD  = Enum.Font.GothamBold
 
 Home._gui = nil
 
@@ -33,14 +47,22 @@ local function headshot(userId, size)
     return ("rbxthumb://type=AvatarHeadShot&id=%d&w=%d&h=%d"):format(userId, size, size)
 end
 
+local function subHex(c)
+    return string.format("#%02X%02X%02X", math.floor(c.R * 255), math.floor(c.G * 255), math.floor(c.B * 255))
+end
+local SUB_HEX = subHex(SUB)
+
 function Home.open()
     -- Stale guard: the gui may have been destroyed externally (respawn, cleanup)
     if Home._gui and Home._gui.Parent then return end
     Home._gui = nil
 
     local lp = Util.localPlayer()
-    local winW, winH = 780, 560
+    local winW, winH = 890, 560
     local TB = 40
+    local PAD = 20
+    local COL1, COL2, COL3 = 264, 306, 250
+    local GAPX = 14
 
     local gui = Instance.new("ScreenGui")
     gui.Name = "SYNC_Home"
@@ -80,8 +102,8 @@ function Home.open()
     win.ClipsDescendants = true
     win.ZIndex = 2
     win.Parent = gui
-    Util.corner(win, 14)
-    Util.stroke(win, WHITE, 1, 0.85)
+    Util.corner(win, 16)
+    Util.stroke(win, WHITE, 1, 0.88)
     Util.shadow(win, { blur = 50, spread = -2, transparency = 0.4, offset = UDim2.fromOffset(0, 20) })
 
     -- Entrance: quick scale + fade in
@@ -90,34 +112,25 @@ function Home.open()
     scaleFx.Parent = win
     win.BackgroundTransparency = 1
     Util.tween(scaleFx, { Scale = 1 }, 0.22, Enum.EasingStyle.Back)
-    Util.tween(win, { BackgroundTransparency = 0.02 }, 0.18)
+    Util.tween(win, { BackgroundTransparency = 0 }, 0.18)
 
     -- Title bar
     local bar = Instance.new("Frame")
     bar.Size = UDim2.new(1, 0, 0, TB)
-    bar.BackgroundColor3 = BAR
-    bar.BackgroundTransparency = 0.25
+    bar.BackgroundColor3 = CARD
+    bar.BackgroundTransparency = 0.35
     bar.BorderSizePixel = 0
     bar.ZIndex = 3
     bar.Parent = win
     local barCorner = Instance.new("UICorner")
     local okCorner = pcall(function()
-        barCorner.TopLeftRadius = UDim.new(0, 14)
-        barCorner.TopRightRadius = UDim.new(0, 14)
+        barCorner.TopLeftRadius = UDim.new(0, 16)
+        barCorner.TopRightRadius = UDim.new(0, 16)
         barCorner.BottomLeftRadius = UDim.new(0, 0)
         barCorner.BottomRightRadius = UDim.new(0, 0)
     end)
-    if not okCorner then barCorner.CornerRadius = UDim.new(0, 14) end
+    if not okCorner then barCorner.CornerRadius = UDim.new(0, 16) end
     barCorner.Parent = bar
-    local hair = Instance.new("Frame")
-    hair.Size = UDim2.new(1, 0, 0, 1)
-    hair.Position = UDim2.new(0, 0, 1, 0)
-    hair.AnchorPoint = Vector2.new(0, 1)
-    hair.BackgroundColor3 = Color3.new(0, 0, 0)
-    hair.BackgroundTransparency = 0.7
-    hair.BorderSizePixel = 0
-    hair.ZIndex = 3
-    hair.Parent = bar
 
     local lights = { Theme.red, Theme.yellow, Theme.green }
     for i, col in ipairs(lights) do
@@ -139,191 +152,132 @@ function Home.open()
     barTitle.Text = "Home"
     barTitle.Font = Theme.fonts.title
     barTitle.TextSize = 14
-    barTitle.TextColor3 = Color3.fromRGB(210, 210, 216)
+    barTitle.TextColor3 = Color3.fromRGB(200, 200, 206)
     barTitle.ZIndex = 3
     barTitle.Parent = bar
 
-    -- -----------------------------------------------------------------------
-    -- Header: welcome + clock
-    -- -----------------------------------------------------------------------
-    local PAD = 24
+    local contentY = TB + PAD
+    local contentH = winH - contentY - PAD
 
-    local welcome = Instance.new("TextLabel")
-    welcome.Text = "Welcome home, " .. (lp.DisplayName or lp.Name)
-    welcome.Font = Enum.Font.GothamBold
-    welcome.TextSize = 24
-    welcome.TextColor3 = WHITE
-    welcome.TextXAlignment = Enum.TextXAlignment.Left
-    welcome.BackgroundTransparency = 1
-    welcome.Position = UDim2.fromOffset(PAD, TB + 18)
-    welcome.Size = UDim2.fromOffset(winW - 200, 26)
-    welcome.ZIndex = 3
-    welcome.Parent = win
-
-    local subtitle = Instance.new("TextLabel")
-    subtitle.Text = "SYNC"
-    subtitle.Font = Theme.fonts.caption
-    subtitle.TextSize = 13
-    subtitle.TextColor3 = SUB
-    subtitle.TextXAlignment = Enum.TextXAlignment.Left
-    subtitle.BackgroundTransparency = 1
-    subtitle.Position = UDim2.fromOffset(PAD, TB + 46)
-    subtitle.Size = UDim2.fromOffset(300, 16)
-    subtitle.ZIndex = 3
-    subtitle.Parent = win
-
-    local clockLabel = Instance.new("TextLabel")
-    clockLabel.Font = Theme.fonts.title
-    clockLabel.TextSize = 17
-    clockLabel.TextColor3 = WHITE
-    clockLabel.TextXAlignment = Enum.TextXAlignment.Right
-    clockLabel.BackgroundTransparency = 1
-    clockLabel.AnchorPoint = Vector2.new(1, 0)
-    clockLabel.Position = UDim2.new(1, -PAD, 0, TB + 22)
-    clockLabel.Size = UDim2.fromOffset(110, 20)
-    clockLabel.ZIndex = 3
-    clockLabel.Parent = win
-
-    local clockIcon = Instance.new("ImageLabel")
-    clockIcon.Size = UDim2.fromOffset(16, 16)
-    clockIcon.AnchorPoint = Vector2.new(1, 0)
-    clockIcon.BackgroundTransparency = 1
-    clockIcon.ZIndex = 3
-    clockIcon.Parent = win
-    Icons.apply(clockIcon, "clock", WHITE)
-
-    -- -----------------------------------------------------------------------
-    -- Stats strip: players / ping / uptime
-    -- -----------------------------------------------------------------------
-    local stats = Instance.new("Frame")
-    stats.Position = UDim2.fromOffset(PAD, TB + 76)
-    stats.Size = UDim2.fromOffset(winW - PAD * 2, 64)
-    stats.BackgroundColor3 = CARD
-    stats.BackgroundTransparency = 0.25
-    stats.BorderSizePixel = 0
-    stats.ZIndex = 3
-    stats.Parent = win
-    Util.corner(stats, 14)
-    Util.rimStroke(stats, 1, 0.75, 0.95)
-
-    local statValues = {}
-    local statDefs = { { "Players" }, { "Ping" }, { "Uptime" } }
-    for i, def in ipairs(statDefs) do
-        local col = Instance.new("Frame")
-        col.Size = UDim2.new(1 / 3, 0, 1, 0)
-        col.Position = UDim2.new((i - 1) / 3, 0, 0, 0)
-        col.BackgroundTransparency = 1
-        col.ZIndex = 3
-        col.Parent = stats
-
-        local v = Instance.new("TextLabel")
-        v.Text = "--"
-        v.Font = Theme.fonts.title
-        v.TextSize = 20
-        v.TextColor3 = WHITE
-        v.BackgroundTransparency = 1
-        v.Position = UDim2.new(0, 0, 0, 11)
-        v.Size = UDim2.new(1, 0, 0, 22)
-        v.ZIndex = 3
-        v.Parent = col
-        statValues[def[1]] = v
-
-        local l = Instance.new("TextLabel")
-        l.Text = def[1]
-        l.Font = Theme.fonts.caption
-        l.TextSize = 12
-        l.TextColor3 = SUB
-        l.BackgroundTransparency = 1
-        l.Position = UDim2.new(0, 0, 0, 34)
-        l.Size = UDim2.new(1, 0, 0, 14)
-        l.ZIndex = 3
-        l.Parent = col
-    end
-
-    -- -----------------------------------------------------------------------
-    -- Cards row
-    -- -----------------------------------------------------------------------
-    local cardsY = TB + 154
-    local cardH = winH - cardsY - PAD
-    local cardW = (winW - PAD * 2 - 14) / 2
-
-    local function makeCard(x)
+    local function makeCard(x, y, w, h, parent)
         local c = Instance.new("Frame")
-        c.Position = UDim2.fromOffset(x, cardsY)
-        c.Size = UDim2.fromOffset(cardW, cardH)
+        c.Position = UDim2.fromOffset(x, y)
+        c.Size = UDim2.fromOffset(w, h)
         c.BackgroundColor3 = CARD
-        c.BackgroundTransparency = 0.25
         c.BorderSizePixel = 0
         c.ClipsDescendants = true
         c.ZIndex = 3
-        c.Parent = win
-        Util.corner(c, 16)
-        Util.rimStroke(c, 1, 0.75, 0.95)
+        c.Parent = parent or win
+        Util.corner(c, 18)
+        Util.rimStroke(c, 1, 0.82, 0.96)
         return c
     end
 
-    local leftCard  = makeCard(PAD)
-    local rightCard = makeCard(PAD + cardW + 14)
+    local function cardTitle(parent, text)
+        local t = Instance.new("TextLabel")
+        t.Text = text
+        t.Font = TITLE_FONT
+        t.TextSize = 19
+        t.TextColor3 = WHITE
+        t.TextXAlignment = Enum.TextXAlignment.Left
+        t.BackgroundTransparency = 1
+        t.Position = UDim2.fromOffset(20, 18)
+        t.Size = UDim2.new(1, -40, 0, 22)
+        t.ZIndex = 4
+        t.Parent = parent
+        return t
+    end
 
     -- -----------------------------------------------------------------------
-    -- Left card: profile view
+    -- Profile card (col 1)
     -- -----------------------------------------------------------------------
+    local profileCard = makeCard(PAD, contentY, COL1, contentH)
+
     local profileView = Instance.new("Frame")
     profileView.Size = UDim2.fromScale(1, 1)
     profileView.BackgroundTransparency = 1
     profileView.ZIndex = 3
-    profileView.Parent = leftCard
+    profileView.Parent = profileCard
 
     local avatarHolder = Instance.new("Frame")
-    avatarHolder.Size = UDim2.fromOffset(116, 116)
+    avatarHolder.Size = UDim2.fromOffset(124, 124)
     avatarHolder.AnchorPoint = Vector2.new(0.5, 0)
-    avatarHolder.Position = UDim2.new(0.5, 0, 0, 34)
+    avatarHolder.Position = UDim2.new(0.5, 0, 0, 36)
     avatarHolder.BackgroundColor3 = FIELD
     avatarHolder.ZIndex = 3
     avatarHolder.Parent = profileView
-    Util.corner(avatarHolder, 58)
-    local ring = Util.stroke(avatarHolder, ACCENT, 3, 0.1)
-    ring.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+    Util.corner(avatarHolder, 62)
+    local ring = Util.stroke(avatarHolder, WHITE, 4, 0)
+    local ringGrad = Instance.new("UIGradient")
+    ringGrad.Color = ColorSequence.new(RINGA, RINGB)
+    ringGrad.Rotation = 45
+    ringGrad.Parent = ring
 
     local avatar = Instance.new("ImageLabel")
     avatar.Image = headshot(lp.UserId, 150)
-    avatar.Size = UDim2.fromScale(1, 1)
+    avatar.Size = UDim2.new(1, -8, 1, -8)
+    avatar.AnchorPoint = Vector2.new(0.5, 0.5)
+    avatar.Position = UDim2.fromScale(0.5, 0.5)
     avatar.BackgroundTransparency = 1
     avatar.ZIndex = 4
     avatar.Parent = avatarHolder
     Util.corner(avatar, 58)
 
-    local onlineDot = Instance.new("Frame")
-    onlineDot.Size = UDim2.fromOffset(22, 22)
-    onlineDot.AnchorPoint = Vector2.new(1, 1)
-    onlineDot.Position = UDim2.new(1, 2, 1, 2)
-    onlineDot.BackgroundColor3 = GREEN
-    onlineDot.ZIndex = 5
-    onlineDot.Parent = avatarHolder
-    Util.corner(onlineDot, 11)
-    Util.stroke(onlineDot, WIN, 3, 0)
-
     local dispName = Instance.new("TextLabel")
     dispName.Text = lp.DisplayName or lp.Name
-    dispName.Font = Theme.fonts.title
-    dispName.TextSize = 20
+    dispName.Font = TITLE_FONT
+    dispName.TextSize = 22
     dispName.TextColor3 = WHITE
     dispName.BackgroundTransparency = 1
-    dispName.Position = UDim2.new(0, 0, 0, 166)
-    dispName.Size = UDim2.new(1, 0, 0, 24)
+    dispName.Position = UDim2.new(0, 0, 0, 176)
+    dispName.Size = UDim2.new(1, 0, 0, 26)
     dispName.ZIndex = 3
     dispName.Parent = profileView
 
     local userName = Instance.new("TextLabel")
     userName.Text = lp.Name
-    userName.Font = Theme.fonts.caption
-    userName.TextSize = 14
+    userName.Font = BODY_BOLD
+    userName.TextSize = 15
     userName.TextColor3 = SUB
     userName.BackgroundTransparency = 1
-    userName.Position = UDim2.new(0, 0, 0, 192)
-    userName.Size = UDim2.new(1, 0, 0, 16)
+    userName.Position = UDim2.new(0, 0, 0, 204)
+    userName.Size = UDim2.new(1, 0, 0, 18)
     userName.ZIndex = 3
     userName.Parent = profileView
+
+    -- Bottom stats row: joined / friends joined / friends online
+    local statsRowY = contentH - 150
+    local statCells = {}
+    for i = 1, 3 do
+        local cell = Instance.new("TextLabel")
+        cell.RichText = true
+        cell.Text = ""
+        cell.Font = BODY_BOLD
+        cell.TextSize = 13
+        cell.TextColor3 = WHITE
+        cell.TextWrapped = true
+        cell.BackgroundTransparency = 1
+        cell.Position = UDim2.new((i - 1) / 3, 4, 0, statsRowY)
+        cell.Size = UDim2.new(1 / 3, -8, 0, 44)
+        cell.ZIndex = 3
+        cell.Parent = profileView
+        statCells[i] = cell
+        if i > 1 then
+            local div = Instance.new("Frame")
+            div.Size = UDim2.fromOffset(1, 34)
+            div.Position = UDim2.new((i - 1) / 3, 0, 0, statsRowY + 5)
+            div.BackgroundColor3 = Color3.fromRGB(70, 70, 76)
+            div.BackgroundTransparency = 0.4
+            div.BorderSizePixel = 0
+            div.ZIndex = 3
+            div.Parent = profileView
+        end
+    end
+
+    local joinDate = os.date("%m/%d/%Y", os.time() - lp.AccountAge * 86400)
+    statCells[1].Text = ('Joined<br /><font color="%s">%s</font>'):format(SUB_HEX, joinDate)
+    statCells[2].Text = ('--<br /><font color="%s">friends joined</font>'):format(SUB_HEX)
+    statCells[3].Text = ('--<br /><font color="%s">friends online</font>'):format(SUB_HEX)
 
     -- Chat pill (opens the chat view)
     local chatPill = Instance.new("TextButton")
@@ -333,77 +287,68 @@ function Home.open()
     chatPill.Position = UDim2.new(0.5, 0, 1, -18)
     chatPill.Size = UDim2.new(1, -36, 0, 50)
     chatPill.BackgroundColor3 = FIELD
-    chatPill.BackgroundTransparency = 0.35
+    chatPill.BackgroundTransparency = 0.25
     chatPill.ZIndex = 4
     chatPill.Parent = profileView
-    Util.corner(chatPill, 15)
+    Util.corner(chatPill, 16)
     Util.stroke(chatPill, WHITE, 1, 0.9)
 
-    local pillIcon = Instance.new("Frame")
-    pillIcon.Size = UDim2.fromOffset(30, 30)
-    pillIcon.Position = UDim2.new(0, 12, 0.5, 0)
+    local pillIcon = Instance.new("ImageLabel")
+    pillIcon.Size = UDim2.fromOffset(18, 18)
+    pillIcon.Position = UDim2.new(0, 16, 0.5, 0)
     pillIcon.AnchorPoint = Vector2.new(0, 0.5)
-    pillIcon.BackgroundColor3 = Color3.fromRGB(120, 120, 128)
+    pillIcon.BackgroundTransparency = 1
     pillIcon.ZIndex = 5
     pillIcon.Parent = chatPill
-    Util.corner(pillIcon, 15)
-    local pillGlyph = Instance.new("ImageLabel")
-    pillGlyph.Size = UDim2.fromOffset(16, 16)
-    pillGlyph.AnchorPoint = Vector2.new(0.5, 0.5)
-    pillGlyph.Position = UDim2.fromScale(0.5, 0.5)
-    pillGlyph.BackgroundTransparency = 1
-    pillGlyph.ZIndex = 6
-    pillGlyph.Parent = pillIcon
-    Icons.apply(pillGlyph, "message-circle", WHITE)
+    Icons.apply(pillIcon, "message-circle", SUB)
 
     local pillText = Instance.new("TextLabel")
     pillText.Text = "Chat..."
-    pillText.Font = Theme.fonts.body
+    pillText.Font = BODY_BOLD
     pillText.TextSize = 15
     pillText.TextColor3 = SUB
     pillText.TextXAlignment = Enum.TextXAlignment.Left
     pillText.BackgroundTransparency = 1
-    pillText.Position = UDim2.fromOffset(52, 0)
-    pillText.Size = UDim2.new(1, -60, 1, 0)
+    pillText.Position = UDim2.fromOffset(44, 0)
+    pillText.Size = UDim2.new(1, -52, 1, 0)
     pillText.ZIndex = 5
     pillText.Parent = chatPill
 
     -- -----------------------------------------------------------------------
-    -- Left card: chat view
+    -- Chat view (swaps over the profile card)
     -- -----------------------------------------------------------------------
     local chatView = Instance.new("Frame")
     chatView.Size = UDim2.fromScale(1, 1)
     chatView.BackgroundTransparency = 1
     chatView.Visible = false
     chatView.ZIndex = 3
-    chatView.Parent = leftCard
+    chatView.Parent = profileCard
 
     local chatTitle = Instance.new("TextLabel")
     chatTitle.Text = "Chat"
-    chatTitle.Font = Enum.Font.GothamBold
-    chatTitle.TextSize = 18
+    chatTitle.Font = TITLE_FONT
+    chatTitle.TextSize = 19
     chatTitle.TextColor3 = WHITE
     chatTitle.TextXAlignment = Enum.TextXAlignment.Left
     chatTitle.BackgroundTransparency = 1
-    chatTitle.Position = UDim2.fromOffset(20, 16)
-    chatTitle.Size = UDim2.fromOffset(120, 22)
+    chatTitle.Position = UDim2.fromOffset(20, 18)
+    chatTitle.Size = UDim2.fromOffset(80, 22)
     chatTitle.ZIndex = 4
     chatTitle.Parent = chatView
 
     local chatClose = Instance.new("TextButton")
     chatClose.Text = ""
     chatClose.AutoButtonColor = false
-    chatClose.Size = UDim2.fromOffset(30, 30)
+    chatClose.Size = UDim2.fromOffset(28, 28)
     chatClose.AnchorPoint = Vector2.new(1, 0)
-    chatClose.Position = UDim2.new(1, -14, 0, 12)
+    chatClose.Position = UDim2.new(1, -14, 0, 15)
     chatClose.BackgroundColor3 = FIELD
-    chatClose.BackgroundTransparency = 0.4
+    chatClose.BackgroundTransparency = 0.3
     chatClose.ZIndex = 4
     chatClose.Parent = chatView
-    Util.corner(chatClose, 10)
-    Util.stroke(chatClose, WHITE, 1, 0.9)
+    Util.corner(chatClose, 9)
     local chatCloseGlyph = Instance.new("ImageLabel")
-    chatCloseGlyph.Size = UDim2.fromOffset(14, 14)
+    chatCloseGlyph.Size = UDim2.fromOffset(13, 13)
     chatCloseGlyph.AnchorPoint = Vector2.new(0.5, 0.5)
     chatCloseGlyph.Position = UDim2.fromScale(0.5, 0.5)
     chatCloseGlyph.BackgroundTransparency = 1
@@ -411,9 +356,41 @@ function Home.open()
     chatCloseGlyph.Parent = chatClose
     Icons.apply(chatCloseGlyph, "x", SUB)
 
+    -- Channel tabs: Server | Universal
+    local activeTab = "server"
+    local tabs = {}
+    local function makeTab(x, w, key, label)
+        local t = Instance.new("TextButton")
+        t.Text = label
+        t.AutoButtonColor = false
+        t.Font = BODY_BOLD
+        t.TextSize = 12
+        t.TextColor3 = SUB
+        t.Position = UDim2.fromOffset(x, 48)
+        t.Size = UDim2.fromOffset(w, 26)
+        t.BackgroundColor3 = FIELD
+        t.BackgroundTransparency = 1
+        t.ZIndex = 4
+        t.Parent = chatView
+        Util.corner(t, 13)
+        tabs[key] = t
+        return t
+    end
+    makeTab(20, 70, "server", "Server")
+    makeTab(96, 86, "universal", "Universal")
+
+    local function setTab(key)
+        activeTab = key
+        for k, t in pairs(tabs) do
+            local on = (k == key)
+            t.TextColor3 = on and WHITE or SUB
+            t.BackgroundTransparency = on and 0.25 or 1
+        end
+    end
+
     local chatScroll = Instance.new("ScrollingFrame")
-    chatScroll.Position = UDim2.fromOffset(12, 52)
-    chatScroll.Size = UDim2.new(1, -24, 1, -122)
+    chatScroll.Position = UDim2.fromOffset(12, 84)
+    chatScroll.Size = UDim2.new(1, -24, 1, -152)
     chatScroll.BackgroundTransparency = 1
     chatScroll.BorderSizePixel = 0
     chatScroll.ScrollBarThickness = 3
@@ -429,14 +406,14 @@ function Home.open()
     Util.autoCanvas(chatScroll, "Y")
 
     local chatEmpty = Instance.new("TextLabel")
-    chatEmpty.Text = "Server chat shows up here."
+    chatEmpty.Text = "Messages show up here."
     chatEmpty.Font = Theme.fonts.caption
-    chatEmpty.TextSize = 14
+    chatEmpty.TextSize = 13
     chatEmpty.TextColor3 = SUB
     chatEmpty.TextWrapped = true
     chatEmpty.BackgroundTransparency = 1
     chatEmpty.AnchorPoint = Vector2.new(0.5, 0.5)
-    chatEmpty.Position = UDim2.fromScale(0.5, 0.42)
+    chatEmpty.Position = UDim2.fromScale(0.5, 0.45)
     chatEmpty.Size = UDim2.new(1, -60, 0, 40)
     chatEmpty.ZIndex = 4
     chatEmpty.Parent = chatView
@@ -446,28 +423,11 @@ function Home.open()
     chatInputHolder.Position = UDim2.new(0.5, 0, 1, -14)
     chatInputHolder.Size = UDim2.new(1, -28, 0, 46)
     chatInputHolder.BackgroundColor3 = FIELD
-    chatInputHolder.BackgroundTransparency = 0.35
+    chatInputHolder.BackgroundTransparency = 0.25
     chatInputHolder.ZIndex = 4
     chatInputHolder.Parent = chatView
     Util.corner(chatInputHolder, 14)
     Util.stroke(chatInputHolder, WHITE, 1, 0.9)
-
-    local inputIcon = Instance.new("Frame")
-    inputIcon.Size = UDim2.fromOffset(26, 26)
-    inputIcon.Position = UDim2.new(0, 10, 0.5, 0)
-    inputIcon.AnchorPoint = Vector2.new(0, 0.5)
-    inputIcon.BackgroundColor3 = Color3.fromRGB(120, 120, 128)
-    inputIcon.ZIndex = 5
-    inputIcon.Parent = chatInputHolder
-    Util.corner(inputIcon, 13)
-    local inputGlyph = Instance.new("ImageLabel")
-    inputGlyph.Size = UDim2.fromOffset(14, 14)
-    inputGlyph.AnchorPoint = Vector2.new(0.5, 0.5)
-    inputGlyph.Position = UDim2.fromScale(0.5, 0.5)
-    inputGlyph.BackgroundTransparency = 1
-    inputGlyph.ZIndex = 6
-    inputGlyph.Parent = inputIcon
-    Icons.apply(inputGlyph, "message-circle", WHITE)
 
     local chatBox = Instance.new("TextBox")
     chatBox.PlaceholderText = "Message..."
@@ -475,12 +435,12 @@ function Home.open()
     chatBox.Text = ""
     chatBox.ClearTextOnFocus = false
     chatBox.Font = Theme.fonts.body
-    chatBox.TextSize = 15
+    chatBox.TextSize = 14
     chatBox.TextColor3 = WHITE
     chatBox.TextXAlignment = Enum.TextXAlignment.Left
     chatBox.BackgroundTransparency = 1
-    chatBox.Position = UDim2.fromOffset(46, 0)
-    chatBox.Size = UDim2.new(1, -56, 1, 0)
+    chatBox.Position = UDim2.fromOffset(16, 0)
+    chatBox.Size = UDim2.new(1, -26, 1, 0)
     chatBox.ZIndex = 5
     chatBox.Parent = chatInputHolder
 
@@ -493,67 +453,17 @@ function Home.open()
         profileView.Visible = true
     end)
 
-    -- Chat message rows -----------------------------------------------------
+    -- Message rows, one store per tab -------------------------------------
     local msgOrder = 0
-    local msgRows = {}
+    local rowsByTab = { server = {}, universal = {} }
 
-    local function addMessage(name, text, userId, isYou)
-        if not alive then return end
-        chatEmpty.Visible = false
-        msgOrder += 1
-        local row = Instance.new("Frame")
-        row.Size = UDim2.new(1, 0, 0, 40)
-        row.AutomaticSize = Enum.AutomaticSize.Y
-        row.BackgroundTransparency = 1
-        row.LayoutOrder = msgOrder
-        row.ZIndex = 4
-        row.Parent = chatScroll
-
-        local av = Instance.new("ImageLabel")
-        av.Size = UDim2.fromOffset(32, 32)
-        av.BackgroundColor3 = FIELD
-        av.ZIndex = 4
-        av.Parent = row
-        Util.corner(av, 16)
-        if userId then
-            av.Image = headshot(userId, 48)
-        else
-            av.Image = ""
+    local function refilterRows()
+        for tabKey, rows in pairs(rowsByTab) do
+            local show = (tabKey == activeTab)
+            for _, r in ipairs(rows) do r.Visible = show end
         end
-
-        local nm = Instance.new("TextLabel")
-        nm.Text = isYou and "You" or name
-        nm.Font = Theme.fonts.title
-        nm.TextSize = 14
-        nm.TextColor3 = ACCENT
-        nm.TextXAlignment = Enum.TextXAlignment.Left
-        nm.BackgroundTransparency = 1
-        nm.Position = UDim2.fromOffset(42, 0)
-        nm.Size = UDim2.new(1, -46, 0, 16)
-        nm.ZIndex = 4
-        nm.Parent = row
-
-        local tx = Instance.new("TextLabel")
-        tx.Text = text
-        tx.Font = Theme.fonts.body
-        tx.TextSize = 14
-        tx.TextColor3 = Color3.fromRGB(225, 225, 230)
-        tx.TextXAlignment = Enum.TextXAlignment.Left
-        tx.TextYAlignment = Enum.TextYAlignment.Top
-        tx.TextWrapped = true
-        tx.BackgroundTransparency = 1
-        tx.AutomaticSize = Enum.AutomaticSize.Y
-        tx.Position = UDim2.fromOffset(42, 18)
-        tx.Size = UDim2.new(1, -46, 0, 16)
-        tx.ZIndex = 4
-        tx.Parent = row
-
-        msgRows[#msgRows + 1] = row
-        if #msgRows > 60 then
-            local old = table.remove(msgRows, 1)
-            old:Destroy()
-        end
-
+        local any = #rowsByTab[activeTab] > 0
+        chatEmpty.Visible = not any
         task.defer(function()
             pcall(function()
                 chatScroll.CanvasPosition = Vector2.new(0, math.max(0, chatLayout.AbsoluteContentSize.Y - chatScroll.AbsoluteWindowSize.Y + 8))
@@ -561,9 +471,111 @@ function Home.open()
         end)
     end
 
-    -- Chat wiring: pick by what the game actually exposes (some games report
-    -- LegacyChatService but only have TextChannels, and vice versa) ----------
-    local sendMessage
+    -- addMessage: avatarSpec = {userId=n} | {url=s, key=s} | {initial=s}
+    local function addMessage(tabKey, name, text, nameColor, avatarSpec)
+        if not alive then return end
+        msgOrder += 1
+        local row = Instance.new("Frame")
+        row.Size = UDim2.new(1, 0, 0, 40)
+        row.AutomaticSize = Enum.AutomaticSize.Y
+        row.BackgroundTransparency = 1
+        row.LayoutOrder = msgOrder
+        row.Visible = (tabKey == activeTab)
+        row.ZIndex = 4
+        row.Parent = chatScroll
+
+        local av = Instance.new("ImageLabel")
+        av.Size = UDim2.fromOffset(30, 30)
+        av.BackgroundColor3 = FIELD
+        av.ZIndex = 4
+        av.Parent = row
+        Util.corner(av, 15)
+        if avatarSpec.userId then
+            av.Image = headshot(avatarSpec.userId, 48)
+        elseif avatarSpec.url then
+            local ini = Instance.new("TextLabel")
+            ini.Text = (name:sub(1, 1) or "?"):upper()
+            ini.Font = BODY_BOLD
+            ini.TextSize = 13
+            ini.TextColor3 = WHITE
+            ini.BackgroundTransparency = 1
+            ini.Size = UDim2.fromScale(1, 1)
+            ini.ZIndex = 5
+            ini.Parent = av
+            task.spawn(function()
+                local id = Util.remoteImage(avatarSpec.url, avatarSpec.key)
+                if id and av.Parent then
+                    av.Image = id
+                    ini:Destroy()
+                end
+            end)
+        else
+            local ini = Instance.new("TextLabel")
+            ini.Text = (avatarSpec.initial or "?"):upper()
+            ini.Font = BODY_BOLD
+            ini.TextSize = 13
+            ini.TextColor3 = WHITE
+            ini.BackgroundTransparency = 1
+            ini.Size = UDim2.fromScale(1, 1)
+            ini.ZIndex = 5
+            ini.Parent = av
+        end
+
+        local nm = Instance.new("TextLabel")
+        nm.Text = name
+        nm.Font = BODY_BOLD
+        nm.TextSize = 13
+        nm.TextColor3 = nameColor or ACCENT
+        nm.TextXAlignment = Enum.TextXAlignment.Left
+        nm.TextTruncate = Enum.TextTruncate.AtEnd
+        nm.BackgroundTransparency = 1
+        nm.Position = UDim2.fromOffset(40, 0)
+        nm.Size = UDim2.new(1, -44, 0, 15)
+        nm.ZIndex = 4
+        nm.Parent = row
+
+        local tx = Instance.new("TextLabel")
+        tx.Text = text
+        tx.Font = Theme.fonts.body
+        tx.TextSize = 13
+        tx.TextColor3 = Color3.fromRGB(222, 222, 228)
+        tx.TextXAlignment = Enum.TextXAlignment.Left
+        tx.TextYAlignment = Enum.TextYAlignment.Top
+        tx.TextWrapped = true
+        tx.BackgroundTransparency = 1
+        tx.AutomaticSize = Enum.AutomaticSize.Y
+        tx.Position = UDim2.fromOffset(40, 17)
+        tx.Size = UDim2.new(1, -44, 0, 15)
+        tx.ZIndex = 4
+        tx.Parent = row
+
+        local rows = rowsByTab[tabKey]
+        rows[#rows + 1] = row
+        if #rows > 60 then
+            local old = table.remove(rows, 1)
+            old:Destroy()
+        end
+
+        if tabKey == activeTab then
+            chatEmpty.Visible = false
+            task.defer(function()
+                pcall(function()
+                    chatScroll.CanvasPosition = Vector2.new(0, math.max(0, chatLayout.AbsoluteContentSize.Y - chatScroll.AbsoluteWindowSize.Y + 8))
+                end)
+            end)
+        end
+    end
+
+    for key, t in pairs(tabs) do
+        t.MouseButton1Click:Connect(function()
+            setTab(key)
+            refilterRows()
+        end)
+    end
+    setTab("server")
+
+    -- Server chat wiring: pick by what the game actually exposes ------------
+    local sendServer
     local generalChannel
     pcall(function()
         local channels = TextChatService:FindFirstChild("TextChannels")
@@ -577,9 +589,10 @@ function Home.open()
             if st ~= nil and st ~= Enum.TextChatMessageStatus.Success then return end
             local src = msg.TextSource
             if not src then return end
-            addMessage(src.Name, msg.Text, src.UserId, src.UserId == lp.UserId)
+            local you = src.UserId == lp.UserId
+            addMessage("server", you and "You" or src.Name, msg.Text, ACCENT, { userId = src.UserId })
         end)
-        sendMessage = function(text)
+        sendServer = function(text)
             pcall(function() generalChannel:SendAsync(text) end)
         end
     else
@@ -591,18 +604,19 @@ function Home.open()
                 if data.MessageType and data.MessageType ~= "Message" then return end
                 local speaker = data.FromSpeaker or "?"
                 local pl = Players:FindFirstChild(speaker)
-                addMessage(speaker, data.Message or "", pl and pl.UserId or nil, pl == lp)
+                addMessage("server", pl == lp and "You" or speaker, data.Message or "",
+                    ACCENT, pl and { userId = pl.UserId } or { initial = speaker:sub(1, 1) })
             end)
         else
             local function hook(pl)
                 conns[#conns + 1] = pl.Chatted:Connect(function(msg)
-                    addMessage(pl.Name, msg, pl.UserId, pl == lp)
+                    addMessage("server", pl == lp and "You" or pl.Name, msg, ACCENT, { userId = pl.UserId })
                 end)
             end
             for _, pl in ipairs(Players:GetPlayers()) do hook(pl) end
             conns[#conns + 1] = Players.PlayerAdded:Connect(hook)
         end
-        sendMessage = function(text)
+        sendServer = function(text)
             pcall(function()
                 local ev = ReplicatedStorage:FindFirstChild("DefaultChatSystemChatEvents")
                 local say = ev and ev:FindFirstChild("SayMessageRequest")
@@ -611,28 +625,104 @@ function Home.open()
         end
     end
 
+    -- Universal chat: poll the relay --------------------------------------
+    local lastUniversalId = nil
+
+    local function renderUniversal(list)
+        for _, m in ipairs(list) do
+            lastUniversalId = m.id
+            local name = m.author or "?"
+            local isRoblox = m.roblox == true
+            if isRoblox then name = name:gsub("%s*%(Roblox%)%s*$", "") end
+            local isYou = isRoblox and name == lp.Name
+            local text = m.content or ""
+            if m.images and #m.images > 0 then
+                text = (text ~= "" and text .. " " or "") .. "[image]"
+            end
+            if text ~= "" then
+                local color = isYou and ACCENT or (isRoblox and ACCENT or BLURPLE)
+                local avatarSpec
+                if isRoblox and isYou then
+                    avatarSpec = { userId = lp.UserId }
+                elseif m.avatar then
+                    avatarSpec = { url = m.avatar, key = "dcav_" .. tostring(m.authorId or name) .. ".png" }
+                else
+                    avatarSpec = { initial = name:sub(1, 1) }
+                end
+                addMessage("universal", isYou and "You" or name, text, color, avatarSpec)
+            end
+        end
+    end
+
+    local function fetchUniversal()
+        local url = RELAY_URL .. "/messages?channel=" .. UNIVERSAL_ID .. "&key=" .. API_KEY
+        if lastUniversalId then url = url .. "&after=" .. lastUniversalId end
+        local body = Util.httpGetH(url, { ["X-API-Key"] = API_KEY })
+        if not body then return nil end
+        local ok, list = pcall(function() return HttpService:JSONDecode(body) end)
+        if not ok or type(list) ~= "table" then return nil end
+        return list
+    end
+
+    task.spawn(function()
+        -- first fetch dumps recent history; render only the tail
+        local first = fetchUniversal()
+        if first and alive then
+            if #first > 15 then
+                local tail = {}
+                for i = #first - 14, #first do tail[#tail + 1] = first[i] end
+                -- keep pagination anchored to the true newest message
+                for _, m in ipairs(first) do lastUniversalId = m.id end
+                renderUniversal(tail)
+            else
+                renderUniversal(first)
+            end
+        end
+        while alive and gui.Parent do
+            for _ = 1, 5 do
+                if not alive then return end
+                task.wait(0.5)
+            end
+            if chatView.Visible or lastUniversalId == nil then
+                local list = fetchUniversal()
+                if list and alive then renderUniversal(list) end
+            end
+        end
+    end)
+
+    local function sendUniversal(text)
+        if not Util.hasRequest() then
+            addMessage("universal", "SYNC", "This executor can't POST (no request API) — sending is disabled, reading still works.", SUB, { initial = "!" })
+            return
+        end
+        task.spawn(function()
+            local ok = Util.httpPost(RELAY_URL .. "/send?key=" .. API_KEY, { ["X-API-Key"] = API_KEY },
+                HttpService:JSONEncode({
+                    channel = UNIVERSAL_ID,
+                    robloxUserId = lp.UserId,
+                    username = lp.Name,
+                    text = text,
+                }))
+            if not ok and alive then
+                addMessage("universal", "SYNC", "Message didn't send (relay rejected it).", SUB, { initial = "!" })
+            end
+        end)
+    end
+
     chatBox.FocusLost:Connect(function(enterPressed)
         if not enterPressed then return end
         local text = chatBox.Text
         if text:gsub("%s", "") == "" then return end
         chatBox.Text = ""
-        sendMessage(text)
+        if activeTab == "universal" then sendUniversal(text) else sendServer(text) end
     end)
 
     -- -----------------------------------------------------------------------
-    -- Right card: Friend Activity (orca port)
+    -- Friend Activity card (col 2) — orca look: full-bleed thumbnails with
+    -- overlapping friend chips that expand green on hover
     -- -----------------------------------------------------------------------
-    local faTitle = Instance.new("TextLabel")
-    faTitle.Text = "Friend Activity"
-    faTitle.Font = Enum.Font.GothamBold
-    faTitle.TextSize = 18
-    faTitle.TextColor3 = WHITE
-    faTitle.TextXAlignment = Enum.TextXAlignment.Left
-    faTitle.BackgroundTransparency = 1
-    faTitle.Position = UDim2.fromOffset(20, 16)
-    faTitle.Size = UDim2.new(1, -40, 0, 22)
-    faTitle.ZIndex = 4
-    faTitle.Parent = rightCard
+    local faCard = makeCard(PAD + COL1 + GAPX, contentY, COL2, contentH)
+    cardTitle(faCard, "Friend Activity")
 
     local faEmpty = Instance.new("TextLabel")
     faEmpty.Text = "Your friends will appear here when they're in-game."
@@ -645,11 +735,11 @@ function Home.open()
     faEmpty.Position = UDim2.fromScale(0.5, 0.5)
     faEmpty.Size = UDim2.new(1, -60, 0, 40)
     faEmpty.ZIndex = 4
-    faEmpty.Parent = rightCard
+    faEmpty.Parent = faCard
 
     local faScroll = Instance.new("ScrollingFrame")
-    faScroll.Position = UDim2.fromOffset(14, 48)
-    faScroll.Size = UDim2.new(1, -28, 1, -62)
+    faScroll.Position = UDim2.fromOffset(20, 52)
+    faScroll.Size = UDim2.new(1, -34, 1, -66)
     faScroll.BackgroundTransparency = 1
     faScroll.BorderSizePixel = 0
     faScroll.ScrollBarThickness = 3
@@ -657,12 +747,11 @@ function Home.open()
     faScroll.ScrollBarImageTransparency = 0.6
     faScroll.CanvasSize = UDim2.new()
     faScroll.ZIndex = 4
-    faScroll.Parent = rightCard
-    local faLayout = Instance.new("UIListLayout")
-    faLayout.SortOrder = Enum.SortOrder.LayoutOrder
-    faLayout.Padding = UDim.new(0, 10)
-    faLayout.Parent = faScroll
-    Util.autoCanvas(faScroll, "Y")
+    faScroll.Parent = faCard
+
+    local THUMB_W = COL2 - 40
+    local THUMB_H = math.floor(THUMB_W * 9 / 16 + 0.5)
+    local ENTRY_H = THUMB_H + 24 + 22   -- thumbnail + chip overhang + gap
 
     local universeCache = {}
     local nameCache = {}
@@ -693,7 +782,7 @@ function Home.open()
     -- PlaceId + GameId, bucketed per place, most friends first.
     local function fetchGames()
         local ok, friends = pcall(function() return lp:GetFriendsOnline(200) end)
-        if not ok or type(friends) ~= "table" then return nil end
+        if not ok or type(friends) ~= "table" then return nil, nil end
         local byPlace, order = {}, {}
         for _, fr in ipairs(friends) do
             if fr.PlaceId and fr.GameId then
@@ -707,49 +796,52 @@ function Home.open()
             end
         end
         table.sort(order, function(a, b) return #a.friends > #b.friends end)
-        return order
+        return order, #friends
     end
 
+    -- orca FriendItem: 44px avatar circle; hover -> green pill with play icon
     local function buildFriendChip(parent, fr, index)
         local chip = Instance.new("TextButton")
         chip.Text = ""
         chip.AutoButtonColor = false
         chip.Size = UDim2.fromOffset(44, 44)
-        chip.BackgroundColor3 = FIELD
-        chip.BackgroundTransparency = 0.2
+        chip.Position = UDim2.fromOffset((index - 1) * 52, 0)
+        chip.BackgroundColor3 = CARD
         chip.ClipsDescendants = true
-        chip.LayoutOrder = index
-        chip.ZIndex = 5
+        chip.ZIndex = 6
         chip.Parent = parent
         Util.corner(chip, 22)
-        local chipStroke = Util.stroke(chip, WHITE, 1, 0.88)
+        local chipStroke = Util.stroke(chip, WHITE, 1, 0.85)
+        local glow = Util.shadow(chip, { blur = 26, spread = 0, transparency = 1, offset = UDim2.fromOffset(0, 4), color = GREEN })
 
         local av = Instance.new("ImageLabel")
         av.Image = headshot(fr.VisitorId, 100)
         av.Size = UDim2.fromOffset(44, 44)
         av.BackgroundTransparency = 1
-        av.ZIndex = 6
+        av.ZIndex = 7
         av.Parent = chip
         Util.corner(av, 22)
 
         local play = Instance.new("ImageLabel")
-        play.Size = UDim2.fromOffset(18, 18)
-        play.Position = UDim2.fromOffset(52, 13)
+        play.Size = UDim2.fromOffset(20, 20)
+        play.Position = UDim2.fromOffset(52, 12)
         play.BackgroundTransparency = 1
         play.ImageTransparency = 1
-        play.ZIndex = 6
+        play.ZIndex = 7
         play.Parent = chip
         Icons.apply(play, "chevron-right", WHITE)
 
         chip.MouseEnter:Connect(function()
-            Util.tween(chip, { Size = UDim2.fromOffset(78, 44), BackgroundColor3 = ACCENT, BackgroundTransparency = 0 }, 0.16)
+            Util.tween(chip, { Size = UDim2.fromOffset(82, 44), BackgroundColor3 = GREEN }, 0.16)
             Util.tween(play, { ImageTransparency = 0 }, 0.16)
-            Util.tween(chipStroke, { Transparency = 0.55 }, 0.16)
+            Util.tween(chipStroke, { Transparency = 1 }, 0.16)
+            if glow then Util.tween(glow, { Transparency = 0.45 }, 0.16) end
         end)
         chip.MouseLeave:Connect(function()
-            Util.tween(chip, { Size = UDim2.fromOffset(44, 44), BackgroundColor3 = FIELD, BackgroundTransparency = 0.2 }, 0.16)
+            Util.tween(chip, { Size = UDim2.fromOffset(44, 44), BackgroundColor3 = CARD }, 0.16)
             Util.tween(play, { ImageTransparency = 1 }, 0.16)
-            Util.tween(chipStroke, { Transparency = 0.88 }, 0.16)
+            Util.tween(chipStroke, { Transparency = 0.85 }, 0.16)
+            if glow then Util.tween(glow, { Transparency = 1 }, 0.16) end
         end)
         chip.MouseButton1Click:Connect(function()
             pcall(function()
@@ -758,106 +850,167 @@ function Home.open()
         end)
     end
 
-    local function render(games)
+    local function renderGames(games)
         if not alive then return end
-        for _, child in ipairs(faScroll:GetChildren()) do
-            if not child:IsA("UIListLayout") then child:Destroy() end
-        end
+        for _, child in ipairs(faScroll:GetChildren()) do child:Destroy() end
         faEmpty.Visible = #games == 0
+        faScroll.CanvasSize = UDim2.fromOffset(0, #games * ENTRY_H + 8)
 
         for gi, g in ipairs(games) do
-            local card = Instance.new("Frame")
-            card.Size = UDim2.new(1, -4, 0, 122)
-            card.BackgroundColor3 = FIELD
-            card.BackgroundTransparency = 0.45
-            card.BorderSizePixel = 0
-            card.LayoutOrder = gi
-            card.ZIndex = 4
-            card.Parent = faScroll
-            Util.corner(card, 14)
-            Util.stroke(card, WHITE, 1, 0.9)
+            local y = (gi - 1) * ENTRY_H
 
-            local icon = Instance.new("ImageLabel")
-            icon.Size = UDim2.fromOffset(48, 48)
-            icon.Position = UDim2.fromOffset(14, 12)
-            icon.BackgroundColor3 = CARD
-            icon.ZIndex = 5
-            icon.Parent = card
-            Util.corner(icon, 12)
+            local thumb = Instance.new("ImageLabel")
+            thumb.Size = UDim2.fromOffset(THUMB_W, THUMB_H)
+            thumb.Position = UDim2.fromOffset(0, y)
+            thumb.BackgroundColor3 = FIELD
+            thumb.ScaleType = Enum.ScaleType.Crop
+            thumb.ZIndex = 5
+            thumb.Parent = faScroll
+            Util.corner(thumb, 12)
+            Util.stroke(thumb, WHITE, 1, 0.86)
 
+            -- Fallback name shows until (unless) the thumbnail loads
             local nameLabel = Instance.new("TextLabel")
             nameLabel.Text = "..."
-            nameLabel.Font = Theme.fonts.title
-            nameLabel.TextSize = 15
+            nameLabel.Font = BODY_BOLD
+            nameLabel.TextSize = 14
             nameLabel.TextColor3 = WHITE
-            nameLabel.TextXAlignment = Enum.TextXAlignment.Left
-            nameLabel.TextTruncate = Enum.TextTruncate.AtEnd
+            nameLabel.TextWrapped = true
             nameLabel.BackgroundTransparency = 1
-            nameLabel.Position = UDim2.fromOffset(72, 16)
-            nameLabel.Size = UDim2.new(1, -86, 0, 18)
-            nameLabel.ZIndex = 5
-            nameLabel.Parent = card
+            nameLabel.AnchorPoint = Vector2.new(0.5, 0.5)
+            nameLabel.Position = UDim2.fromScale(0.5, 0.45)
+            nameLabel.Size = UDim2.new(1, -24, 0, 40)
+            nameLabel.ZIndex = 6
+            nameLabel.Parent = thumb
 
-            local countLabel = Instance.new("TextLabel")
-            countLabel.Text = #g.friends .. (#g.friends == 1 and " friend here" or " friends here")
-            countLabel.Font = Theme.fonts.caption
-            countLabel.TextSize = 12
-            countLabel.TextColor3 = SUB
-            countLabel.TextXAlignment = Enum.TextXAlignment.Left
-            countLabel.BackgroundTransparency = 1
-            countLabel.Position = UDim2.fromOffset(72, 36)
-            countLabel.Size = UDim2.new(1, -86, 0, 14)
-            countLabel.ZIndex = 5
-            countLabel.Parent = card
-
-            local chips = Instance.new("ScrollingFrame")
-            chips.Position = UDim2.fromOffset(14, 68)
-            chips.Size = UDim2.new(1, -28, 0, 44)
-            chips.BackgroundTransparency = 1
-            chips.BorderSizePixel = 0
-            chips.ScrollBarThickness = 0
-            chips.ScrollingDirection = Enum.ScrollingDirection.X
-            chips.CanvasSize = UDim2.fromOffset(#g.friends * 54 + 40, 0)
-            chips.ZIndex = 5
-            chips.Parent = card
-            local chipsLayout = Instance.new("UIListLayout")
-            chipsLayout.FillDirection = Enum.FillDirection.Horizontal
-            chipsLayout.SortOrder = Enum.SortOrder.LayoutOrder
-            chipsLayout.Padding = UDim.new(0, 10)
-            chipsLayout.Parent = chips
+            local chipRow = Instance.new("Frame")
+            chipRow.Size = UDim2.new(1, 0, 0, 44)
+            chipRow.Position = UDim2.fromOffset(10, y + THUMB_H - 22)
+            chipRow.BackgroundTransparency = 1
+            chipRow.ZIndex = 6
+            chipRow.Parent = faScroll
 
             for fi, fr in ipairs(g.friends) do
-                buildFriendChip(chips, fr, fi)
+                buildFriendChip(chipRow, fr, fi)
             end
 
-            -- Slow lookups (name + universe icon) resolved after the card shows
             task.spawn(function()
                 local nm = gameNameFor(g.placeId)
                 if nameLabel.Parent then nameLabel.Text = nm end
+                -- 768x432 game thumbnail: universe id -> thumbnails API -> CDN png
+                -- (the old www.roblox.com/asset-thumbnail endpoint now returns HTML)
                 local uid = universeIdFor(g.placeId)
-                if uid and icon.Parent then
-                    icon.Image = ("rbxthumb://type=GameIcon&id=%d&w=150&h=150"):format(uid)
+                local cdn
+                if uid then
+                    local body = Util.httpGet("https://thumbnails.roblox.com/v1/games/multiget/thumbnails?universeIds="
+                        .. uid .. "&size=768x432&format=Png&countPerUniverse=1")
+                    if body then
+                        pcall(function()
+                            local d = HttpService:JSONDecode(body)
+                            cdn = d.data[1].thumbnails[1].imageUrl
+                        end)
+                    end
+                end
+                local id = cdn and Util.remoteImage(cdn, "gthumb2_" .. g.placeId .. ".png")
+                if id and thumb.Parent then
+                    thumb.Image = id
+                    nameLabel.Visible = false
+                elseif uid and thumb.Parent then
+                    thumb.Image = ("rbxthumb://type=GameIcon&id=%d&w=150&h=150"):format(uid)
+                    thumb.ImageTransparency = 0.35
                 end
             end)
         end
     end
 
-    -- Refresh loop: 30s when populated, 5s retry when empty (orca's cadence)
-    task.spawn(function()
-        while alive and gui.Parent do
-            local games = fetchGames()
-            if not alive then return end
-            if games then render(games) end
-            local delaySec = (games and #games > 0) and 30 or 5
-            for _ = 1, delaySec * 2 do
-                if not alive then return end
-                task.wait(0.5)
-            end
-        end
+    -- -----------------------------------------------------------------------
+    -- Server card + clock pill (col 3)
+    -- -----------------------------------------------------------------------
+    local col3X = PAD + COL1 + GAPX + COL2 + GAPX
+    local serverCard = makeCard(col3X, contentY, COL3, 190)
+    cardTitle(serverCard, "Server")
+
+    local serverRows = {}
+    for i = 1, 3 do
+        local r = Instance.new("TextLabel")
+        r.RichText = true
+        r.Text = ""
+        r.Font = BODY_BOLD
+        r.TextSize = 16
+        r.TextColor3 = WHITE
+        r.TextXAlignment = Enum.TextXAlignment.Left
+        r.BackgroundTransparency = 1
+        r.Position = UDim2.fromOffset(20, 24 + i * 34)
+        r.Size = UDim2.new(1, -90, 0, 22)
+        r.ZIndex = 4
+        r.Parent = serverCard
+        serverRows[i] = r
+    end
+
+    -- Hop (random server) + rejoin buttons, orca's shuffle/retry pair
+    local function serverButton(y, iconName, cb)
+        local b = Instance.new("TextButton")
+        b.Text = ""
+        b.AutoButtonColor = false
+        b.Size = UDim2.fromOffset(50, 50)
+        b.AnchorPoint = Vector2.new(1, 0)
+        b.Position = UDim2.new(1, -16, 0, y)
+        b.BackgroundColor3 = FIELD
+        b.BackgroundTransparency = 0.25
+        b.ZIndex = 4
+        b.Parent = serverCard
+        Util.corner(b, 14)
+        Util.stroke(b, WHITE, 1, 0.9)
+        local g = Instance.new("ImageLabel")
+        g.Size = UDim2.fromOffset(22, 22)
+        g.AnchorPoint = Vector2.new(0.5, 0.5)
+        g.Position = UDim2.fromScale(0.5, 0.5)
+        g.BackgroundTransparency = 1
+        g.ZIndex = 5
+        g.Parent = b
+        Icons.apply(g, iconName, SUB)
+        b.MouseEnter:Connect(function()
+            Util.tween(b, { BackgroundTransparency = 0 }, 0.12)
+            g.ImageColor3 = WHITE
+        end)
+        b.MouseLeave:Connect(function()
+            Util.tween(b, { BackgroundTransparency = 0.25 }, 0.12)
+            g.ImageColor3 = SUB
+        end)
+        b.MouseButton1Click:Connect(cb)
+        return b
+    end
+
+    serverButton(58, "orbit", function()
+        pcall(function() TeleportService:Teleport(game.PlaceId, lp) end)
+    end)
+    serverButton(120, "power", function()
+        pcall(function() TeleportService:TeleportToPlaceInstance(game.PlaceId, game.JobId, lp) end)
     end)
 
+    local clockCard = makeCard(col3X, contentY + 190 + GAPX, COL3, 62)
+    local clockIcon = Instance.new("ImageLabel")
+    clockIcon.Size = UDim2.fromOffset(20, 20)
+    clockIcon.AnchorPoint = Vector2.new(0, 0.5)
+    clockIcon.Position = UDim2.new(0, 20, 0.5, 0)
+    clockIcon.BackgroundTransparency = 1
+    clockIcon.ZIndex = 4
+    clockIcon.Parent = clockCard
+    Icons.apply(clockIcon, "clock", WHITE)
+
+    local clockLabel = Instance.new("TextLabel")
+    clockLabel.Font = TITLE_FONT
+    clockLabel.TextSize = 19
+    clockLabel.TextColor3 = WHITE
+    clockLabel.TextXAlignment = Enum.TextXAlignment.Left
+    clockLabel.BackgroundTransparency = 1
+    clockLabel.Position = UDim2.fromOffset(52, 0)
+    clockLabel.Size = UDim2.new(1, -60, 1, 0)
+    clockLabel.ZIndex = 4
+    clockLabel.Parent = clockCard
+
     -- -----------------------------------------------------------------------
-    -- Live header/stats loop
+    -- Live loops
     -- -----------------------------------------------------------------------
     local function ping()
         local ms
@@ -872,16 +1025,55 @@ function Home.open()
 
     task.spawn(function()
         while alive and gui.Parent do
-            local t = Util.date("%I:%M %p"):gsub("^0", "")
-            clockLabel.Text = t
-            clockIcon.Position = UDim2.new(1, -PAD - clockLabel.TextBounds.X - 10, 0, TB + 24)
+            clockLabel.Text = Util.date("%I:%M %p"):gsub("^0", "")
 
-            statValues.Players.Text = #Players:GetPlayers() .. "/" .. Players.MaxPlayers
+            local white = "#FFFFFF"
+            serverRows[1].Text = ('<font color="%s">%d / %d</font> <font color="%s">players</font>')
+                :format(white, #Players:GetPlayers(), Players.MaxPlayers, SUB_HEX)
+            local mins = math.floor(time() / 60)
+            serverRows[2].Text = ('<font color="%s">%d %s</font> <font color="%s">elapsed</font>')
+                :format(white, mins, mins == 1 and "minute" or "minutes", SUB_HEX)
             local ms = ping()
-            statValues.Ping.Text = ms and (ms .. "ms") or "--"
-            local up = math.floor(time())
-            statValues.Uptime.Text = string.format("%02d:%02d:%02d", up // 3600, (up // 60) % 60, up % 60)
+            serverRows[3].Text = ('<font color="%s">%s</font> <font color="%s">ping</font>')
+                :format(white, ms and (ms .. " ms") or "--", SUB_HEX)
             task.wait(1)
+        end
+    end)
+
+    -- Friend activity + profile counters: 30s when populated, 5s retry
+    task.spawn(function()
+        while alive and gui.Parent do
+            local games, onlineCount = fetchGames()
+            if not alive then return end
+            if games then
+                renderGames(games)
+                statCells[3].Text = ('%d friends<br /><font color="%s">online</font>')
+                    :format(onlineCount or 0, SUB_HEX)
+            end
+            local delaySec = (games and #games > 0) and 30 or 5
+            for _ = 1, delaySec * 2 do
+                if not alive then return end
+                task.wait(0.5)
+            end
+        end
+    end)
+
+    -- Friends in this server (yields per player; refresh sparsely)
+    task.spawn(function()
+        while alive and gui.Parent do
+            local n = 0
+            for _, pl in ipairs(Players:GetPlayers()) do
+                if pl ~= lp then
+                    local ok, isFriend = pcall(function() return lp:IsFriendsWith(pl.UserId) end)
+                    if ok and isFriend then n += 1 end
+                end
+            end
+            if not alive then return end
+            statCells[2].Text = ('%d friends<br /><font color="%s">joined</font>'):format(n, SUB_HEX)
+            for _ = 1, 60 do
+                if not alive then return end
+                task.wait(0.5)
+            end
         end
     end)
 
