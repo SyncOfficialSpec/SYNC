@@ -4779,6 +4779,26 @@ function Scripts.open()
             pressed = false
             updateBody()
         end)
+        -- per-card busy overlay (dim + spinner) while this card is executing
+        local busy = Instance.new("Frame")
+        busy.Size = UDim2.fromScale(1, 1)
+        busy.BackgroundColor3 = Color3.new(0, 0, 0)
+        busy.BackgroundTransparency = 1
+        busy.Visible = false
+        busy.ZIndex = 8
+        busy.Parent = body
+        Util.corner(busy, 12)
+        local busySpin = Instance.new("ImageLabel")
+        busySpin.Size = UDim2.fromOffset(28, 28)
+        busySpin.AnchorPoint = Vector2.new(0.5, 0.5)
+        busySpin.Position = UDim2.fromScale(0.5, 0.5)
+        busySpin.BackgroundTransparency = 1
+        busySpin.ZIndex = 9
+        busySpin.Parent = busy
+        Icons.apply(busySpin, "orbit", WHITE)
+        local busyTween = game:GetService("TweenService"):Create(
+            busySpin, TweenInfo.new(0.9, Enum.EasingStyle.Linear, Enum.EasingDirection.Out, -1), { Rotation = 360 })
+
         local running = false
         c.MouseButton1Click:Connect(function()
             if running then return end
@@ -4788,6 +4808,9 @@ function Scripts.open()
                 return
             end
             running = true
+            busy.Visible = true
+            busyTween:Play()
+            Util.tween(busy, { BackgroundTransparency = 0.45 }, 0.15)
             status.Text = "Running " .. (s.title or "script") .. "..."
             status.TextColor3 = SUB
             task.spawn(function()
@@ -4795,6 +4818,9 @@ function Scripts.open()
                 -- then loadstring + protected run via the shared executor.
                 local ok, err = Executor.runUrl(s.rawScript, s.title)
                 running = false
+                busyTween:Pause()
+                busy.Visible = false
+                busy.BackgroundTransparency = 1
                 if not alive then return end
                 if ok then
                     status.Text = "Executed " .. (s.title or "script")
