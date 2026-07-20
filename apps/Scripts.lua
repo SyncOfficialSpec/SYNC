@@ -45,6 +45,17 @@ local function hashStr(s)
     return h
 end
 
+-- 716426 -> "716K", 1240000 -> "1.2M"
+local function formatCount(n)
+    n = tonumber(n) or 0
+    if n >= 1e6 then
+        return string.format("%.1fM", n / 1e6):gsub("%.0M", "M")
+    elseif n >= 1e3 then
+        return string.format("%.0fK", n / 1e3)
+    end
+    return tostring(math.floor(n))
+end
+
 Scripts._gui = nil
 
 function Scripts.open()
@@ -439,6 +450,26 @@ function Scripts.open()
             pill.ZIndex = 6
             pill.Parent = body
             Util.corner(pill, 6)
+        end
+
+        -- view count badge, bottom-right over the fade
+        if s.views and tonumber(s.views) and tonumber(s.views) > 0 then
+            local vb = Instance.new("TextLabel")
+            vb.Text = formatCount(s.views) .. " views"
+            vb.Font = BODY_BOLD
+            vb.TextSize = 11
+            vb.TextColor3 = Color3.fromRGB(210, 210, 216)
+            vb.TextXAlignment = Enum.TextXAlignment.Right
+            vb.BackgroundColor3 = Color3.fromRGB(10, 11, 13)
+            vb.BackgroundTransparency = 0.35
+            vb.AutomaticSize = Enum.AutomaticSize.X
+            vb.AnchorPoint = Vector2.new(1, 1)
+            vb.Position = UDim2.new(1, -10, 1, -10)
+            vb.Size = UDim2.fromOffset(0, 18)
+            vb.ZIndex = 6
+            vb.Parent = body
+            Util.corner(vb, 6)
+            Util.padding(vb, 5)
         end
 
         if s.keySystem then
