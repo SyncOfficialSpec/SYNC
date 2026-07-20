@@ -28,6 +28,7 @@ local TOP_INSET    = 30   -- leave room for the menu bar (vertical docks)
 
 local APPS = {
     { name = "Home",      icon = "app-window",     top = Color3.fromRGB(96, 170, 255),  bot = Color3.fromRGB(28, 110, 230) },
+    { name = "Scripts",   icon = "file-text",      top = Color3.fromRGB(172, 122, 255), bot = Color3.fromRGB(104, 52, 212) },
     { name = "Settings",  icon = "settings",       top = Color3.fromRGB(150, 152, 158), bot = Color3.fromRGB(90, 92, 98) },
 }
 

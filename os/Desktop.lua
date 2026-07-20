@@ -7,6 +7,7 @@ local Dock     = SYNC.import("os/Dock")
 local Settings = SYNC.import("os/Settings")
 local MenuBar  = SYNC.import("os/MenuBar")
 local Home     = SYNC.import("apps/Home")
+local Scripts  = SYNC.import("apps/Scripts")
 
 local Desktop = {}
 
@@ -23,6 +24,8 @@ function Desktop.start()
     dock = Dock.create(gui, function(appName)
         if appName == "Home" then
             Home.open()
+        elseif appName == "Scripts" then
+            Scripts.open()
         elseif appName == "Settings" then
             Settings.open({
                 position = dock.getPosition(),
