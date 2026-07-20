@@ -7,9 +7,10 @@
 
 local HttpService = game:GetService("HttpService")
 
-local Theme = SYNC.import("core/Theme")
-local Util  = SYNC.import("core/Util")
-local Icons = SYNC.import("core/Icons")
+local Theme    = SYNC.import("core/Theme")
+local Util     = SYNC.import("core/Util")
+local Icons    = SYNC.import("core/Icons")
+local Executor = SYNC.import("core/Executor")
 
 local Scripts = {}
 
@@ -463,42 +464,32 @@ function Scripts.open()
             pressed = false
             updateBody()
         end)
+        local running = false
         c.MouseButton1Click:Connect(function()
+            if running then return end
             if not s.rawScript then
                 status.Text = "No raw script for \"" .. (s.title or "?") .. "\""
                 status.TextColor3 = RED
                 return
             end
-            status.Text = "Fetching " .. (s.title or "script") .. "..."
+            running = true
+            status.Text = "Running " .. (s.title or "script") .. "..."
             status.TextColor3 = SUB
             task.spawn(function()
-                local src = Util.httpGet(s.rawScript)
+                -- SYNC runs it in-game itself (no paste): fetch with retries,
+                -- then loadstring + protected run via the shared executor.
+                local ok, err = Executor.runUrl(s.rawScript, s.title)
+                running = false
                 if not alive then return end
-                if not src or src == "" then
-                    status.Text = "Download failed for \"" .. (s.title or "?") .. "\""
-                    status.TextColor3 = RED
-                    return
-                end
-                local fn, err = loadstring(src)
-                if not fn then
-                    status.Text = "loadstring failed: " .. tostring(err):sub(1, 80)
+                if ok then
+                    status.Text = "Executed " .. (s.title or "script")
+                    status.TextColor3 = GREEN
+                    flash(GREEN)
+                else
+                    status.Text = (s.title or "script") .. ": " .. tostring(err):sub(1, 90)
                     status.TextColor3 = RED
                     flash(RED)
-                    return
                 end
-                status.Text = "Executed " .. (s.title or "script")
-                status.TextColor3 = GREEN
-                flash(GREEN)
-                -- surface runtime errors (lots of rscripts uploads are dead
-                -- one-line wrappers whose inner URL no longer serves Lua)
-                task.spawn(function()
-                    local okRun, runErr = pcall(fn)
-                    if not okRun and alive then
-                        status.Text = "Script errored: " .. tostring(runErr):gsub("\n.*", ""):sub(1, 90)
-                        status.TextColor3 = RED
-                        flash(RED)
-                    end
-                end)
             end)
         end)
 
