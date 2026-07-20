@@ -3913,6 +3913,8 @@ function Scripts.open()
         c.ZIndex = 4
         c.Parent = grid
 
+        -- Plain Frame: CanvasGroup escapes ScrollingFrame/window clipping on
+        -- executor builds. Nothing inside overflows, so square clip is fine.
         local body = Instance.new("Frame")
         body.AnchorPoint = Vector2.new(0.5, 0.5)
         body.Position = UDim2.fromScale(0.5, 0.5)
@@ -4015,12 +4017,10 @@ function Scripts.open()
         local hovered, pressed = false, false
         local function updateBody()
             local grow = hovered and not pressed
+            -- growing the body alone re-crops the art (free zoom feel) and
+            -- nothing overflows the rounded clip, so corners stay round
             Util.tween(body, { Size = grow and UDim2.fromOffset(CARD_W + GROW, CARD_H + GROW)
                 or UDim2.fromOffset(CARD_W, CARD_H) }, 0.22, Enum.EasingStyle.Quad)
-            -- inner art zoom carries the depth so the card doesn't need to
-            -- swallow its neighbors
-            Util.tween(art, { Size = grow and UDim2.fromScale(1.09, 1.09)
-                or UDim2.fromScale(1, 1) }, 0.25, Enum.EasingStyle.Quad)
         end
 
         c.MouseEnter:Connect(function()
