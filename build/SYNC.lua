@@ -4350,6 +4350,34 @@ function Scripts.open()
     grid.ZIndex = 3
     grid.Parent = win
 
+    -- Empty state (shown when a search returns nothing)
+    local emptyState = Instance.new("Frame")
+    emptyState.Size = UDim2.fromScale(1, 1)
+    emptyState.BackgroundTransparency = 1
+    emptyState.Visible = false
+    emptyState.ZIndex = 3
+    emptyState.Parent = grid
+    local emptyIcon = Instance.new("ImageLabel")
+    emptyIcon.Size = UDim2.fromOffset(34, 34)
+    emptyIcon.AnchorPoint = Vector2.new(0.5, 0.5)
+    emptyIcon.Position = UDim2.fromScale(0.5, 0.4)
+    emptyIcon.BackgroundTransparency = 1
+    emptyIcon.ImageTransparency = 0.4
+    emptyIcon.ZIndex = 4
+    emptyIcon.Parent = emptyState
+    Icons.apply(emptyIcon, "search", SUB)
+    local emptyText = Instance.new("TextLabel")
+    emptyText.Text = "No scripts found"
+    emptyText.Font = BODY_BOLD
+    emptyText.TextSize = 15
+    emptyText.TextColor3 = SUB
+    emptyText.BackgroundTransparency = 1
+    emptyText.AnchorPoint = Vector2.new(0.5, 0.5)
+    emptyText.Position = UDim2.fromScale(0.5, 0.5)
+    emptyText.Size = UDim2.new(1, -60, 0, 20)
+    emptyText.ZIndex = 4
+    emptyText.Parent = emptyState
+
     -- 12px inset all around gives the orca hover-grow room inside the scroll clip.
     -- GROW stays under the 14px card gap so a hovered card never covers neighbors.
     local INSET = 12
@@ -4610,7 +4638,9 @@ function Scripts.open()
 
     local function renderList(list, append)
         if not append then
-            for _, child in ipairs(grid:GetChildren()) do child:Destroy() end
+            for _, child in ipairs(grid:GetChildren()) do
+                if child ~= emptyState then child:Destroy() end
+            end
             itemCount = 0
             grid.CanvasPosition = Vector2.new(0, 0)
         end
@@ -4618,6 +4648,7 @@ function Scripts.open()
             itemCount += 1
             buildCard(s, itemCount)
         end
+        emptyState.Visible = itemCount == 0
         local rows = math.ceil(itemCount / 2)
         grid.CanvasSize = UDim2.fromOffset(0, rows * (CARD_H + 14) + INSET * 2)
     end
