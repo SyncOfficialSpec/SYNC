@@ -26,6 +26,35 @@ local function looksLikeHTML(s)
         or head:find("just a moment", 1, true) ~= nil
 end
 
+-- Signatures of a host that took the script down (Vercel/Netlify/GitHub etc.).
+-- These aren't Lua, so loadstring returns nil and the wrapper dies on line 1
+-- with a useless "attempt to call a nil value". We translate that up front.
+local function deadHostReason(s)
+    if type(s) ~= "string" then return nil end
+    local h = s:sub(1, 200):lower()
+    if h:find("deployment_disabled", 1, true) or h:find("payment required", 1, true) then
+        return "the uploader's host is offline (deployment disabled)"
+    end
+    if h:find("not found", 1, true) and #s < 60 then
+        return "the script link is dead (404 not found)"
+    end
+    if h:find("account suspended", 1, true) or h:find("service unavailable", 1, true) then
+        return "the uploader's host is down"
+    end
+    if looksLikeHTML(s) then
+        return "the link returned a web page, not a script"
+    end
+    return nil
+end
+
+-- Pull the first URL out of a `loadstring(game:HttpGet("url"))()` wrapper, so we
+-- can validate the real target before running the wrapper blind.
+local function wrapperInnerUrl(src)
+    if type(src) ~= "string" or #src > 400 then return nil end
+    return src:match('HttpGet%s*%(%s*["\']([^"\']+)["\']')
+        or src:match('HttpGetAsync%s*%(%s*["\']([^"\']+)["\']')
+end
+
 -- Fetch raw Lua for a URL. Retries a few times because the challenge page is
 -- transient. Returns (source, nil) or (nil, reason).
 function Executor.fetch(url, tries)
@@ -77,15 +106,36 @@ function Executor.run(source, name)
         task.wait(0.05)
     end
     if done and not runOk then
-        return false, "runtime error: " .. tostring(runErr):gsub("\n.*", "")
+        local msg = tostring(runErr):gsub("\n.*", "")
+        -- a bare wrapper whose inner loadstring returned nil surfaces as this
+        if msg:find("attempt to call a nil value") then
+            return false, "the script link is dead (uploader's host is offline)"
+        end
+        return false, "runtime error: " .. msg
     end
     return true, nil
 end
 
--- Fetch a URL and run it. Returns (ok, err).
+-- Fetch a URL and run it. Returns (ok, err). If the fetched source is a thin
+-- `loadstring(game:HttpGet("inner"))()` wrapper (most rscripts uploads are),
+-- the inner link is validated first so a dead host gives a clear reason instead
+-- of a cryptic "attempt to call a nil value" from the wrapper.
 function Executor.runUrl(url, name)
     local src, reason = Executor.fetch(url)
     if not src then return false, reason end
+
+    local inner = wrapperInnerUrl(src)
+    if inner then
+        local innerBody = Util.httpGet(inner)
+        if not innerBody or innerBody == "" then
+            return false, "the script link is dead (host didn't respond)"
+        end
+        local dead = deadHostReason(innerBody)
+        if dead then return false, dead end
+        -- inner is real Lua: run it directly (skips the wrapper's own fetch)
+        return Executor.run(innerBody, name)
+    end
+
     return Executor.run(src, name)
 end
 
