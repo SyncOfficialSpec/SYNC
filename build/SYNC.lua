@@ -2545,10 +2545,19 @@ function Settings.open(opts)
     Util.mount(gui)
     Settings._gui = gui
 
+    local winRef, scaleRef -- assigned once the window exists
+    local closing = false
     local function close()
-        if not Settings._gui then return end
+        if not Settings._gui or closing then return end
+        closing = true
         Settings._gui = nil
-        gui:Destroy()
+        if winRef and scaleRef then
+            Util.tween(scaleRef, { Scale = 0.94 }, 0.15)
+            Util.tween(winRef, { BackgroundTransparency = 1 }, 0.15)
+            task.delay(0.17, function() gui:Destroy() end)
+        else
+            gui:Destroy()
+        end
     end
 
     -- Outside-click catcher
@@ -2577,6 +2586,15 @@ function Settings.open(opts)
     Util.corner(win, 12)
     Util.stroke(win, WHITE, 1, 0.85)
     Util.shadow(win, { blur = 50, spread = -2, transparency = 0.4, offset = UDim2.fromOffset(0, 20) })
+
+    -- Entrance: scale + fade in (matches Home / Scripts)
+    local scaleFx = Instance.new("UIScale")
+    scaleFx.Scale = 0.94
+    scaleFx.Parent = win
+    win.BackgroundTransparency = 1
+    Util.tween(scaleFx, { Scale = 1 }, 0.22, Enum.EasingStyle.Back)
+    Util.tween(win, { BackgroundTransparency = 0.04 }, 0.18)
+    winRef, scaleRef = win, scaleFx
 
     -- Title bar
     local bar = Instance.new("Frame")
