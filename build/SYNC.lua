@@ -2780,6 +2780,9 @@ function Home.open()
     ringGrad.Color = ColorSequence.new(RINGA, RINGB)
     ringGrad.Rotation = 45
     ringGrad.Parent = ring
+    -- slow continuous spin on the ring gradient
+    local TweenService = game:GetService("TweenService")
+    TweenService:Create(ringGrad, TweenInfo.new(6, Enum.EasingStyle.Linear, Enum.EasingDirection.Out, -1), { Rotation = 405 }):Play()
 
     local avatar = Instance.new("ImageLabel")
     avatar.Image = headshot(lp.UserId, 150)
@@ -2876,11 +2879,38 @@ function Home.open()
     pillText.TextSize = 15
     pillText.TextColor3 = SUB
     pillText.TextXAlignment = Enum.TextXAlignment.Left
+    pillText.TextTruncate = Enum.TextTruncate.AtEnd
     pillText.BackgroundTransparency = 1
     pillText.Position = UDim2.fromOffset(44, 0)
-    pillText.Size = UDim2.new(1, -52, 1, 0)
+    pillText.Size = UDim2.new(1, -76, 1, 0)
     pillText.ZIndex = 5
     pillText.Parent = chatPill
+
+    -- unread badge (messages that arrive while the chat view is closed)
+    local unread = 0
+    local badge = Instance.new("TextLabel")
+    badge.Text = ""
+    badge.Font = BODY_BOLD
+    badge.TextSize = 11
+    badge.TextColor3 = WHITE
+    badge.BackgroundColor3 = Theme.red
+    badge.AnchorPoint = Vector2.new(1, 0.5)
+    badge.Position = UDim2.new(1, -12, 0.5, 0)
+    badge.Size = UDim2.fromOffset(22, 22)
+    badge.Visible = false
+    badge.ZIndex = 5
+    badge.Parent = chatPill
+    Util.corner(badge, 11)
+
+    local function bumpUnread()
+        unread += 1
+        badge.Text = unread > 9 and "9+" or tostring(unread)
+        badge.Visible = true
+    end
+    local function clearUnread()
+        unread = 0
+        badge.Visible = false
+    end
 
     -- -----------------------------------------------------------------------
     -- Chat view (swaps over the profile card)
@@ -3015,6 +3045,7 @@ function Home.open()
     chatPill.MouseButton1Click:Connect(function()
         profileView.Visible = false
         chatView.Visible = true
+        clearUnread()
     end)
     chatClose.MouseButton1Click:Connect(function()
         chatView.Visible = false
@@ -3122,6 +3153,13 @@ function Home.open()
         if #rows > 60 then
             local old = table.remove(rows, 1)
             old:Destroy()
+        end
+
+        -- keep the closed pill informative
+        pillText.Text = (name == "You" and "You: " or name .. ": ") .. text
+        pillText.TextColor3 = Color3.fromRGB(200, 200, 206)
+        if not chatView.Visible and name ~= "You" then
+            bumpUnread()
         end
 
         if tabKey == activeTab then
@@ -3247,14 +3285,14 @@ function Home.open()
             end
         end
         while alive and gui.Parent do
-            for _ = 1, 5 do
+            -- 2.5s when the chat is open, 6s in the background (unread badge)
+            local ticks = chatView.Visible and 5 or 12
+            for _ = 1, ticks do
                 if not alive then return end
                 task.wait(0.5)
             end
-            if chatView.Visible or lastUniversalId == nil then
-                local list = fetchUniversal()
-                if list and alive then renderUniversal(list) end
-            end
+            local list = fetchUniversal()
+            if list and alive then renderUniversal(list) end
         end
     end)
 
@@ -3364,7 +3402,7 @@ function Home.open()
             end
         end
         table.sort(order, function(a, b) return #a.friends > #b.friends end)
-        return order, #friends
+        return order, friends
     end
 
     -- orca FriendItem: 44px avatar circle; hover -> green pill with play icon
@@ -3451,6 +3489,30 @@ function Home.open()
             nameLabel.ZIndex = 6
             nameLabel.Parent = thumb
 
+            -- game name pill fades in when hovering the art
+            local namePill = Instance.new("TextLabel")
+            namePill.Text = ""
+            namePill.Font = BODY_BOLD
+            namePill.TextSize = 12
+            namePill.TextColor3 = WHITE
+            namePill.TextTransparency = 1
+            namePill.TextTruncate = Enum.TextTruncate.AtEnd
+            namePill.BackgroundColor3 = Color3.new(0, 0, 0)
+            namePill.BackgroundTransparency = 1
+            namePill.Position = UDim2.fromOffset(10, 10)
+            namePill.Size = UDim2.new(1, -20, 0, 24)
+            namePill.ZIndex = 7
+            namePill.Parent = thumb
+            Util.corner(namePill, 8)
+            thumb.MouseEnter:Connect(function()
+                if namePill.Text ~= "" and not nameLabel.Visible then
+                    Util.tween(namePill, { TextTransparency = 0, BackgroundTransparency = 0.35 }, 0.15)
+                end
+            end)
+            thumb.MouseLeave:Connect(function()
+                Util.tween(namePill, { TextTransparency = 1, BackgroundTransparency = 1 }, 0.15)
+            end)
+
             local chipRow = Instance.new("Frame")
             chipRow.Size = UDim2.new(1, 0, 0, 44)
             chipRow.Position = UDim2.fromOffset(10, y + THUMB_H - 22)
@@ -3465,6 +3527,7 @@ function Home.open()
             task.spawn(function()
                 local nm = gameNameFor(g.placeId)
                 if nameLabel.Parent then nameLabel.Text = nm end
+                if namePill.Parent then namePill.Text = " " .. nm .. " " end
                 -- 768x432 game thumbnail: universe id -> thumbnails API -> CDN png
                 -- (the old www.roblox.com/asset-thumbnail endpoint now returns HTML)
                 local uid = universeIdFor(g.placeId)
@@ -3577,6 +3640,82 @@ function Home.open()
     clockLabel.ZIndex = 4
     clockLabel.Parent = clockCard
 
+    -- Friends card: online friends at a glance, green ring = in a game
+    local friendsY = contentY + 190 + GAPX + 62 + GAPX
+    local friendsCard = makeCard(col3X, friendsY, COL3, contentH - (friendsY - contentY))
+    local friendsTitle = cardTitle(friendsCard, "Friends")
+
+    local friendsGrid = Instance.new("Frame")
+    friendsGrid.Position = UDim2.fromOffset(20, 50)
+    friendsGrid.Size = UDim2.new(1, -40, 1, -64)
+    friendsGrid.BackgroundTransparency = 1
+    friendsGrid.ZIndex = 4
+    friendsGrid.Parent = friendsCard
+    local friendsLayout = Instance.new("UIGridLayout")
+    friendsLayout.CellSize = UDim2.fromOffset(38, 38)
+    friendsLayout.CellPadding = UDim2.fromOffset(10, 10)
+    friendsLayout.SortOrder = Enum.SortOrder.LayoutOrder
+    friendsLayout.Parent = friendsGrid
+
+    local friendsEmpty = Instance.new("TextLabel")
+    friendsEmpty.Text = "No friends online right now."
+    friendsEmpty.Font = Theme.fonts.caption
+    friendsEmpty.TextSize = 13
+    friendsEmpty.TextColor3 = SUB
+    friendsEmpty.TextWrapped = true
+    friendsEmpty.BackgroundTransparency = 1
+    friendsEmpty.AnchorPoint = Vector2.new(0.5, 0.5)
+    friendsEmpty.Position = UDim2.fromScale(0.5, 0.55)
+    friendsEmpty.Size = UDim2.new(1, -40, 0, 36)
+    friendsEmpty.ZIndex = 4
+    friendsEmpty.Parent = friendsCard
+
+    local function renderFriendsOnline(friends)
+        if not alive then return end
+        for _, ch in ipairs(friendsGrid:GetChildren()) do
+            if ch:IsA("ImageLabel") then ch:Destroy() end
+        end
+        friendsTitle.Text = "Friends"
+        friendsEmpty.Visible = #friends == 0
+        if #friends > 0 then
+            friendsTitle.Text = ("Friends · %d"):format(#friends)
+        end
+        for i, fr in ipairs(friends) do
+            if i > 15 then break end
+            local av = Instance.new("ImageLabel")
+            av.Image = headshot(fr.VisitorId, 100)
+            av.BackgroundColor3 = FIELD
+            av.LayoutOrder = i
+            av.ZIndex = 5
+            av.Parent = friendsGrid
+            Util.corner(av, 19)
+            local inGame = fr.PlaceId and fr.GameId
+            Util.stroke(av, inGame and GREEN or Color3.fromRGB(90, 90, 96), 2, inGame and 0.1 or 0.55)
+        end
+    end
+
+    -- Entrance: cards settle in one after another
+    for i, cardFrame in ipairs({ profileCard, faCard, serverCard, clockCard, friendsCard }) do
+        local cover = Instance.new("Frame")
+        cover.Size = UDim2.fromScale(1, 1)
+        cover.BackgroundColor3 = WIN
+        cover.BorderSizePixel = 0
+        cover.ZIndex = 10
+        cover.Parent = cardFrame
+        Util.corner(cover, 18)
+        local cs = Instance.new("UIScale")
+        cs.Scale = 0.95
+        cs.Parent = cardFrame
+        task.delay(0.05 + (i - 1) * 0.06, function()
+            if not cover.Parent then return end
+            Util.tween(cover, { BackgroundTransparency = 1 }, 0.3)
+            Util.tween(cs, { Scale = 1 }, 0.3, Enum.EasingStyle.Back)
+            task.delay(0.35, function()
+                if cover.Parent then cover:Destroy() end
+            end)
+        end)
+    end
+
     -- -----------------------------------------------------------------------
     -- Live loops
     -- -----------------------------------------------------------------------
@@ -3611,12 +3750,13 @@ function Home.open()
     -- Friend activity + profile counters: 30s when populated, 5s retry
     task.spawn(function()
         while alive and gui.Parent do
-            local games, onlineCount = fetchGames()
+            local games, onlineFriends = fetchGames()
             if not alive then return end
             if games then
                 renderGames(games)
+                renderFriendsOnline(onlineFriends or {})
                 statCells[3].Text = ('%d friends<br /><font color="%s">online</font>')
-                    :format(onlineCount or 0, SUB_HEX)
+                    :format(onlineFriends and #onlineFriends or 0, SUB_HEX)
             end
             local delaySec = (games and #games > 0) and 30 or 5
             for _ = 1, delaySec * 2 do
