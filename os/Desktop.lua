@@ -20,12 +20,27 @@ function Desktop.start()
     -- Menu bar hidden for now (module kept for later): local menubar = MenuBar.create(gui)
     local menubar = nil
 
+    -- Raise a window above the others so a dock click on an already-open app
+    -- brings it to the front (keeps the desktop/dock itself on top).
+    local topOrder = 1000000
+    local function raise(appName)
+        local host = gui.Parent
+        local w = host and host:FindFirstChild("SYNC_" .. appName)
+        if w and w:IsA("ScreenGui") then
+            topOrder += 1
+            w.DisplayOrder = topOrder
+            gui.DisplayOrder = topOrder + 1
+        end
+    end
+
     local dock
     dock = Dock.create(gui, function(appName)
         if appName == "Home" then
             Home.open()
+            raise("Home")
         elseif appName == "Scripts" then
             Scripts.open()
+            raise("Scripts")
         elseif appName == "Settings" then
             Settings.open({
                 position = dock.getPosition(),
@@ -49,6 +64,7 @@ function Desktop.start()
                     Util.save("DockSizeFrac", tostring(f))
                 end,
             })
+            raise("Settings")
         end
     end)
 
