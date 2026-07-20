@@ -582,9 +582,22 @@ function Home.open()
         nm.TextTruncate = Enum.TextTruncate.AtEnd
         nm.BackgroundTransparency = 1
         nm.Position = UDim2.fromOffset(40, 0)
-        nm.Size = UDim2.new(1, -44, 0, 15)
+        nm.Size = UDim2.new(1, -102, 0, 15)
         nm.ZIndex = 4
         nm.Parent = row
+
+        local ts = Instance.new("TextLabel")
+        ts.Text = Util.date("%I:%M %p"):gsub("^0", "")
+        ts.Font = Theme.fonts.caption
+        ts.TextSize = 10
+        ts.TextColor3 = SUB
+        ts.TextXAlignment = Enum.TextXAlignment.Right
+        ts.BackgroundTransparency = 1
+        ts.AnchorPoint = Vector2.new(1, 0)
+        ts.Position = UDim2.new(1, -2, 0, 2)
+        ts.Size = UDim2.fromOffset(56, 12)
+        ts.ZIndex = 4
+        ts.Parent = row
 
         local tx = Instance.new("TextLabel")
         tx.Text = text
@@ -799,10 +812,20 @@ function Home.open()
     faEmpty.TextWrapped = true
     faEmpty.BackgroundTransparency = 1
     faEmpty.AnchorPoint = Vector2.new(0.5, 0.5)
-    faEmpty.Position = UDim2.fromScale(0.5, 0.5)
+    faEmpty.Position = UDim2.fromScale(0.5, 0.52)
     faEmpty.Size = UDim2.new(1, -60, 0, 40)
     faEmpty.ZIndex = 4
     faEmpty.Parent = faCard
+
+    local faEmptyIcon = Instance.new("ImageLabel")
+    faEmptyIcon.Size = UDim2.fromOffset(30, 30)
+    faEmptyIcon.AnchorPoint = Vector2.new(0.5, 0.5)
+    faEmptyIcon.Position = UDim2.fromScale(0.5, 0.4)
+    faEmptyIcon.BackgroundTransparency = 1
+    faEmptyIcon.ImageTransparency = 0.4
+    faEmptyIcon.ZIndex = 4
+    faEmptyIcon.Parent = faCard
+    Icons.apply(faEmptyIcon, "gamepad-2", SUB)
 
     local faScroll = Instance.new("ScrollingFrame")
     faScroll.Position = UDim2.fromOffset(20, 52)
@@ -931,6 +954,7 @@ function Home.open()
         if not alive then return end
         for _, child in ipairs(faScroll:GetChildren()) do child:Destroy() end
         faEmpty.Visible = #games == 0
+        faEmptyIcon.Visible = #games == 0
         faScroll.CanvasSize = UDim2.fromOffset(0, #games * ENTRY_H + 8)
 
         for gi, g in ipairs(games) do
@@ -1119,10 +1143,21 @@ function Home.open()
     clockLabel.TextColor3 = WHITE
     clockLabel.TextXAlignment = Enum.TextXAlignment.Left
     clockLabel.BackgroundTransparency = 1
-    clockLabel.Position = UDim2.fromOffset(52, 0)
-    clockLabel.Size = UDim2.new(1, -60, 1, 0)
+    clockLabel.Position = UDim2.fromOffset(52, 9)
+    clockLabel.Size = UDim2.new(1, -60, 0, 24)
     clockLabel.ZIndex = 4
     clockLabel.Parent = clockCard
+
+    local dateLabel = Instance.new("TextLabel")
+    dateLabel.Font = Theme.fonts.caption
+    dateLabel.TextSize = 11
+    dateLabel.TextColor3 = SUB
+    dateLabel.TextXAlignment = Enum.TextXAlignment.Left
+    dateLabel.BackgroundTransparency = 1
+    dateLabel.Position = UDim2.fromOffset(52, 35)
+    dateLabel.Size = UDim2.new(1, -60, 0, 14)
+    dateLabel.ZIndex = 4
+    dateLabel.Parent = clockCard
 
     -- Friends card: online friends at a glance, green ring = in a game
     local friendsY = contentY + 190 + GAPX + 62 + GAPX
@@ -1157,17 +1192,16 @@ function Home.open()
     local function renderFriendsOnline(friends)
         if not alive then return end
         for _, ch in ipairs(friendsGrid:GetChildren()) do
-            if ch:IsA("ImageLabel") then ch:Destroy() end
+            if ch:IsA("GuiObject") then ch:Destroy() end
         end
-        friendsTitle.Text = "Friends"
+        local titleDefault = #friends > 0 and ("Friends · %d"):format(#friends) or "Friends"
+        friendsTitle.Text = titleDefault
         friendsEmpty.Visible = #friends == 0
-        if #friends > 0 then
-            friendsTitle.Text = ("Friends · %d"):format(#friends)
-        end
         for i, fr in ipairs(friends) do
             if i > 15 then break end
-            local av = Instance.new("ImageLabel")
+            local av = Instance.new("ImageButton")
             av.Image = headshot(fr.VisitorId, 100)
+            av.AutoButtonColor = false
             av.BackgroundColor3 = FIELD
             av.LayoutOrder = i
             av.ZIndex = 5
@@ -1175,6 +1209,23 @@ function Home.open()
             Util.corner(av, 19)
             local inGame = fr.PlaceId and fr.GameId
             Util.stroke(av, inGame and GREEN or Color3.fromRGB(90, 90, 96), 2, inGame and 0.1 or 0.55)
+
+            -- hover shows who it is (and that green means joinable)
+            av.MouseEnter:Connect(function()
+                friendsTitle.Text = (fr.DisplayName or fr.UserName or "?")
+                    .. (inGame and "  ·  click to join" or "")
+            end)
+            av.MouseLeave:Connect(function()
+                friendsTitle.Text = titleDefault
+            end)
+            av.MouseButton1Click:Connect(function()
+                if inGame then
+                    pcall(function()
+                        TeleportService:TeleportToPlaceInstance(fr.PlaceId, fr.GameId, lp)
+                    end)
+                end
+            end)
+
             local avScale = Instance.new("UIScale")
             avScale.Scale = 0
             avScale.Parent = av
@@ -1225,6 +1276,7 @@ function Home.open()
     task.spawn(function()
         while alive and gui.Parent do
             clockLabel.Text = Util.date("%I:%M %p"):gsub("^0", "")
+            dateLabel.Text = Util.date("%a, %b %d")
 
             local white = "#FFFFFF"
             serverRows[1].Text = ('<font color="%s">%d / %d</font> <font color="%s">players</font>')
@@ -1233,8 +1285,13 @@ function Home.open()
             serverRows[2].Text = ('<font color="%s">%d %s</font> <font color="%s">elapsed</font>')
                 :format(white, mins, mins == 1 and "minute" or "minutes", SUB_HEX)
             local ms = ping()
+            -- ping value color-coded: green under 80, amber under 150, red above
+            local pingHex = white
+            if ms then
+                pingHex = ms < 80 and "#3ED194" or ms < 150 and "#FEBC2E" or "#FF5F57"
+            end
             serverRows[3].Text = ('<font color="%s">%s</font> <font color="%s">ping</font>')
-                :format(white, ms and (ms .. " ms") or "--", SUB_HEX)
+                :format(pingHex, ms and (ms .. " ms") or "--", SUB_HEX)
             task.wait(1)
         end
     end)
