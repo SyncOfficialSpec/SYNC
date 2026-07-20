@@ -453,7 +453,22 @@ function Home.open()
         return t
     end
     makeTab(20, 70, "server", "Server")
-    makeTab(96, 86, "universal", "Universal")
+    makeTab(96, 96, "universal", "Universal")
+
+    -- Live dot on the Universal tab: green when the Discord bridge answered,
+    -- gray until the first successful poll / after a failure.
+    local liveDot = Instance.new("Frame")
+    liveDot.Size = UDim2.fromOffset(6, 6)
+    liveDot.AnchorPoint = Vector2.new(1, 0.5)
+    liveDot.Position = UDim2.new(1, -8, 0.5, 0)
+    liveDot.BackgroundColor3 = Color3.fromRGB(90, 90, 96)
+    liveDot.BorderSizePixel = 0
+    liveDot.ZIndex = 5
+    liveDot.Parent = tabs.universal
+    Util.corner(liveDot, 3)
+    local function setUniversalLive(on)
+        Util.tween(liveDot, { BackgroundColor3 = on and GREEN or Color3.fromRGB(120, 90, 90) }, 0.2)
+    end
 
     local function setTab(key)
         activeTab = key
@@ -788,9 +803,10 @@ function Home.open()
         local url = RELAY_URL .. "/messages?channel=" .. UNIVERSAL_ID .. "&key=" .. API_KEY
         if lastUniversalId then url = url .. "&after=" .. lastUniversalId end
         local body = Util.httpGetH(url, { ["X-API-Key"] = API_KEY })
-        if not body then return nil end
+        if not body then setUniversalLive(false); return nil end
         local ok, list = pcall(function() return HttpService:JSONDecode(body) end)
-        if not ok or type(list) ~= "table" then return nil end
+        if not ok or type(list) ~= "table" then setUniversalLive(false); return nil end
+        setUniversalLive(true)
         return list
     end
 
