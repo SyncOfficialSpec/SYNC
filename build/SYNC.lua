@@ -4404,6 +4404,29 @@ function Scripts.open()
     searchGlyph.Parent = search
     Icons.apply(searchGlyph, "search", BLURPLE)
 
+    -- Clear (X) button: appears once there's text, resets back to recent
+    local clearBtn = Instance.new("TextButton")
+    clearBtn.Text = ""
+    clearBtn.AutoButtonColor = false
+    clearBtn.Size = UDim2.fromOffset(26, 26)
+    clearBtn.AnchorPoint = Vector2.new(1, 0.5)
+    clearBtn.Position = UDim2.new(1, -14, 0.5, 0)
+    clearBtn.BackgroundColor3 = Color3.fromRGB(70, 71, 78)
+    clearBtn.BackgroundTransparency = 1
+    clearBtn.Visible = false
+    clearBtn.ZIndex = 5
+    clearBtn.Parent = search
+    Util.corner(clearBtn, 13)
+    local clearGlyph = Instance.new("ImageLabel")
+    clearGlyph.Size = UDim2.fromOffset(13, 13)
+    clearGlyph.AnchorPoint = Vector2.new(0.5, 0.5)
+    clearGlyph.Position = UDim2.fromScale(0.5, 0.5)
+    clearGlyph.BackgroundTransparency = 1
+    clearGlyph.ImageTransparency = 1
+    clearGlyph.ZIndex = 6
+    clearGlyph.Parent = clearBtn
+    Icons.apply(clearGlyph, "x", WHITE)
+
     -- Status line
     local status = Instance.new("TextLabel")
     status.Text = "Loading recent scripts..."
@@ -4818,6 +4841,10 @@ function Scripts.open()
     -- Search as you type (debounced) + instant on Enter
     local searchVersion = 0
     searchBox:GetPropertyChangedSignal("Text"):Connect(function()
+        local has = searchBox.Text ~= ""
+        clearBtn.Visible = has
+        Util.tween(clearBtn, { BackgroundTransparency = has and 0.15 or 1 }, 0.12)
+        Util.tween(clearGlyph, { ImageTransparency = has and 0 or 1 }, 0.12)
         searchVersion += 1
         local v = searchVersion
         task.delay(0.6, function()
@@ -4830,6 +4857,11 @@ function Scripts.open()
         if not enterPressed then return end
         searchVersion += 1
         fetchScripts(searchBox.Text)
+    end)
+    clearBtn.MouseButton1Click:Connect(function()
+        searchBox.Text = ""
+        searchVersion += 1
+        fetchScripts(nil)
     end)
 
     -- Cached list paints instantly on reopen, then refreshes in the background
