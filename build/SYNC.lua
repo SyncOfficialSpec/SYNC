@@ -3897,6 +3897,18 @@ function Scripts.open()
     local CARD_W = math.floor((winW - PAD * 2 - 14 - INSET * 2) / 2)
     local CARD_H = 150
     local reqToken = 0
+    local curQuery = nil
+    local curPage = 1
+    local maxPages = 1
+    local loadingMore = false
+    local itemCount = 0
+
+    local function statusDefault()
+        if curQuery and curQuery ~= "" then
+            return "Results for \"" .. curQuery .. "\" · Powered by RScripts.io"
+        end
+        return "Recent uploads · Powered by RScripts.io"
+    end
 
     local function buildCard(s, index)
         local col = (index - 1) % 2
@@ -3999,6 +4011,40 @@ function Scripts.open()
             Util.corner(pill, 6)
         end
 
+        if s.keySystem then
+            local kp = Instance.new("TextLabel")
+            kp.Text = "KEY"
+            kp.Font = BODY_BOLD
+            kp.TextSize = 10
+            kp.TextColor3 = WHITE
+            kp.BackgroundColor3 = Color3.fromRGB(176, 108, 34)
+            kp.Position = UDim2.fromOffset(10, 10)
+            kp.Size = UDim2.fromOffset(38, 20)
+            kp.ZIndex = 6
+            kp.Parent = body
+            Util.corner(kp, 6)
+        end
+
+        -- Entrance: staggered fade + settle (orca-style intro)
+        local cover = Instance.new("Frame")
+        cover.Size = UDim2.fromScale(1, 1)
+        cover.BackgroundColor3 = WIN
+        cover.BorderSizePixel = 0
+        cover.ZIndex = 9
+        cover.Parent = body
+        Util.corner(cover, 12)
+        local bScale = Instance.new("UIScale")
+        bScale.Scale = 0.93
+        bScale.Parent = body
+        task.delay(((index - 1) % 16) * 0.04, function()
+            if not cover.Parent then return end
+            Util.tween(cover, { BackgroundTransparency = 1 }, 0.3)
+            Util.tween(bScale, { Scale = 1 }, 0.3, Enum.EasingStyle.Back)
+            task.delay(0.35, function()
+                if cover.Parent then cover:Destroy() end
+            end)
+        end)
+
         -- Shine sweep (orca: white diagonal gradient sliding in on hover)
         local shine = Instance.new("Frame")
         shine.Size = UDim2.fromScale(1, 1)
@@ -4013,6 +4059,17 @@ function Scripts.open()
         shineGrad.Transparency = NumberSequence.new(0.75, 1)
         shineGrad.Offset = Vector2.new(-1, -1)
         shineGrad.Parent = shine
+
+        -- quick color pulse over the card (execute / copy feedback)
+        local function flash(color)
+            shine.BackgroundColor3 = color
+            shine.BackgroundTransparency = 0.5
+            shineGrad.Offset = Vector2.new(0, 0)
+            Util.tween(shine, { BackgroundTransparency = 1 }, 0.6)
+            task.delay(0.6, function()
+                if shine.Parent then shine.BackgroundColor3 = WHITE end
+            end)
+        end
 
         local hovered, pressed = false, false
         local function updateBody()
@@ -4068,55 +4125,125 @@ function Scripts.open()
                 if not fn then
                     status.Text = "loadstring failed: " .. tostring(err):sub(1, 80)
                     status.TextColor3 = RED
+                    flash(RED)
                     return
                 end
                 task.defer(fn)
                 status.Text = "Executed " .. (s.title or "script")
                 status.TextColor3 = GREEN
+                flash(GREEN)
             end)
+        end)
+
+        -- right click: copy a ready loadstring
+        c.MouseButton2Click:Connect(function()
+            if not s.rawScript then return end
+            local ok = pcall(function()
+                setclipboard('loadstring(game:HttpGet("' .. s.rawScript .. '"))()')
+            end)
+            if ok then
+                status.Text = "Copied loadstring for " .. (s.title or "script")
+                status.TextColor3 = GREEN
+                flash(GREEN)
+            end
         end)
     end
 
-    local function renderList(list)
-        for _, child in ipairs(grid:GetChildren()) do child:Destroy() end
-        for i, s in ipairs(list) do buildCard(s, i) end
-        local rows = math.ceil(#list / 2)
+    local function renderList(list, append)
+        if not append then
+            for _, child in ipairs(grid:GetChildren()) do child:Destroy() end
+            itemCount = 0
+            grid.CanvasPosition = Vector2.new(0, 0)
+        end
+        for _, s in ipairs(list) do
+            itemCount += 1
+            buildCard(s, itemCount)
+        end
+        local rows = math.ceil(itemCount / 2)
         grid.CanvasSize = UDim2.fromOffset(0, rows * (CARD_H + 14) + INSET * 2)
+    end
+
+    local function requestPage(q, page)
+        local url = API .. "/scripts?page=" .. page .. "&orderBy=date&sort=desc"
+        if q and q ~= "" then url = url .. "&q=" .. HttpService:UrlEncode(q) end
+        local body = Util.httpGet(url)
+        if not body then return nil end
+        local data
+        pcall(function() data = HttpService:JSONDecode(body) end)
+        if type(data) ~= "table" or type(data.scripts) ~= "table" then return nil end
+        return data
     end
 
     local function fetchScripts(q)
         reqToken += 1
         local token = reqToken
+        curQuery = (q and q ~= "") and q or nil
+        curPage = 1
+        loadingMore = false
         status.TextColor3 = SUB
-        status.Text = (q and q ~= "") and "Searching..." or "Loading recent scripts..."
+        status.Text = curQuery and "Searching..." or "Loading recent scripts..."
         task.spawn(function()
-            local url = API .. "/scripts?page=1&orderBy=date&sort=desc"
-            if q and q ~= "" then url = url .. "&q=" .. HttpService:UrlEncode(q) end
-            local body = Util.httpGet(url)
+            local data = requestPage(curQuery, 1)
             if not alive or token ~= reqToken then return end
-            local list
-            if body then
-                pcall(function() list = HttpService:JSONDecode(body).scripts end)
-            end
-            if type(list) ~= "table" then
+            if not data then
                 status.Text = "Couldn't reach RScripts. Try again."
                 status.TextColor3 = RED
                 return
             end
-            renderList(list)
-            if q and q ~= "" then
-                status.Text = "Results for \"" .. q .. "\" · Powered by RScripts.io"
-            else
-                status.Text = "Recent uploads · Powered by RScripts.io"
+            maxPages = (data.info and tonumber(data.info.maxPages)) or 1
+            renderList(data.scripts, false)
+            status.Text = statusDefault()
+            if not curQuery then
+                Scripts._cache = data.scripts
             end
         end)
     end
 
+    -- Infinite scroll: pull the next page when close to the bottom
+    grid:GetPropertyChangedSignal("CanvasPosition"):Connect(function()
+        if loadingMore or curPage >= maxPages or itemCount == 0 then return end
+        local bottom = grid.CanvasPosition.Y + grid.AbsoluteWindowSize.Y
+        if bottom < grid.AbsoluteCanvasSize.Y - 220 then return end
+        loadingMore = true
+        local token = reqToken
+        local page = curPage + 1
+        status.Text = "Loading more..."
+        status.TextColor3 = SUB
+        task.spawn(function()
+            local data = requestPage(curQuery, page)
+            if not alive or token ~= reqToken then return end
+            if data then
+                curPage = page
+                maxPages = (data.info and tonumber(data.info.maxPages)) or maxPages
+                renderList(data.scripts, true)
+            end
+            status.Text = statusDefault()
+            loadingMore = false
+        end)
+    end)
+
+    -- Search as you type (debounced) + instant on Enter
+    local searchVersion = 0
+    searchBox:GetPropertyChangedSignal("Text"):Connect(function()
+        searchVersion += 1
+        local v = searchVersion
+        task.delay(0.6, function()
+            if alive and v == searchVersion then
+                fetchScripts(searchBox.Text)
+            end
+        end)
+    end)
     searchBox.FocusLost:Connect(function(enterPressed)
         if not enterPressed then return end
+        searchVersion += 1
         fetchScripts(searchBox.Text)
     end)
 
+    -- Cached list paints instantly on reopen, then refreshes in the background
+    if type(Scripts._cache) == "table" and #Scripts._cache > 0 then
+        renderList(Scripts._cache, false)
+        status.Text = statusDefault()
+    end
     fetchScripts(nil)
 
     return { close = close }
