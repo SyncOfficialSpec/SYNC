@@ -71,13 +71,22 @@ function Home.open()
 
     local alive = true
     local conns = {}
+    local winRef, scaleRef -- filled in below; close() animates them out
 
+    local closing = false
     local function close()
-        if not Home._gui then return end
+        if not Home._gui or closing then return end
+        closing = true
         Home._gui = nil
         alive = false
         for _, c in ipairs(conns) do pcall(function() c:Disconnect() end) end
-        gui:Destroy()
+        if winRef and scaleRef then
+            Util.tween(scaleRef, { Scale = 0.94 }, 0.15)
+            Util.tween(winRef, { BackgroundTransparency = 1 }, 0.15)
+            task.delay(0.17, function() gui:Destroy() end)
+        else
+            gui:Destroy()
+        end
     end
 
     -- Outside-click catcher
@@ -113,6 +122,7 @@ function Home.open()
     win.BackgroundTransparency = 1
     Util.tween(scaleFx, { Scale = 1 }, 0.22, Enum.EasingStyle.Back)
     Util.tween(win, { BackgroundTransparency = 0 }, 0.18)
+    winRef, scaleRef = win, scaleFx
 
     -- Title bar
     local bar = Instance.new("Frame")
@@ -334,10 +344,15 @@ function Home.open()
     badge.Parent = chatPill
     Util.corner(badge, 11)
 
+    local badgeScale = Instance.new("UIScale")
+    badgeScale.Parent = badge
+
     local function bumpUnread()
         unread += 1
         badge.Text = unread > 9 and "9+" or tostring(unread)
         badge.Visible = true
+        badgeScale.Scale = 1.35
+        Util.tween(badgeScale, { Scale = 1 }, 0.25, Enum.EasingStyle.Back)
     end
     local function clearUnread()
         unread = 0
@@ -477,11 +492,15 @@ function Home.open()
     chatPill.MouseButton1Click:Connect(function()
         profileView.Visible = false
         chatView.Visible = true
+        chatView.Position = UDim2.fromOffset(0, 22)
+        Util.tween(chatView, { Position = UDim2.fromOffset(0, 0) }, 0.24, Enum.EasingStyle.Quint)
         clearUnread()
     end)
     chatClose.MouseButton1Click:Connect(function()
         chatView.Visible = false
         profileView.Visible = true
+        profileView.Position = UDim2.fromOffset(0, 22)
+        Util.tween(profileView, { Position = UDim2.fromOffset(0, 0) }, 0.24, Enum.EasingStyle.Quint)
     end)
 
     -- Message rows, one store per tab -------------------------------------
@@ -579,6 +598,14 @@ function Home.open()
         tx.Size = UDim2.new(1, -44, 0, 15)
         tx.ZIndex = 4
         tx.Parent = row
+
+        -- new rows fade in
+        av.ImageTransparency = 1
+        nm.TextTransparency = 1
+        tx.TextTransparency = 1
+        Util.tween(av, { ImageTransparency = 0 }, 0.25)
+        Util.tween(nm, { TextTransparency = 0 }, 0.25)
+        Util.tween(tx, { TextTransparency = 0 }, 0.25)
 
         local rows = rowsByTab[tabKey]
         rows[#rows + 1] = row
@@ -886,6 +913,16 @@ function Home.open()
                 TeleportService:TeleportToPlaceInstance(fr.PlaceId, fr.GameId, lp)
             end)
         end)
+
+        -- pop in, staggered along the row
+        local chipScale = Instance.new("UIScale")
+        chipScale.Scale = 0
+        chipScale.Parent = chip
+        task.delay((index - 1) * 0.05, function()
+            if chip.Parent then
+                Util.tween(chipScale, { Scale = 1 }, 0.25, Enum.EasingStyle.Back)
+            end
+        end)
     end
 
     local function renderGames(games)
@@ -976,11 +1013,14 @@ function Home.open()
                 end
                 local id = cdn and Util.remoteImage(cdn, "gthumb2_" .. g.placeId .. ".png")
                 if id and thumb.Parent then
+                    thumb.ImageTransparency = 1
                     thumb.Image = id
                     nameLabel.Visible = false
+                    Util.tween(thumb, { ImageTransparency = 0 }, 0.35)
                 elseif uid and thumb.Parent then
+                    thumb.ImageTransparency = 1
                     thumb.Image = ("rbxthumb://type=GameIcon&id=%d&w=150&h=150"):format(uid)
-                    thumb.ImageTransparency = 0.35
+                    Util.tween(thumb, { ImageTransparency = 0.35 }, 0.35)
                 end
             end)
         end
@@ -1032,13 +1072,23 @@ function Home.open()
         g.ZIndex = 5
         g.Parent = b
         Icons.apply(g, iconName, SUB)
+        local bScale = Instance.new("UIScale")
+        bScale.Parent = b
         b.MouseEnter:Connect(function()
             Util.tween(b, { BackgroundTransparency = 0 }, 0.12)
+            Util.tween(bScale, { Scale = 1.06 }, 0.12)
             g.ImageColor3 = WHITE
         end)
         b.MouseLeave:Connect(function()
             Util.tween(b, { BackgroundTransparency = 0.25 }, 0.12)
+            Util.tween(bScale, { Scale = 1 }, 0.12)
             g.ImageColor3 = SUB
+        end)
+        b.MouseButton1Down:Connect(function()
+            Util.tween(bScale, { Scale = 0.92 }, 0.08)
+        end)
+        b.MouseButton1Up:Connect(function()
+            Util.tween(bScale, { Scale = 1.06 }, 0.12)
         end)
         b.MouseButton1Click:Connect(cb)
         return b
@@ -1123,6 +1173,14 @@ function Home.open()
             Util.corner(av, 19)
             local inGame = fr.PlaceId and fr.GameId
             Util.stroke(av, inGame and GREEN or Color3.fromRGB(90, 90, 96), 2, inGame and 0.1 or 0.55)
+            local avScale = Instance.new("UIScale")
+            avScale.Scale = 0
+            avScale.Parent = av
+            task.delay((i - 1) * 0.04, function()
+                if av.Parent then
+                    Util.tween(avScale, { Scale = 1 }, 0.22, Enum.EasingStyle.Back)
+                end
+            end)
         end
     end
 
