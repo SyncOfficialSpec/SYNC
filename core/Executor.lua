@@ -55,10 +55,19 @@ local function wrapperInnerUrl(src)
         or src:match('HttpGetAsync%s*%(%s*["\']([^"\']+)["\']')
 end
 
+-- Short-lived cache of successful fetches, so re-running or re-clicking a
+-- script is instant instead of re-hitting the network + retry loop.
+local _fetchCache = {}
+local FETCH_TTL = 90
+
 -- Fetch raw Lua for a URL. Retries a few times because the challenge page is
 -- transient. Returns (source, nil) or (nil, reason).
 function Executor.fetch(url, tries)
     tries = tries or 4
+    local hit = _fetchCache[url]
+    if hit and (os.clock() - hit.at) < FETCH_TTL then
+        return hit.src, nil
+    end
     local lastReason = "no response"
     for attempt = 1, tries do
         local body = Util.httpGet(url)
@@ -66,6 +75,7 @@ function Executor.fetch(url, tries)
             if looksLikeHTML(body) then
                 lastReason = "host returned a web page, not a script"
             else
+                _fetchCache[url] = { src = body, at = os.clock() }
                 return body, nil
             end
         else
