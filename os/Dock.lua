@@ -82,10 +82,21 @@ local function buildIcon(parent, app)
     Util.corner(label, 7)
     local lstroke = Util.stroke(label, WHITE, 1, 1)
 
+    -- running-indicator dot (macOS style): lit while the app's window is open
+    local runDot = Instance.new("Frame")
+    runDot.AnchorPoint = Vector2.new(0.5, 0.5)
+    runDot.Size = UDim2.fromOffset(4, 4)
+    runDot.BackgroundColor3 = WHITE
+    runDot.BackgroundTransparency = 1
+    runDot.BorderSizePixel = 0
+    runDot.ZIndex = 8
+    runDot.Parent = holder
+    Util.corner(runDot, 2)
+
     return {
         holder = holder, label = label, lstroke = lstroke, app = app.name,
         size = BASE_DEFAULT, bounceStart = nil, restCenter = 0, centerMain = 0,
-        pressed = false, labelShown = false,
+        pressed = false, labelShown = false, runDot = runDot, running = false,
     }
 end
 
@@ -219,18 +230,30 @@ function Dock.create(parent, onAppClick)
                 ic.holder.Position = UDim2.fromOffset(cm, baseBottomY + curOff - interior)
                 ic.label.AnchorPoint = Vector2.new(0.5, 1)
                 ic.label.Position = UDim2.new(0.5, 0, 0, -8)
+                ic.runDot.Position = UDim2.new(0.5, 0, 1, 5)
             elseif pos == "left" then
                 ic.holder.AnchorPoint = Vector2.new(0, 0.5)
                 ic.holder.Position = UDim2.fromOffset(baseLeftX - curOff + interior, cm)
                 ic.label.AnchorPoint = Vector2.new(0, 0.5)
                 ic.label.Position = UDim2.new(1, 8, 0.5, 0)
+                ic.runDot.Position = UDim2.new(0, -5, 0.5, 0)
             else -- right
                 ic.holder.AnchorPoint = Vector2.new(1, 0.5)
                 ic.holder.Position = UDim2.fromOffset(baseRightX + curOff - interior, cm)
                 ic.label.AnchorPoint = Vector2.new(1, 0.5)
                 ic.label.Position = UDim2.new(0, -8, 0.5, 0)
+                ic.runDot.Position = UDim2.new(1, 5, 0.5, 0)
             end
             accM += ic.size + GAP
+        end
+
+        -- Running dots: lit while the app's window is open (polls CoreGui)
+        for _, ic in ipairs(icons) do
+            local isOpen = parent.Parent and parent.Parent:FindFirstChild("SYNC_" .. ic.app) ~= nil
+            if isOpen ~= ic.running then
+                ic.running = isOpen
+                Util.tween(ic.runDot, { BackgroundTransparency = isOpen and 0 or 1 }, 0.18)
+            end
         end
 
         -- Labels (poll-based)
