@@ -486,10 +486,19 @@ function Scripts.open()
                     flash(RED)
                     return
                 end
-                task.defer(fn)
                 status.Text = "Executed " .. (s.title or "script")
                 status.TextColor3 = GREEN
                 flash(GREEN)
+                -- surface runtime errors (lots of rscripts uploads are dead
+                -- one-line wrappers whose inner URL no longer serves Lua)
+                task.spawn(function()
+                    local okRun, runErr = pcall(fn)
+                    if not okRun and alive then
+                        status.Text = "Script errored: " .. tostring(runErr):gsub("\n.*", ""):sub(1, 90)
+                        status.TextColor3 = RED
+                        flash(RED)
+                    end
+                end)
             end)
         end)
 
