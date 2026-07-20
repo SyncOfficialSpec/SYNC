@@ -1,0 +1,33 @@
+SYNC
+
+Devlog 1 • July 21, 2026
+
+First devlog. This batch introduces the Home app, the main hub window that lives on the SYNC dock.
+
+New Elements:
+Home App
+A macOS style window with traffic lights, opened from the dock, holding every card below. It can be dragged around by its title bar and opens and closes with a smooth scale and fade animation.
+
+Profile Card
+Shows your headshot inside a slowly spinning purple to blue gradient ring, your display name and username, and a stats row with your join date, how many friends are in your server and how many friends are online.
+
+Chat
+Opens from the pill at the bottom of the profile card and has two channels. Server talks in the game server chat, and Universal is bridged to the universal-chat channel in the SYNC Discord server, so players in game and Discord members talk in one room. The pill previews the latest message and shows an unread badge while the chat is closed, and every message row has an avatar, a colored name and a timestamp.
+
+Friend Activity
+Shows which games your friends are playing right now as full game thumbnails with their avatars overlapping the art. Hovering a friend expands them into a green join chip, and clicking it teleports you into their server. Hovering the art shows the game name.
+
+Server Card
+Live players, session time and ping, with the ping value colored green, amber or red based on how good it is. Two buttons on the side let you hop to a random server or rejoin the current one.
+
+Clock Card
+A small pill with the current time and date.
+
+Friends Card
+Every online friend as an avatar grid. A green ring means they are in a game, hovering shows their name and clicking a green friend joins them directly.
+
+Improvements:
+All cards settle in one after another when the window opens.
+Friend chips and friend avatars pop in with a small stagger.
+Game thumbnails fade in once they finish loading.
+Switching between profile and chat slides smoothly instead of snapping.
