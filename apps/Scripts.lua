@@ -236,9 +236,10 @@ function Scripts.open()
     grid.ZIndex = 3
     grid.Parent = win
 
-    -- 12px inset all around gives the orca hover-grow room inside the scroll clip
+    -- 12px inset all around gives the orca hover-grow room inside the scroll clip.
+    -- GROW stays under the 14px card gap so a hovered card never covers neighbors.
     local INSET = 12
-    local GROW = 24
+    local GROW = 12
     local CARD_W = math.floor((winW - PAD * 2 - 14 - INSET * 2) / 2)
     local CARD_H = 150
     local reqToken = 0
@@ -273,6 +274,8 @@ function Scripts.open()
         local art = Instance.new("ImageLabel")
         art.Image = BANNERS[hashStr(s.title or tostring(index)) % #BANNERS + 1]
         art.ScaleType = Enum.ScaleType.Crop
+        art.AnchorPoint = Vector2.new(0.5, 0.5)
+        art.Position = UDim2.fromScale(0.5, 0.5)
         art.Size = UDim2.fromScale(1, 1)
         art.BackgroundTransparency = 1
         art.ZIndex = 4
@@ -355,18 +358,15 @@ function Scripts.open()
         shineGrad.Offset = Vector2.new(-1, -1)
         shineGrad.Parent = shine
 
-        local shineStroke = Util.stroke(body, WHITE, 3, 1)
-        local shineStrokeGrad = Instance.new("UIGradient")
-        shineStrokeGrad.Rotation = 45
-        shineStrokeGrad.Transparency = NumberSequence.new(0.7, 0.9)
-        shineStrokeGrad.Offset = Vector2.new(-1, -1)
-        shineStrokeGrad.Parent = shineStroke
-
         local hovered, pressed = false, false
         local function updateBody()
             local grow = hovered and not pressed
             Util.tween(body, { Size = grow and UDim2.fromOffset(CARD_W + GROW, CARD_H + GROW)
                 or UDim2.fromOffset(CARD_W, CARD_H) }, 0.22, Enum.EasingStyle.Quad)
+            -- inner art zoom carries the depth so the card doesn't need to
+            -- swallow its neighbors
+            Util.tween(art, { Size = grow and UDim2.fromScale(1.09, 1.09)
+                or UDim2.fromScale(1, 1) }, 0.25, Enum.EasingStyle.Quad)
         end
 
         c.MouseEnter:Connect(function()
@@ -375,8 +375,6 @@ function Scripts.open()
             updateBody()
             Util.tween(shine, { BackgroundTransparency = 0 }, 0.25)
             Util.tween(shineGrad, { Offset = Vector2.new(0, 0) }, 0.25)
-            Util.tween(shineStroke, { Transparency = 0 }, 0.25)
-            Util.tween(shineStrokeGrad, { Offset = Vector2.new(0, 0) }, 0.25)
             Util.tween(cStroke, { Transparency = 1 }, 0.25)
         end)
         c.MouseLeave:Connect(function()
@@ -386,8 +384,6 @@ function Scripts.open()
             updateBody()
             Util.tween(shine, { BackgroundTransparency = 1 }, 0.25)
             Util.tween(shineGrad, { Offset = Vector2.new(-1, -1) }, 0.25)
-            Util.tween(shineStroke, { Transparency = 1 }, 0.25)
-            Util.tween(shineStrokeGrad, { Offset = Vector2.new(-1, -1) }, 0.25)
             Util.tween(cStroke, { Transparency = 0.85 }, 0.25)
         end)
         c.MouseButton1Down:Connect(function()
