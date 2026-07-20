@@ -4401,6 +4401,26 @@ function Scripts.open()
     emptyText.ZIndex = 4
     emptyText.Parent = emptyState
 
+    -- Loading spinner (shown during the very first fetch, before any cards)
+    local loader = Instance.new("ImageLabel")
+    loader.Size = UDim2.fromOffset(34, 34)
+    loader.AnchorPoint = Vector2.new(0.5, 0.5)
+    loader.Position = UDim2.fromScale(0.5, 0.42)
+    loader.BackgroundTransparency = 1
+    loader.ImageTransparency = 0.3
+    loader.Visible = false
+    loader.ZIndex = 4
+    loader.Parent = grid
+    Icons.apply(loader, "orbit", BLURPLE)
+    do
+        local TweenService = game:GetService("TweenService")
+        local spin = TweenService:Create(loader, TweenInfo.new(1, Enum.EasingStyle.Linear, Enum.EasingDirection.Out, -1), { Rotation = 360 })
+        spin:Play()
+    end
+    local function setLoading(on)
+        loader.Visible = on
+    end
+
     -- 12px inset all around gives the orca hover-grow room inside the scroll clip.
     -- GROW stays under the 14px card gap so a hovered card never covers neighbors.
     local INSET = 12
@@ -4662,7 +4682,7 @@ function Scripts.open()
     local function renderList(list, append)
         if not append then
             for _, child in ipairs(grid:GetChildren()) do
-                if child ~= emptyState then child:Destroy() end
+                if child ~= emptyState and child ~= loader then child:Destroy() end
             end
             itemCount = 0
             grid.CanvasPosition = Vector2.new(0, 0)
@@ -4695,9 +4715,12 @@ function Scripts.open()
         loadingMore = false
         status.TextColor3 = SUB
         status.Text = curQuery and "Searching..." or "Loading recent scripts..."
+        -- spinner only when there are no cards to look at yet
+        setLoading(itemCount == 0)
         task.spawn(function()
             local data = requestPage(curQuery, 1)
             if not alive or token ~= reqToken then return end
+            setLoading(false)
             if not data then
                 status.Text = "Couldn't reach RScripts. Try again."
                 status.TextColor3 = RED
