@@ -396,6 +396,24 @@ function Scripts.open()
     grid.ZIndex = 3
     grid.Parent = win
 
+    -- Bottom scroll fade: cards dissolve into the window edge as they scroll off
+    local gridFade = Instance.new("Frame")
+    gridFade.AnchorPoint = Vector2.new(0.5, 1)
+    gridFade.Position = UDim2.new(0.5, 0, 1, 0)
+    gridFade.Size = UDim2.new(1, 0, 0, 40)
+    gridFade.BackgroundColor3 = WIN
+    gridFade.BorderSizePixel = 0
+    gridFade.Active = false
+    gridFade.ZIndex = 6
+    gridFade.Parent = win
+    local gridFadeGrad = Instance.new("UIGradient")
+    gridFadeGrad.Rotation = 90
+    gridFadeGrad.Transparency = NumberSequence.new({
+        NumberSequenceKeypoint.new(0, 1),
+        NumberSequenceKeypoint.new(1, 0.05),
+    })
+    gridFadeGrad.Parent = gridFade
+
     -- Scroll-to-top button (floats bottom-right, appears once scrolled down)
     local toTop = Instance.new("TextButton")
     toTop.Text = ""
@@ -759,10 +777,7 @@ function Scripts.open()
         end)
 
         local copyLink = Instance.new("TextButton")
-        copyLink.Text = "  Copy link"
-        copyLink.Font = TITLE_FONT
-        copyLink.TextSize = 15
-        copyLink.TextColor3 = Color3.fromRGB(20, 20, 24)
+        copyLink.Text = ""
         copyLink.Size = UDim2.fromOffset(392, 44)
         copyLink.Position = UDim2.fromOffset(24, 250)
         copyLink.BackgroundColor3 = WHITE
@@ -770,15 +785,66 @@ function Scripts.open()
         copyLink.ZIndex = 82
         copyLink.Parent = modal
         Util.corner(copyLink, 14)
+        local clStroke = Util.stroke(copyLink, GREEN, 1.5, 1) -- appears on copied
+        -- centered icon + label group
+        local clRow = Instance.new("Frame")
+        clRow.Size = UDim2.fromScale(1, 1)
+        clRow.BackgroundTransparency = 1
+        clRow.ZIndex = 83
+        clRow.Parent = copyLink
+        local clLayout = Instance.new("UIListLayout")
+        clLayout.FillDirection = Enum.FillDirection.Horizontal
+        clLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+        clLayout.VerticalAlignment = Enum.VerticalAlignment.Center
+        clLayout.Padding = UDim.new(0, 8)
+        clLayout.Parent = clRow
+        local clIc = Instance.new("ImageLabel")
+        clIc.Size = UDim2.fromOffset(17, 17)
+        clIc.BackgroundTransparency = 1
+        clIc.ImageColor3 = Color3.fromRGB(20, 20, 24)
+        clIc.LayoutOrder = 1
+        clIc.ZIndex = 83
+        clIc.Parent = clRow
+        loadSvgIcon(clIc, "cdn.jsdelivr.net/npm/lucide-static/icons/link.svg", "ic_linkw.png", Color3.fromRGB(20, 20, 24), true)
+        local clTxt = Instance.new("TextLabel")
+        clTxt.Text = "Copy link"
+        clTxt.Font = TITLE_FONT
+        clTxt.TextSize = 15
+        clTxt.TextColor3 = Color3.fromRGB(20, 20, 24)
+        clTxt.BackgroundTransparency = 1
+        clTxt.AutomaticSize = Enum.AutomaticSize.X
+        clTxt.Size = UDim2.fromOffset(0, 20)
+        clTxt.LayoutOrder = 2
+        clTxt.ZIndex = 83
+        clTxt.Parent = clRow
+
         local clScale = Instance.new("UIScale"); clScale.Parent = copyLink
         copyLink.MouseEnter:Connect(function() Util.tween(clScale, { Scale = 1.02 }, 0.12) end)
         copyLink.MouseLeave:Connect(function() Util.tween(clScale, { Scale = 1 }, 0.12) end)
+        local clCopied = false
         copyLink.MouseButton1Click:Connect(function()
+            if clCopied then return end
+            clCopied = true
             pcall(function() setclipboard(shareUrl) end)
-            copyLink.Text = "  Copied!"
+            -- morph: white -> dark with green outline, link -> check, text green
+            Util.tween(copyLink, { BackgroundColor3 = Color3.fromRGB(18, 26, 22), BackgroundTransparency = 0.15 }, 0.2)
+            Util.tween(clStroke, { Transparency = 0.2 }, 0.2)
+            loadSvgIcon(clIc, "cdn.jsdelivr.net/npm/lucide-static/icons/check.svg", "ic_checkw.png", GREEN, true)
+            clIc.ImageColor3 = GREEN
+            clTxt.Text = "Copied!"
+            clTxt.TextColor3 = GREEN
             clScale.Scale = 1.06
-            Util.tween(clScale, { Scale = 1 }, 0.25, Enum.EasingStyle.Back)
-            task.delay(1, function() if copyLink.Parent then copyLink.Text = "  Copy link" end end)
+            Util.tween(clScale, { Scale = 1 }, 0.28, Enum.EasingStyle.Back)
+            task.delay(1.2, function()
+                if not copyLink.Parent then return end
+                Util.tween(copyLink, { BackgroundColor3 = WHITE, BackgroundTransparency = 0 }, 0.2)
+                Util.tween(clStroke, { Transparency = 1 }, 0.2)
+                loadSvgIcon(clIc, "cdn.jsdelivr.net/npm/lucide-static/icons/link.svg", "ic_linkw.png", Color3.fromRGB(20, 20, 24), true)
+                clIc.ImageColor3 = Color3.fromRGB(20, 20, 24)
+                clTxt.Text = "Copy link"
+                clTxt.TextColor3 = Color3.fromRGB(20, 20, 24)
+                clCopied = false
+            end)
         end)
     end
 
