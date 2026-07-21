@@ -2730,7 +2730,7 @@ function Settings.open(opts)
     win.Text = ""
     win.AutoButtonColor = false
     win.AnchorPoint = Vector2.new(0.5, 0.5)
-    win.Position = UDim2.fromScale(0.5, 0.5)
+    win.Position = UDim2.fromScale(0.5, 0.5) -- persistPosition (below) overrides
     win.Size = UDim2.fromOffset(cardW, cardH)
     win.BackgroundColor3 = WIN
     win.BackgroundTransparency = 0.04
@@ -2794,6 +2794,7 @@ function Settings.open(opts)
     end
 
     Util.draggable(win, bar)
+    Util.persistPosition(win, "SettingsWin")
 
     local title = Instance.new("TextLabel")
     title.Size = UDim2.new(1, 0, 1, 0)
