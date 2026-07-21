@@ -989,6 +989,24 @@ function Home.open()
     faScroll.ZIndex = 4
     faScroll.Parent = faCard
 
+    -- bottom fade so game cards dissolve into the card edge as they scroll off
+    local faFade = Instance.new("Frame")
+    faFade.AnchorPoint = Vector2.new(0.5, 1)
+    faFade.Position = UDim2.new(0.5, 0, 1, -6)
+    faFade.Size = UDim2.new(1, -8, 0, 34)
+    faFade.BackgroundColor3 = CARD
+    faFade.BorderSizePixel = 0
+    faFade.Active = false
+    faFade.ZIndex = 6
+    faFade.Parent = faCard
+    local faFadeGrad = Instance.new("UIGradient")
+    faFadeGrad.Rotation = 90
+    faFadeGrad.Transparency = NumberSequence.new({
+        NumberSequenceKeypoint.new(0, 1),
+        NumberSequenceKeypoint.new(1, 0.1),
+    })
+    faFadeGrad.Parent = faFade
+
     local THUMB_W = COL2 - 40
     local THUMB_H = math.floor(THUMB_W * 9 / 16 + 0.5)
     local ENTRY_H = THUMB_H + 24 + 22   -- thumbnail + chip overhang + gap

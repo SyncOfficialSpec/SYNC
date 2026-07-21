@@ -3983,6 +3983,24 @@ function Home.open()
     faScroll.ZIndex = 4
     faScroll.Parent = faCard
 
+    -- bottom fade so game cards dissolve into the card edge as they scroll off
+    local faFade = Instance.new("Frame")
+    faFade.AnchorPoint = Vector2.new(0.5, 1)
+    faFade.Position = UDim2.new(0.5, 0, 1, -6)
+    faFade.Size = UDim2.new(1, -8, 0, 34)
+    faFade.BackgroundColor3 = CARD
+    faFade.BorderSizePixel = 0
+    faFade.Active = false
+    faFade.ZIndex = 6
+    faFade.Parent = faCard
+    local faFadeGrad = Instance.new("UIGradient")
+    faFadeGrad.Rotation = 90
+    faFadeGrad.Transparency = NumberSequence.new({
+        NumberSequenceKeypoint.new(0, 1),
+        NumberSequenceKeypoint.new(1, 0.1),
+    })
+    faFadeGrad.Parent = faFade
+
     local THUMB_W = COL2 - 40
     local THUMB_H = math.floor(THUMB_W * 9 / 16 + 0.5)
     local ENTRY_H = THUMB_H + 24 + 22   -- thumbnail + chip overhang + gap
@@ -5506,21 +5524,32 @@ function Scripts.open()
         banner.Image = BANNERS[hashStr(s.title or "?") % #BANNERS + 1]
         banner.ZIndex = 41
         banner.Parent = scroll
-        Util.corner(banner, 14)
-        -- bottom fade: the image dissolves into the window toward its lower edge
+        -- round only the TOP corners; the bottom is a straight edge the fade
+        -- dissolves into the window, so there's no visible boundary down there
+        local bCorner = Instance.new("UICorner")
+        local okBC = pcall(function()
+            bCorner.TopLeftRadius = UDim.new(0, 14)
+            bCorner.TopRightRadius = UDim.new(0, 14)
+            bCorner.BottomLeftRadius = UDim.new(0, 0)
+            bCorner.BottomRightRadius = UDim.new(0, 0)
+        end)
+        if not okBC then bCorner.CornerRadius = UDim.new(0, 14) end
+        bCorner.Parent = banner
+        -- bottom fade: the image dissolves fully into the window (transparency 0
+        -- = solid window colour at the very bottom, no edge)
         local bannerFade = Instance.new("Frame")
         bannerFade.Size = UDim2.fromScale(1, 1)
         bannerFade.BackgroundColor3 = WIN
         bannerFade.BorderSizePixel = 0
         bannerFade.ZIndex = 42
         bannerFade.Parent = banner
-        Util.corner(bannerFade, 14)
         local bannerFadeGrad = Instance.new("UIGradient")
         bannerFadeGrad.Rotation = 90
         bannerFadeGrad.Transparency = NumberSequence.new({
             NumberSequenceKeypoint.new(0, 1),
-            NumberSequenceKeypoint.new(0.55, 1),
-            NumberSequenceKeypoint.new(1, 0.05),
+            NumberSequenceKeypoint.new(0.4, 1),
+            NumberSequenceKeypoint.new(0.8, 0.35),
+            NumberSequenceKeypoint.new(1, 0),
         })
         bannerFadeGrad.Parent = bannerFade
         -- real script art (webp -> weserv PNG), replaces the wallpaper if it loads

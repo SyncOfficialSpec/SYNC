@@ -959,21 +959,32 @@ function Scripts.open()
         banner.Image = BANNERS[hashStr(s.title or "?") % #BANNERS + 1]
         banner.ZIndex = 41
         banner.Parent = scroll
-        Util.corner(banner, 14)
-        -- bottom fade: the image dissolves into the window toward its lower edge
+        -- round only the TOP corners; the bottom is a straight edge the fade
+        -- dissolves into the window, so there's no visible boundary down there
+        local bCorner = Instance.new("UICorner")
+        local okBC = pcall(function()
+            bCorner.TopLeftRadius = UDim.new(0, 14)
+            bCorner.TopRightRadius = UDim.new(0, 14)
+            bCorner.BottomLeftRadius = UDim.new(0, 0)
+            bCorner.BottomRightRadius = UDim.new(0, 0)
+        end)
+        if not okBC then bCorner.CornerRadius = UDim.new(0, 14) end
+        bCorner.Parent = banner
+        -- bottom fade: the image dissolves fully into the window (transparency 0
+        -- = solid window colour at the very bottom, no edge)
         local bannerFade = Instance.new("Frame")
         bannerFade.Size = UDim2.fromScale(1, 1)
         bannerFade.BackgroundColor3 = WIN
         bannerFade.BorderSizePixel = 0
         bannerFade.ZIndex = 42
         bannerFade.Parent = banner
-        Util.corner(bannerFade, 14)
         local bannerFadeGrad = Instance.new("UIGradient")
         bannerFadeGrad.Rotation = 90
         bannerFadeGrad.Transparency = NumberSequence.new({
             NumberSequenceKeypoint.new(0, 1),
-            NumberSequenceKeypoint.new(0.55, 1),
-            NumberSequenceKeypoint.new(1, 0.05),
+            NumberSequenceKeypoint.new(0.4, 1),
+            NumberSequenceKeypoint.new(0.8, 0.35),
+            NumberSequenceKeypoint.new(1, 0),
         })
         bannerFadeGrad.Parent = bannerFade
         -- real script art (webp -> weserv PNG), replaces the wallpaper if it loads
