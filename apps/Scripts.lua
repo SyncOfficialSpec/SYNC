@@ -1409,17 +1409,31 @@ function Scripts.open()
         end
 
         if s.keySystem then
-            local kp = Instance.new("TextLabel")
-            kp.Text = "KEY"
-            kp.Font = BODY_BOLD
-            kp.TextSize = 10
-            kp.TextColor3 = WHITE
+            local kp = Instance.new("Frame")
             kp.BackgroundColor3 = Color3.fromRGB(176, 108, 34)
             kp.Position = UDim2.fromOffset(10, 10)
-            kp.Size = UDim2.fromOffset(38, 20)
+            kp.Size = UDim2.fromOffset(54, 20)
             kp.ZIndex = 6
             kp.Parent = body
             Util.corner(kp, 6)
+            local klock = Instance.new("ImageLabel")
+            klock.Size = UDim2.fromOffset(11, 11)
+            klock.Position = UDim2.fromOffset(8, 4)
+            klock.BackgroundTransparency = 1
+            klock.ZIndex = 7
+            klock.Parent = kp
+            loadSvgIcon(klock, "cdn.jsdelivr.net/npm/lucide-static/icons/lock.svg", "ic_lockw.png", WHITE, true)
+            local ktxt = Instance.new("TextLabel")
+            ktxt.Text = "KEY"
+            ktxt.Font = BODY_BOLD
+            ktxt.TextSize = 10
+            ktxt.TextColor3 = WHITE
+            ktxt.TextXAlignment = Enum.TextXAlignment.Left
+            ktxt.BackgroundTransparency = 1
+            ktxt.Position = UDim2.fromOffset(23, 0)
+            ktxt.Size = UDim2.new(1, -25, 1, 0)
+            ktxt.ZIndex = 7
+            ktxt.Parent = kp
         end
 
         -- Entrance: staggered fade + settle (orca-style intro)
