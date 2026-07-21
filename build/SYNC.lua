@@ -4363,10 +4363,10 @@ function Home.open()
             local inGame = fr.PlaceId and fr.GameId
             Util.stroke(av, inGame and GREEN or Color3.fromRGB(90, 90, 96), 2, inGame and 0.1 or 0.55)
 
-            -- hover shows who it is (and that green means joinable)
+            -- hover shows who it is; green = joinable, otherwise copy profile
             av.MouseEnter:Connect(function()
                 friendsTitle.Text = (fr.DisplayName or fr.UserName or "?")
-                    .. (inGame and "  ·  click to join" or "")
+                    .. (inGame and "  ·  click to join" or "  ·  click to copy profile")
             end)
             av.MouseLeave:Connect(function()
                 friendsTitle.Text = titleDefault
@@ -4376,6 +4376,16 @@ function Home.open()
                     pcall(function()
                         TeleportService:TeleportToPlaceInstance(fr.PlaceId, fr.GameId, lp)
                     end)
+                else
+                    local ok = pcall(function()
+                        setclipboard(("https://www.roblox.com/users/%d/profile"):format(fr.VisitorId))
+                    end)
+                    if ok then
+                        friendsTitle.Text = "Profile link copied"
+                        task.delay(1.2, function()
+                            if friendsTitle.Parent then friendsTitle.Text = titleDefault end
+                        end)
+                    end
                 end
             end)
 
@@ -4583,19 +4593,21 @@ local function weservPng(imgUrl, w)
         .. "&output=png&w=" .. (w or 768)
 end
 
--- Load an SVG icon (lucide / simple-icons) as a PNG the client can render:
--- weserv rasterises the SVG, getcustomasset loads it. Tint via ImageColor3.
--- Async: fills `img` once ready. filename must be unique per icon.
-local function loadSvgIcon(img, svgUrl, filename, tint)
+-- Load an SVG icon as a PNG the client can render: weserv rasterises the SVG,
+-- getcustomasset loads it. lucide icons render BLACK, and ImageColor3 can't
+-- lighten black (multiply), so invert=true runs weserv's negate filter to make
+-- them white first; then the tint applies. Async: fills `img` once ready.
+local function loadSvgIcon(img, svgUrl, filename, tint, invert)
     task.spawn(function()
         local pngUrl = "https://images.weserv.nl/?url="
             .. game:GetService("HttpService"):UrlEncode(svgUrl) .. "&output=png&w=64&h=64"
+        if invert then pngUrl = pngUrl .. "&filt=negate" end
         local id = SYNC.import("core/Util").remoteImage(pngUrl, filename)
         if id and img and img.Parent then
             img.Image = id
             img.ImageRectOffset = Vector2.new(0, 0)
             img.ImageRectSize = Vector2.new(0, 0)
-            if tint then img.ImageColor3 = tint end
+            img.ImageColor3 = tint or Color3.fromRGB(255, 255, 255)
         end
     end)
 end
@@ -5183,7 +5195,7 @@ function Scripts.open()
             logo.BackgroundTransparency = 1
             logo.ZIndex = 83
             logo.Parent = b
-            loadSvgIcon(logo, "cdn.simpleicons.org/" .. soc.slug .. "/ffffff", "ic_soc_" .. soc.slug .. ".png")
+            loadSvgIcon(logo, "cdn.simpleicons.org/" .. soc.slug .. "/ffffff", "ic_soc_" .. soc.slug .. ".png", WHITE)
             local lbl = Instance.new("TextLabel")
             lbl.Text = soc.name
             lbl.Font = BODY_BOLD
@@ -5195,6 +5207,16 @@ function Scripts.open()
             lbl.Size = UDim2.fromOffset(90, 16)
             lbl.ZIndex = 83
             lbl.Parent = b
+            -- hover: lift + brighten
+            local bScale = Instance.new("UIScale"); bScale.Parent = b
+            b.MouseEnter:Connect(function()
+                Util.tween(b, { BackgroundTransparency = 0.05 }, 0.12)
+                Util.tween(bScale, { Scale = 1.05 }, 0.12, Enum.EasingStyle.Back)
+            end)
+            b.MouseLeave:Connect(function()
+                Util.tween(b, { BackgroundTransparency = 0.35 }, 0.12)
+                Util.tween(bScale, { Scale = 1 }, 0.12)
+            end)
             b.MouseButton1Click:Connect(function()
                 pcall(function() setclipboard(shareUrl) end)
                 lbl.Text = "Copied"
@@ -5212,6 +5234,16 @@ function Scripts.open()
         sys.ZIndex = 82
         sys.Parent = modal
         Util.corner(sys, 12)
+        local sysIcon = Instance.new("ImageLabel")
+        sysIcon.Size = UDim2.fromOffset(20, 20)
+        sysIcon.AnchorPoint = Vector2.new(0, 0.5)
+        sysIcon.Position = UDim2.new(0, 20, 0.5, 0)
+        sysIcon.BackgroundTransparency = 1
+        sysIcon.ZIndex = 83
+        sysIcon.Parent = sys
+        loadSvgIcon(sysIcon, "cdn.jsdelivr.net/npm/lucide-static/icons/share-2.svg", "ic_share2w.png", WHITE, true)
+        sys.MouseEnter:Connect(function() Util.tween(sys, { BackgroundTransparency = 0.1 }, 0.12) end)
+        sys.MouseLeave:Connect(function() Util.tween(sys, { BackgroundTransparency = 0.35 }, 0.12) end)
         local sysT = Instance.new("TextLabel")
         sysT.Text = "System share"
         sysT.Font = BODY_BOLD
@@ -5248,12 +5280,18 @@ function Scripts.open()
         copyLink.Size = UDim2.fromOffset(392, 44)
         copyLink.Position = UDim2.fromOffset(24, 250)
         copyLink.BackgroundColor3 = WHITE
+        copyLink.AutoButtonColor = false
         copyLink.ZIndex = 82
         copyLink.Parent = modal
         Util.corner(copyLink, 14)
+        local clScale = Instance.new("UIScale"); clScale.Parent = copyLink
+        copyLink.MouseEnter:Connect(function() Util.tween(clScale, { Scale = 1.02 }, 0.12) end)
+        copyLink.MouseLeave:Connect(function() Util.tween(clScale, { Scale = 1 }, 0.12) end)
         copyLink.MouseButton1Click:Connect(function()
             pcall(function() setclipboard(shareUrl) end)
             copyLink.Text = "  Copied!"
+            clScale.Scale = 1.06
+            Util.tween(clScale, { Scale = 1 }, 0.25, Enum.EasingStyle.Back)
             task.delay(1, function() if copyLink.Parent then copyLink.Text = "  Copy link" end end)
         end)
     end
@@ -5280,6 +5318,24 @@ function Scripts.open()
         blocker.BackgroundTransparency = 1
         blocker.ZIndex = 40
         blocker.Parent = layer
+
+        -- bottom fade: content dissolves into the window edge as it scrolls
+        local fade = Instance.new("Frame")
+        fade.AnchorPoint = Vector2.new(0, 1)
+        fade.Position = UDim2.fromScale(0, 1)
+        fade.Size = UDim2.new(1, 0, 0, 46)
+        fade.BackgroundColor3 = WIN
+        fade.BorderSizePixel = 0
+        fade.ZIndex = 50
+        fade.Active = false
+        fade.Parent = layer
+        local fadeGrad = Instance.new("UIGradient")
+        fadeGrad.Rotation = 90
+        fadeGrad.Transparency = NumberSequence.new({
+            NumberSequenceKeypoint.new(0, 1),
+            NumberSequenceKeypoint.new(1, 0),
+        })
+        fadeGrad.Parent = fade
 
         local scroll = Instance.new("ScrollingFrame")
         scroll.Size = UDim2.fromScale(1, 1)
@@ -5443,7 +5499,7 @@ function Scripts.open()
         end
         local shareBtn = sideBtn(pad + execW + gap, nil, function() openShare(s) end)
         loadSvgIcon(shareBtn:FindFirstChildWhichIsA("ImageLabel"),
-            "cdn.jsdelivr.net/npm/lucide-static/icons/share-2.svg", "ic_share2.png", SUB)
+            "cdn.jsdelivr.net/npm/lucide-static/icons/share-2.svg", "ic_share2w.png", SUB, true)
 
         -- Stats chips (real thumbs / eye icons via SVG)
         local statY = actY + 62
@@ -5454,11 +5510,11 @@ function Scripts.open()
         stats.ZIndex = 41
         stats.Parent = scroll
         local _, likeIc = pill(stats, 60, nil, tostring(s.likes or 0), 0)
-        loadSvgIcon(likeIc, "cdn.jsdelivr.net/npm/lucide-static/icons/thumbs-up.svg", "ic_thumbup.png", SUB)
+        loadSvgIcon(likeIc, "cdn.jsdelivr.net/npm/lucide-static/icons/thumbs-up.svg", "ic_thumbupw.png", SUB, true)
         local _, disIc = pill(stats, 60, nil, tostring(s.dislikes or 0), 68)
-        loadSvgIcon(disIc, "cdn.jsdelivr.net/npm/lucide-static/icons/thumbs-down.svg", "ic_thumbdown.png", SUB)
+        loadSvgIcon(disIc, "cdn.jsdelivr.net/npm/lucide-static/icons/thumbs-down.svg", "ic_thumbdownw.png", SUB, true)
         local _, viewIc = pill(stats, 96, nil, formatCount(s.views or 0), 136)
-        loadSvgIcon(viewIc, "cdn.jsdelivr.net/npm/lucide-static/icons/eye.svg", "ic_eye.png", SUB)
+        loadSvgIcon(viewIc, "cdn.jsdelivr.net/npm/lucide-static/icons/eye.svg", "ic_eyew.png", SUB, true)
         pill(stats, 96, "clock", relativeAge(s.createdAt), 240)
 
         -- Script Preview
@@ -5512,52 +5568,23 @@ function Scripts.open()
         prevCopy.Parent = prevCard
         Util.corner(prevCopy, 8)
         local prevCopyIc = Instance.new("ImageLabel")
-        prevCopyIc.Size = UDim2.fromOffset(12, 12); prevCopyIc.Position = UDim2.fromOffset(12, 8)
+        prevCopyIc.Size = UDim2.fromOffset(13, 13); prevCopyIc.Position = UDim2.fromOffset(12, 8)
         prevCopyIc.BackgroundTransparency = 1; prevCopyIc.ZIndex = 44; prevCopyIc.Parent = prevCopy
-        Icons.apply(prevCopyIc, "file-text", SUB)
+        loadSvgIcon(prevCopyIc, "cdn.jsdelivr.net/npm/lucide-static/icons/copy.svg", "ic_copyw.png", SUB, true)
         prevCopy.MouseEnter:Connect(function() Util.tween(prevCopy, { BackgroundTransparency = 0 }, 0.12) end)
         prevCopy.MouseLeave:Connect(function() Util.tween(prevCopy, { BackgroundTransparency = 0.3 }, 0.12) end)
         prevCopy.MouseButton1Click:Connect(function()
             if not previewSrc then return end
             pcall(function() setclipboard(previewSrc) end)
             prevCopy.Text = "  Copied"
-            task.delay(1, function() if prevCopy.Parent then prevCopy.Text = "  Copy" end end)
-        end)
-
-        -- Download button: saves the source to a file the executor can reach
-        local prevDl = Instance.new("TextButton")
-        prevDl.Text = "  Save"
-        prevDl.Font = BODY_BOLD
-        prevDl.TextSize = 12
-        prevDl.TextColor3 = Color3.fromRGB(210, 210, 216)
-        prevDl.AutoButtonColor = false
-        prevDl.AnchorPoint = Vector2.new(1, 0)
-        prevDl.Position = UDim2.new(1, -94, 0, 12)
-        prevDl.Size = UDim2.fromOffset(72, 28)
-        prevDl.BackgroundColor3 = FIELD
-        prevDl.BackgroundTransparency = 0.3
-        prevDl.ZIndex = 43
-        prevDl.Parent = prevCard
-        Util.corner(prevDl, 8)
-        local prevDlIc = Instance.new("ImageLabel")
-        prevDlIc.Size = UDim2.fromOffset(12, 12); prevDlIc.Position = UDim2.fromOffset(12, 8)
-        prevDlIc.BackgroundTransparency = 1; prevDlIc.ZIndex = 44; prevDlIc.Parent = prevDl
-        Icons.apply(prevDlIc, "chevron-down", SUB)
-        prevDl.MouseEnter:Connect(function() Util.tween(prevDl, { BackgroundTransparency = 0 }, 0.12) end)
-        prevDl.MouseLeave:Connect(function() Util.tween(prevDl, { BackgroundTransparency = 0.3 }, 0.12) end)
-        prevDl.MouseButton1Click:Connect(function()
-            if not previewSrc then return end
-            local safe = (s.title or "script"):gsub("[^%w%-_ ]", ""):gsub("%s+", "_"):sub(1, 40)
-            local ok = pcall(function()
-                if typeof(makefolder) == "function" and typeof(isfolder) == "function" and not isfolder("SYNC/scripts") then
-                    makefolder("SYNC/scripts")
+            -- stretch so the longer label reads properly, then settle back
+            Util.tween(prevCopy, { Size = UDim2.fromOffset(90, 28) }, 0.18, Enum.EasingStyle.Back)
+            task.delay(1, function()
+                if prevCopy.Parent then
+                    prevCopy.Text = "  Copy"
+                    Util.tween(prevCopy, { Size = UDim2.fromOffset(72, 28) }, 0.18)
                 end
-                writefile("SYNC/scripts/" .. safe .. ".lua", previewSrc)
             end)
-            prevDl.Text = ok and "  Saved" or "  Failed"
-            status.Text = ok and ("Saved to SYNC/scripts/" .. safe .. ".lua") or "Save failed (no file API)"
-            status.TextColor3 = ok and GREEN or RED
-            task.delay(1.2, function() if prevDl.Parent then prevDl.Text = "  Save" end end)
         end)
 
         local codeBox = Instance.new("TextLabel")

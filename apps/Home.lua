@@ -1388,10 +1388,10 @@ function Home.open()
             local inGame = fr.PlaceId and fr.GameId
             Util.stroke(av, inGame and GREEN or Color3.fromRGB(90, 90, 96), 2, inGame and 0.1 or 0.55)
 
-            -- hover shows who it is (and that green means joinable)
+            -- hover shows who it is; green = joinable, otherwise copy profile
             av.MouseEnter:Connect(function()
                 friendsTitle.Text = (fr.DisplayName or fr.UserName or "?")
-                    .. (inGame and "  ·  click to join" or "")
+                    .. (inGame and "  ·  click to join" or "  ·  click to copy profile")
             end)
             av.MouseLeave:Connect(function()
                 friendsTitle.Text = titleDefault
@@ -1401,6 +1401,16 @@ function Home.open()
                     pcall(function()
                         TeleportService:TeleportToPlaceInstance(fr.PlaceId, fr.GameId, lp)
                     end)
+                else
+                    local ok = pcall(function()
+                        setclipboard(("https://www.roblox.com/users/%d/profile"):format(fr.VisitorId))
+                    end)
+                    if ok then
+                        friendsTitle.Text = "Profile link copied"
+                        task.delay(1.2, function()
+                            if friendsTitle.Parent then friendsTitle.Text = titleDefault end
+                        end)
+                    end
                 end
             end)
 
