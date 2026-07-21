@@ -523,9 +523,8 @@ function Home.open()
     chatScroll.Size = UDim2.new(1, -24, 1, -152)
     chatScroll.BackgroundTransparency = 1
     chatScroll.BorderSizePixel = 0
-    chatScroll.ScrollBarThickness = 3
-    chatScroll.ScrollBarImageColor3 = SUB
-    chatScroll.ScrollBarImageTransparency = 0.6
+    chatScroll.ScrollBarThickness = 0
+    chatScroll.ScrollBarImageTransparency = 1
     chatScroll.CanvasSize = UDim2.new()
     chatScroll.ZIndex = 4
     chatScroll.Parent = chatView
