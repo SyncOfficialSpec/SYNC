@@ -2953,18 +2953,37 @@ function Settings.open(opts)
     verLabel.ZIndex = 3
     verLabel.Parent = win
 
-    local taglineLabel = Instance.new("TextLabel")
-    taglineLabel.Text = "Desktop OS for Roblox"
-    taglineLabel.Font = Theme.fonts.caption
-    taglineLabel.TextSize = 12
-    taglineLabel.TextColor3 = SUB
-    taglineLabel.TextXAlignment = Enum.TextXAlignment.Right
-    taglineLabel.BackgroundTransparency = 1
-    taglineLabel.AnchorPoint = Vector2.new(1, 0)
-    taglineLabel.Position = UDim2.new(1, -20, 0, aboutY + 11)
-    taglineLabel.Size = UDim2.fromOffset(220, 14)
-    taglineLabel.ZIndex = 3
-    taglineLabel.Parent = win
+    -- Reset window positions button: recenters Home/Scripts/Settings next open
+    local resetBtn = Instance.new("TextButton")
+    resetBtn.Text = "Reset window positions"
+    resetBtn.Font = Theme.fonts.body
+    resetBtn.TextSize = 12
+    resetBtn.TextColor3 = SUB
+    resetBtn.AutoButtonColor = false
+    resetBtn.BackgroundColor3 = GROUP
+    resetBtn.BackgroundTransparency = 0.2
+    resetBtn.AnchorPoint = Vector2.new(1, 0.5)
+    resetBtn.Position = UDim2.new(1, -20, 0, aboutY + 17)
+    resetBtn.Size = UDim2.fromOffset(180, 26)
+    resetBtn.ZIndex = 3
+    resetBtn.Parent = win
+    Util.corner(resetBtn, 8)
+    Util.stroke(resetBtn, WHITE, 1, 0.9)
+    resetBtn.MouseEnter:Connect(function()
+        Util.tween(resetBtn, { BackgroundTransparency = 0 }, 0.12)
+        resetBtn.TextColor3 = WHITE
+    end)
+    resetBtn.MouseLeave:Connect(function()
+        Util.tween(resetBtn, { BackgroundTransparency = 0.2 }, 0.12)
+        resetBtn.TextColor3 = SUB
+    end)
+    resetBtn.MouseButton1Click:Connect(function()
+        for _, k in ipairs({ "HomeWinOX", "HomeWinOY", "ScriptsWinOX", "ScriptsWinOY", "SettingsWinOX", "SettingsWinOY" }) do
+            Util.save(k, "")
+        end
+        resetBtn.Text = "Positions reset"
+        task.delay(1.2, function() if resetBtn.Parent then resetBtn.Text = "Reset window positions" end end)
+    end)
 
     return { close = close }
 end
