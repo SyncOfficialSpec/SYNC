@@ -4961,6 +4961,23 @@ function Scripts.open()
     })
     gridFadeGrad.Parent = gridFade
 
+    -- Top scroll fade: cards dissolve in under the sort row as they scroll up
+    local gridFadeTop = Instance.new("Frame")
+    gridFadeTop.Position = UDim2.fromOffset(0, gridY - 2)
+    gridFadeTop.Size = UDim2.new(1, 0, 0, 26)
+    gridFadeTop.BackgroundColor3 = WIN
+    gridFadeTop.BorderSizePixel = 0
+    gridFadeTop.Active = false
+    gridFadeTop.ZIndex = 6
+    gridFadeTop.Parent = win
+    local gridFadeTopGrad = Instance.new("UIGradient")
+    gridFadeTopGrad.Rotation = 90
+    gridFadeTopGrad.Transparency = NumberSequence.new({
+        NumberSequenceKeypoint.new(0, 0.05),
+        NumberSequenceKeypoint.new(1, 1),
+    })
+    gridFadeTopGrad.Parent = gridFadeTop
+
     -- Scroll-to-top button (floats bottom-right, appears once scrolled down)
     local toTop = Instance.new("TextButton")
     toTop.Text = ""
