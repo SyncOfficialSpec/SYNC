@@ -612,6 +612,15 @@ function Home.open()
     sendGlyph.Parent = sendBtn
     Icons.apply(sendGlyph, "chevron-right", WHITE)
 
+    -- dim the send button until there's something to send
+    local function updateSendState()
+        local has = chatBox.Text:gsub("%s", "") ~= ""
+        Util.tween(sendBtn, { BackgroundTransparency = has and 0.1 or 0.65 }, 0.12)
+        sendGlyph.ImageTransparency = has and 0 or 0.45
+    end
+    chatBox:GetPropertyChangedSignal("Text"):Connect(updateSendState)
+    updateSendState()
+
     chatPill.MouseButton1Click:Connect(function()
         profileView.Visible = false
         chatView.Visible = true
