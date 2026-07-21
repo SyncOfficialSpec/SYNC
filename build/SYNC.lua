@@ -3027,9 +3027,9 @@ function Login.run(onDone)
     title.Position = UDim2.fromOffset(rightX, px(68))
     title.Size = UDim2.fromOffset(rightW, px(46))
     title.BackgroundTransparency = 1
-    title.Font = Theme.fonts.title
+    title.Font = Enum.Font.GothamBlack -- heavy wordmark, like the reference
     title.Text = "S Y N C"
-    title.TextSize = px(38)
+    title.TextSize = px(40)
     title.TextColor3 = WHITE
     title.TextTransparency = 1
     title.TextXAlignment = Enum.TextXAlignment.Center
@@ -3120,19 +3120,6 @@ function Login.run(onDone)
 
     local userBox, userStroke = field(px(232), "Enter username", false, 0.2)
     local passBox, passStroke = field(px(300), "Enter password", true, 0.24)
-
-    -- password masking (keep the real value, display bullets)
-    local realPass = ""
-    passBox:GetPropertyChangedSignal("Text"):Connect(function()
-        local t = passBox.Text
-        if t == string.rep("\226\128\162", #realPass) then return end -- our own masked set
-        if #t > #realPass then
-            realPass = realPass .. t:sub(#realPass + 1)
-        else
-            realPass = realPass:sub(1, #t)
-        end
-        passBox.Text = string.rep("\226\128\162", #realPass)
-    end)
 
     -- Continue button
     local cont = Instance.new("TextButton")
@@ -3281,7 +3268,7 @@ function Login.run(onDone)
     end
 
     local function attempt()
-        if userBox.Text == USER and realPass == PASS then
+        if userBox.Text == USER and passBox.Text == PASS then
             err.TextColor3 = Color3.fromRGB(120, 220, 150)
             err.Text = "Welcome back"
             exitThen(function() finish(false) end)
