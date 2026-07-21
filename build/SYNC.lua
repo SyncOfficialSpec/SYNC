@@ -4583,6 +4583,23 @@ local function weservPng(imgUrl, w)
         .. "&output=png&w=" .. (w or 768)
 end
 
+-- Load an SVG icon (lucide / simple-icons) as a PNG the client can render:
+-- weserv rasterises the SVG, getcustomasset loads it. Tint via ImageColor3.
+-- Async: fills `img` once ready. filename must be unique per icon.
+local function loadSvgIcon(img, svgUrl, filename, tint)
+    task.spawn(function()
+        local pngUrl = "https://images.weserv.nl/?url="
+            .. game:GetService("HttpService"):UrlEncode(svgUrl) .. "&output=png&w=64&h=64"
+        local id = SYNC.import("core/Util").remoteImage(pngUrl, filename)
+        if id and img and img.Parent then
+            img.Image = id
+            img.ImageRectOffset = Vector2.new(0, 0)
+            img.ImageRectSize = Vector2.new(0, 0)
+            if tint then img.ImageColor3 = tint end
+        end
+    end)
+end
+
 Scripts._gui = nil
 
 function Scripts.open()
@@ -5032,9 +5049,10 @@ function Scripts.open()
         ic.Size = UDim2.fromOffset(14, 14)
         ic.Position = UDim2.fromOffset(12, 8)
         ic.BackgroundTransparency = 1
+        ic.ImageColor3 = SUB
         ic.ZIndex = 63
         ic.Parent = p
-        Icons.apply(ic, iconName, SUB)
+        if iconName then Icons.apply(ic, iconName, SUB) end
         local t = Instance.new("TextLabel")
         t.Text = text
         t.Font = BODY_BOLD
@@ -5046,7 +5064,7 @@ function Scripts.open()
         t.Size = UDim2.new(1, -38, 1, 0)
         t.ZIndex = 63
         t.Parent = p
-        return p
+        return p, ic
     end
 
     local function openShare(s)
@@ -5067,7 +5085,7 @@ function Scripts.open()
         local modal = Instance.new("Frame")
         modal.AnchorPoint = Vector2.new(0.5, 0.5)
         modal.Position = UDim2.fromScale(0.5, 0.5)
-        modal.Size = UDim2.fromOffset(440, 320)
+        modal.Size = UDim2.fromOffset(440, 340)
         modal.BackgroundColor3 = Color3.fromRGB(24, 25, 29)
         modal.ZIndex = 81
         modal.Parent = layer
@@ -5137,25 +5155,47 @@ function Scripts.open()
         via.ZIndex = 82
         via.Parent = modal
 
-        local socials = { "X", "Facebook", "Reddit", "Telegram" }
-        for i, name in ipairs(socials) do
+        -- brand logos from simple-icons (white), rasterised via weserv
+        local socials = {
+            { name = "X",        slug = "x" },
+            { name = "Facebook", slug = "facebook" },
+            { name = "Reddit",   slug = "reddit" },
+            { name = "Telegram", slug = "telegram" },
+        }
+        for i, soc in ipairs(socials) do
             local b = Instance.new("TextButton")
-            b.Text = name
+            b.Text = ""
             b.AutoButtonColor = false
-            b.Font = BODY_BOLD
-            b.TextSize = 12
-            b.TextColor3 = Color3.fromRGB(210, 210, 216)
-            b.Size = UDim2.fromOffset(94, 46)
+            b.Size = UDim2.fromOffset(94, 62)
             b.Position = UDim2.fromOffset(24 + (i - 1) * 100, 106)
             b.BackgroundColor3 = FIELD
             b.BackgroundTransparency = 0.35
             b.ZIndex = 82
             b.Parent = modal
             Util.corner(b, 12)
+            local logo = Instance.new("ImageLabel")
+            logo.Size = UDim2.fromOffset(22, 22)
+            logo.AnchorPoint = Vector2.new(0.5, 0)
+            logo.Position = UDim2.new(0.5, 0, 0, 12)
+            logo.BackgroundTransparency = 1
+            logo.ZIndex = 83
+            logo.Parent = b
+            loadSvgIcon(logo, "cdn.simpleicons.org/" .. soc.slug .. "/ffffff", "ic_soc_" .. soc.slug .. ".png")
+            local lbl = Instance.new("TextLabel")
+            lbl.Text = soc.name
+            lbl.Font = BODY_BOLD
+            lbl.TextSize = 12
+            lbl.TextColor3 = Color3.fromRGB(210, 210, 216)
+            lbl.BackgroundTransparency = 1
+            lbl.AnchorPoint = Vector2.new(0.5, 1)
+            lbl.Position = UDim2.new(0.5, 0, 1, -8)
+            lbl.Size = UDim2.fromOffset(90, 16)
+            lbl.ZIndex = 83
+            lbl.Parent = b
             b.MouseButton1Click:Connect(function()
                 pcall(function() setclipboard(shareUrl) end)
-                b.Text = "Copied"
-                task.delay(1, function() if b.Parent then b.Text = name end end)
+                lbl.Text = "Copied"
+                task.delay(1, function() if lbl.Parent then lbl.Text = soc.name end end)
             end)
         end
 
@@ -5163,7 +5203,7 @@ function Scripts.open()
         sys.Text = ""
         sys.AutoButtonColor = false
         sys.Size = UDim2.fromOffset(392, 52)
-        sys.Position = UDim2.fromOffset(24, 164)
+        sys.Position = UDim2.fromOffset(24, 182)
         sys.BackgroundColor3 = FIELD
         sys.BackgroundTransparency = 0.35
         sys.ZIndex = 82
@@ -5203,7 +5243,7 @@ function Scripts.open()
         copyLink.TextSize = 15
         copyLink.TextColor3 = Color3.fromRGB(20, 20, 24)
         copyLink.Size = UDim2.fromOffset(392, 44)
-        copyLink.Position = UDim2.fromOffset(24, 232)
+        copyLink.Position = UDim2.fromOffset(24, 250)
         copyLink.BackgroundColor3 = WHITE
         copyLink.ZIndex = 82
         copyLink.Parent = modal
@@ -5227,6 +5267,16 @@ function Scripts.open()
         layer.Parent = win
         detailLayer = layer
         Util.tween(layer, { BackgroundTransparency = 0 }, 0.15)
+
+        -- input blocker: without this, clicks on empty detail areas fall through
+        -- to the grid cards behind and reopen the detail ("refreshes the menu")
+        local blocker = Instance.new("TextButton")
+        blocker.Text = ""
+        blocker.AutoButtonColor = false
+        blocker.Size = UDim2.fromScale(1, 1)
+        blocker.BackgroundTransparency = 1
+        blocker.ZIndex = 40
+        blocker.Parent = layer
 
         local scroll = Instance.new("ScrollingFrame")
         scroll.Size = UDim2.fromScale(1, 1)
@@ -5314,8 +5364,8 @@ function Scripts.open()
 
         -- Actions: Execute (big) + Copy + Share
         local actY = 54 + bannerH + 74
-        local shareW, copyW, gap = 50, 50, 10
-        local execW = (winW - pad * 2) - shareW - copyW - gap * 2
+        local shareW, gap = 50, 10
+        local execW = (winW - pad * 2) - shareW - gap
 
         local exec = Instance.new("TextButton")
         exec.Text = "  Execute"
@@ -5388,15 +5438,11 @@ function Scripts.open()
             b.MouseButton1Click:Connect(cb)
             return b
         end
-        sideBtn(pad + execW + gap, "file-text", function()
-            if s.rawScript then
-                pcall(function() setclipboard('loadstring(game:HttpGet("' .. s.rawScript .. '"))()') end)
-                status.Text = "Copied loadstring for " .. (s.title or "script"); status.TextColor3 = GREEN
-            end
-        end)
-        sideBtn(pad + execW + gap + copyW + gap, "sliders-horizontal", function() openShare(s) end)
+        local shareBtn = sideBtn(pad + execW + gap, nil, function() openShare(s) end)
+        loadSvgIcon(shareBtn:FindFirstChildWhichIsA("ImageLabel"),
+            "cdn.jsdelivr.net/npm/lucide-static/icons/share-2.svg", "ic_share2.png", SUB)
 
-        -- Stats chips
+        -- Stats chips (real thumbs / eye icons via SVG)
         local statY = actY + 62
         local stats = Instance.new("Frame")
         stats.Size = UDim2.new(1, -pad * 2, 0, 30)
@@ -5404,9 +5450,12 @@ function Scripts.open()
         stats.BackgroundTransparency = 1
         stats.ZIndex = 41
         stats.Parent = scroll
-        pill(stats, 60, "chevron-up", tostring(s.likes or 0), 0)
-        pill(stats, 60, "chevron-down", tostring(s.dislikes or 0), 68)
-        pill(stats, 96, "search", formatCount(s.views or 0), 136)
+        local _, likeIc = pill(stats, 60, nil, tostring(s.likes or 0), 0)
+        loadSvgIcon(likeIc, "cdn.jsdelivr.net/npm/lucide-static/icons/thumbs-up.svg", "ic_thumbup.png", SUB)
+        local _, disIc = pill(stats, 60, nil, tostring(s.dislikes or 0), 68)
+        loadSvgIcon(disIc, "cdn.jsdelivr.net/npm/lucide-static/icons/thumbs-down.svg", "ic_thumbdown.png", SUB)
+        local _, viewIc = pill(stats, 96, nil, formatCount(s.views or 0), 136)
+        loadSvgIcon(viewIc, "cdn.jsdelivr.net/npm/lucide-static/icons/eye.svg", "ic_eye.png", SUB)
         pill(stats, 96, "clock", relativeAge(s.createdAt), 240)
 
         -- Script Preview
