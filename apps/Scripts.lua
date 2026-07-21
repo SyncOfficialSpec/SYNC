@@ -209,7 +209,7 @@ function Scripts.open()
     search.ZIndex = 3
     search.Parent = win
     Util.corner(search, 14)
-    Util.stroke(search, WHITE, 1, 0.9)
+    local searchStroke = Util.stroke(search, WHITE, 1, 0.9)
 
     local searchBox = Instance.new("TextBox")
     searchBox.PlaceholderText = "Search scripts..."
@@ -817,9 +817,16 @@ function Scripts.open()
         end)
     end)
     searchBox.FocusLost:Connect(function(enterPressed)
-        if not enterPressed then return end
-        searchVersion += 1
-        fetchScripts(searchBox.Text)
+        if enterPressed then
+            searchVersion += 1
+            fetchScripts(searchBox.Text)
+        end
+        -- release the focus ring
+        Util.tween(searchStroke, { Color = WHITE, Transparency = 0.9 }, 0.15)
+    end)
+    searchBox.Focused:Connect(function()
+        -- accent focus ring
+        Util.tween(searchStroke, { Color = BLURPLE, Transparency = 0.35 }, 0.15)
     end)
     clearBtn.MouseButton1Click:Connect(function()
         searchBox.Text = ""
