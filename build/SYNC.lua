@@ -4795,8 +4795,16 @@ function Scripts.open()
         { key = "views", label = "Popular",   heading = "Most viewed" },
         { key = "likes", label = "Top rated", heading = "Top rated" },
     }
+    -- restore the last chosen sort (persisted across reopens)
     local sortIdx = 1
+    do
+        local saved = Util.load("ScriptsSort")
+        for i, s in ipairs(SORTS) do
+            if s.key == saved then sortIdx = i break end
+        end
+    end
     local function curSort() return SORTS[sortIdx] end
+    sortChipLabel.Text = SORTS[sortIdx].label
 
     local function statusDefault()
         if curQuery and curQuery ~= "" then
@@ -5207,12 +5215,14 @@ function Scripts.open()
     sortChip.MouseButton1Click:Connect(function()
         sortIdx = sortIdx % #SORTS + 1
         sortChipLabel.Text = curSort().label
+        Util.save("ScriptsSort", curSort().key)
         searchVersion += 1
         fetchScripts(curQuery)
     end)
 
-    -- Cached list paints instantly on reopen, then refreshes in the background
-    if type(Scripts._cache) == "table" and #Scripts._cache > 0 then
+    -- Cached list paints instantly on reopen (only for the default sort, which
+    -- is what the cache holds), then refreshes in the background
+    if curSort().key == "date" and type(Scripts._cache) == "table" and #Scripts._cache > 0 then
         renderList(Scripts._cache, false)
         status.Text = statusDefault()
     end
