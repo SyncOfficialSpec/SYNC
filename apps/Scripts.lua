@@ -604,6 +604,13 @@ function Scripts.open()
     end
 
     local function openShare(s)
+        local TEAL   = Color3.fromRGB(20, 184, 166)
+        local TEALBG = Color3.fromRGB(18, 32, 30)
+        local BLACK  = Color3.fromRGB(20, 20, 24)
+        local TILE   = Color3.fromRGB(38, 39, 45)
+        local MW, pad = 448, 24
+        local shareUrl = "https://rscripts.net/script/" .. (s.slug or "")
+
         local layer = Instance.new("Frame")
         layer.Size = UDim2.fromScale(1, 1)
         layer.BackgroundColor3 = Color3.new(0, 0, 0)
@@ -621,11 +628,11 @@ function Scripts.open()
         local modal = Instance.new("Frame")
         modal.AnchorPoint = Vector2.new(0.5, 0.5)
         modal.Position = UDim2.fromScale(0.5, 0.5)
-        modal.Size = UDim2.fromOffset(440, 340)
+        modal.Size = UDim2.fromOffset(MW, 360)
         modal.BackgroundColor3 = Color3.fromRGB(24, 25, 29)
         modal.ZIndex = 81
         modal.Parent = layer
-        Util.corner(modal, 18)
+        Util.corner(modal, 20)
         Util.rimStroke(modal, 1, 0.6, 0.95)
         local msc = Instance.new("UIScale"); msc.Scale = 0.9; msc.Parent = modal
         Util.tween(msc, { Scale = 1 }, 0.18, Enum.EasingStyle.Back)
@@ -637,6 +644,24 @@ function Scripts.open()
         end
         catch.MouseButton1Click:Connect(closeShare)
 
+        -- Header: leading share-icon tile + title + subtitle
+        local hicon = Instance.new("Frame")
+        hicon.Size = UDim2.fromOffset(48, 48)
+        hicon.Position = UDim2.fromOffset(pad, 22)
+        hicon.BackgroundColor3 = TILE
+        hicon.BackgroundTransparency = 0.15
+        hicon.ZIndex = 82
+        hicon.Parent = modal
+        Util.corner(hicon, 12)
+        local hiconG = Instance.new("ImageLabel")
+        hiconG.Size = UDim2.fromOffset(22, 22)
+        hiconG.AnchorPoint = Vector2.new(0.5, 0.5)
+        hiconG.Position = UDim2.fromScale(0.5, 0.5)
+        hiconG.BackgroundTransparency = 1
+        hiconG.ZIndex = 83
+        hiconG.Parent = hicon
+        loadSvgIcon(hiconG, "cdn.jsdelivr.net/npm/lucide-static/icons/share-2.svg", "ic_share2w.png", WHITE, true)
+
         local sh = Instance.new("TextLabel")
         sh.Text = "Share script"
         sh.Font = TITLE_FONT
@@ -644,8 +669,8 @@ function Scripts.open()
         sh.TextColor3 = WHITE
         sh.TextXAlignment = Enum.TextXAlignment.Left
         sh.BackgroundTransparency = 1
-        sh.Position = UDim2.fromOffset(24, 22)
-        sh.Size = UDim2.fromOffset(300, 26)
+        sh.Position = UDim2.fromOffset(84, 24)
+        sh.Size = UDim2.fromOffset(280, 26)
         sh.ZIndex = 82
         sh.Parent = modal
         local shSub = Instance.new("TextLabel")
@@ -656,29 +681,30 @@ function Scripts.open()
         shSub.TextXAlignment = Enum.TextXAlignment.Left
         shSub.TextTruncate = Enum.TextTruncate.AtEnd
         shSub.BackgroundTransparency = 1
-        shSub.Position = UDim2.fromOffset(24, 50)
-        shSub.Size = UDim2.fromOffset(392, 18)
+        shSub.Position = UDim2.fromOffset(84, 50)
+        shSub.Size = UDim2.fromOffset(MW - 84 - 56, 18)
         shSub.ZIndex = 82
         shSub.Parent = modal
 
         local xBtn = Instance.new("TextButton")
         xBtn.Text = ""; xBtn.AutoButtonColor = false
-        xBtn.Size = UDim2.fromOffset(30, 30)
+        xBtn.Size = UDim2.fromOffset(34, 34)
         xBtn.AnchorPoint = Vector2.new(1, 0)
-        xBtn.Position = UDim2.new(1, -16, 0, 18)
-        xBtn.BackgroundColor3 = FIELD
-        xBtn.BackgroundTransparency = 0.3
+        xBtn.Position = UDim2.new(1, -16, 0, 20)
+        xBtn.BackgroundColor3 = TILE
+        xBtn.BackgroundTransparency = 0.25
         xBtn.ZIndex = 82
         xBtn.Parent = modal
-        Util.corner(xBtn, 10)
+        Util.corner(xBtn, 11)
         local xg = Instance.new("ImageLabel")
-        xg.Size = UDim2.fromOffset(13, 13); xg.AnchorPoint = Vector2.new(0.5, 0.5)
+        xg.Size = UDim2.fromOffset(14, 14); xg.AnchorPoint = Vector2.new(0.5, 0.5)
         xg.Position = UDim2.fromScale(0.5, 0.5); xg.BackgroundTransparency = 1
         xg.ZIndex = 83; xg.Parent = xBtn
         Icons.apply(xg, "x", SUB)
+        xBtn.MouseEnter:Connect(function() Util.tween(xBtn, { BackgroundTransparency = 0 }, 0.12); xg.ImageColor3 = WHITE end)
+        xBtn.MouseLeave:Connect(function() Util.tween(xBtn, { BackgroundTransparency = 0.25 }, 0.12); xg.ImageColor3 = SUB end)
         xBtn.MouseButton1Click:Connect(closeShare)
 
-        local shareUrl = "https://rscripts.net/script/" .. (s.slug or "")
         local via = Instance.new("TextLabel")
         via.Text = "SHARE VIA"
         via.Font = BODY_BOLD
@@ -686,59 +712,57 @@ function Scripts.open()
         via.TextColor3 = SUB
         via.TextXAlignment = Enum.TextXAlignment.Left
         via.BackgroundTransparency = 1
-        via.Position = UDim2.fromOffset(24, 84)
+        via.Position = UDim2.fromOffset(pad, 92)
         via.Size = UDim2.fromOffset(200, 14)
         via.ZIndex = 82
         via.Parent = modal
 
-        -- brand logos from simple-icons (white), rasterised via weserv
+        -- Social buttons: brand logo on top, label below (all four, incl. X)
         local socials = {
             { name = "X",        slug = "x" },
             { name = "Facebook", slug = "facebook" },
             { name = "Reddit",   slug = "reddit" },
             { name = "Telegram", slug = "telegram" },
         }
+        local socY, socH = 114, 66
+        local socW = math.floor((MW - pad * 2 - 30) / 4)   -- 3 gaps of 10
         for i, soc in ipairs(socials) do
             local b = Instance.new("TextButton")
             b.Text = ""
             b.AutoButtonColor = false
-            b.Size = UDim2.fromOffset(94, 62)
-            b.Position = UDim2.fromOffset(24 + (i - 1) * 100, 106)
-            b.BackgroundColor3 = FIELD
-            b.BackgroundTransparency = 0.35
+            b.Size = UDim2.fromOffset(socW, socH)
+            b.Position = UDim2.fromOffset(pad + (i - 1) * (socW + 10), socY)
+            b.BackgroundColor3 = TILE
+            b.BackgroundTransparency = 0.4
             b.ZIndex = 82
             b.Parent = modal
             Util.corner(b, 12)
-            -- X shows the logo centered with no label (like the reference);
-            -- the others have the logo on top and a label below
-            local xOnly = (soc.slug == "x")
             local logo = Instance.new("ImageLabel")
             logo.Size = UDim2.fromOffset(22, 22)
-            logo.AnchorPoint = Vector2.new(0.5, xOnly and 0.5 or 0)
-            logo.Position = xOnly and UDim2.fromScale(0.5, 0.5) or UDim2.new(0.5, 0, 0, 12)
+            logo.AnchorPoint = Vector2.new(0.5, 0)
+            logo.Position = UDim2.new(0.5, 0, 0, 13)
             logo.BackgroundTransparency = 1
             logo.ZIndex = 83
             logo.Parent = b
             loadSvgIcon(logo, "cdn.simpleicons.org/" .. soc.slug .. "/ffffff", "ic_soc_" .. soc.slug .. ".png", WHITE)
             local lbl = Instance.new("TextLabel")
-            lbl.Text = xOnly and "" or soc.name
+            lbl.Text = soc.name
             lbl.Font = BODY_BOLD
             lbl.TextSize = 12
-            lbl.TextColor3 = Color3.fromRGB(210, 210, 216)
+            lbl.TextColor3 = Color3.fromRGB(200, 200, 208)
             lbl.BackgroundTransparency = 1
             lbl.AnchorPoint = Vector2.new(0.5, 1)
-            lbl.Position = UDim2.new(0.5, 0, 1, -8)
-            lbl.Size = UDim2.fromOffset(90, 16)
+            lbl.Position = UDim2.new(0.5, 0, 1, -9)
+            lbl.Size = UDim2.fromOffset(socW - 6, 16)
             lbl.ZIndex = 83
             lbl.Parent = b
-            -- hover: lift + brighten
             local bScale = Instance.new("UIScale"); bScale.Parent = b
             b.MouseEnter:Connect(function()
-                Util.tween(b, { BackgroundTransparency = 0.05 }, 0.12)
-                Util.tween(bScale, { Scale = 1.05 }, 0.12, Enum.EasingStyle.Back)
+                Util.tween(b, { BackgroundTransparency = 0.15 }, 0.12)
+                Util.tween(bScale, { Scale = 1.04 }, 0.12, Enum.EasingStyle.Back)
             end)
             b.MouseLeave:Connect(function()
-                Util.tween(b, { BackgroundTransparency = 0.35 }, 0.12)
+                Util.tween(b, { BackgroundTransparency = 0.4 }, 0.12)
                 Util.tween(bScale, { Scale = 1 }, 0.12)
             end)
             b.MouseButton1Click:Connect(function()
@@ -748,26 +772,37 @@ function Scripts.open()
             end)
         end
 
+        -- System share
+        local sysY = socY + socH + 14
         local sys = Instance.new("TextButton")
         sys.Text = ""
         sys.AutoButtonColor = false
-        sys.Size = UDim2.fromOffset(392, 52)
-        sys.Position = UDim2.fromOffset(24, 182)
-        sys.BackgroundColor3 = FIELD
-        sys.BackgroundTransparency = 0.35
+        sys.Size = UDim2.fromOffset(MW - pad * 2, 56)
+        sys.Position = UDim2.fromOffset(pad, sysY)
+        sys.BackgroundColor3 = TILE
+        sys.BackgroundTransparency = 0.4
         sys.ZIndex = 82
         sys.Parent = modal
         Util.corner(sys, 12)
+        local sysTile = Instance.new("Frame")
+        sysTile.Size = UDim2.fromOffset(38, 38)
+        sysTile.AnchorPoint = Vector2.new(0, 0.5)
+        sysTile.Position = UDim2.new(0, 10, 0.5, 0)
+        sysTile.BackgroundColor3 = Color3.fromRGB(30, 31, 36)
+        sysTile.BackgroundTransparency = 0.2
+        sysTile.ZIndex = 83
+        sysTile.Parent = sys
+        Util.corner(sysTile, 10)
         local sysIcon = Instance.new("ImageLabel")
-        sysIcon.Size = UDim2.fromOffset(20, 20)
-        sysIcon.AnchorPoint = Vector2.new(0, 0.5)
-        sysIcon.Position = UDim2.new(0, 20, 0.5, 0)
+        sysIcon.Size = UDim2.fromOffset(19, 19)
+        sysIcon.AnchorPoint = Vector2.new(0.5, 0.5)
+        sysIcon.Position = UDim2.fromScale(0.5, 0.5)
         sysIcon.BackgroundTransparency = 1
-        sysIcon.ZIndex = 83
-        sysIcon.Parent = sys
+        sysIcon.ZIndex = 84
+        sysIcon.Parent = sysTile
         loadSvgIcon(sysIcon, "cdn.jsdelivr.net/npm/lucide-static/icons/share-2.svg", "ic_share2w.png", WHITE, true)
-        sys.MouseEnter:Connect(function() Util.tween(sys, { BackgroundTransparency = 0.1 }, 0.12) end)
-        sys.MouseLeave:Connect(function() Util.tween(sys, { BackgroundTransparency = 0.35 }, 0.12) end)
+        sys.MouseEnter:Connect(function() Util.tween(sys, { BackgroundTransparency = 0.2 }, 0.12) end)
+        sys.MouseLeave:Connect(function() Util.tween(sys, { BackgroundTransparency = 0.4 }, 0.12) end)
         local sysT = Instance.new("TextLabel")
         sysT.Text = "System share"
         sysT.Font = BODY_BOLD
@@ -775,39 +810,53 @@ function Scripts.open()
         sysT.TextColor3 = WHITE
         sysT.TextXAlignment = Enum.TextXAlignment.Left
         sysT.BackgroundTransparency = 1
-        sysT.Position = UDim2.fromOffset(58, 8)
-        sysT.Size = UDim2.fromOffset(300, 18)
+        sysT.Position = UDim2.fromOffset(60, 9)
+        sysT.Size = UDim2.fromOffset(320, 18)
         sysT.ZIndex = 83
         sysT.Parent = sys
         local sysS = Instance.new("TextLabel")
-        sysS.Text = "Copy the script link"
+        sysS.Text = "Use your device's share sheet"
         sysS.Font = Theme.fonts.caption
         sysS.TextSize = 12
         sysS.TextColor3 = SUB
         sysS.TextXAlignment = Enum.TextXAlignment.Left
         sysS.BackgroundTransparency = 1
-        sysS.Position = UDim2.fromOffset(58, 27)
-        sysS.Size = UDim2.fromOffset(300, 16)
+        sysS.Position = UDim2.fromOffset(60, 29)
+        sysS.Size = UDim2.fromOffset(320, 16)
         sysS.ZIndex = 83
         sysS.Parent = sys
         sys.MouseButton1Click:Connect(function()
             pcall(function() setclipboard(shareUrl) end)
             sysS.Text = "Link copied to clipboard"
-            sysS.TextColor3 = GREEN
+            sysS.TextColor3 = TEAL
         end)
 
+        -- OR COPY LINK label
+        local orY = sysY + 56 + 16
+        local orLbl = Instance.new("TextLabel")
+        orLbl.Text = "OR COPY LINK"
+        orLbl.Font = BODY_BOLD
+        orLbl.TextSize = 11
+        orLbl.TextColor3 = SUB
+        orLbl.TextXAlignment = Enum.TextXAlignment.Left
+        orLbl.BackgroundTransparency = 1
+        orLbl.Position = UDim2.fromOffset(pad, orY)
+        orLbl.Size = UDim2.fromOffset(200, 14)
+        orLbl.ZIndex = 82
+        orLbl.Parent = modal
+
+        -- Copy link: plain white pill; click -> teal "Copied!" morph (no hover)
+        local clY = orY + 22
         local copyLink = Instance.new("TextButton")
         copyLink.Text = ""
-        copyLink.Size = UDim2.fromOffset(392, 44)
-        copyLink.Position = UDim2.fromOffset(24, 250)
+        copyLink.Size = UDim2.fromOffset(MW - pad * 2, 46)
+        copyLink.Position = UDim2.fromOffset(pad, clY)
         copyLink.BackgroundColor3 = WHITE
         copyLink.AutoButtonColor = false
         copyLink.ZIndex = 82
         copyLink.Parent = modal
-        Util.corner(copyLink, 14)
-        -- soft blue accent border (matches the reference)
-        Util.stroke(copyLink, Color3.fromRGB(120, 150, 240), 1.5, 0.45)
-        -- centered icon + label group
+        Util.corner(copyLink, 15)
+        local clStroke = Util.stroke(copyLink, TEAL, 1.5, 1) -- hidden until copied
         local clRow = Instance.new("Frame")
         clRow.Size = UDim2.fromScale(1, 1)
         clRow.BackgroundTransparency = 1
@@ -817,21 +866,21 @@ function Scripts.open()
         clLayout.FillDirection = Enum.FillDirection.Horizontal
         clLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
         clLayout.VerticalAlignment = Enum.VerticalAlignment.Center
-        clLayout.Padding = UDim.new(0, 8)
+        clLayout.Padding = UDim.new(0, 9)
         clLayout.Parent = clRow
         local clIc = Instance.new("ImageLabel")
         clIc.Size = UDim2.fromOffset(17, 17)
         clIc.BackgroundTransparency = 1
-        clIc.ImageColor3 = Color3.fromRGB(20, 20, 24)
+        clIc.ImageColor3 = BLACK
         clIc.LayoutOrder = 1
         clIc.ZIndex = 83
         clIc.Parent = clRow
-        loadSvgIcon(clIc, "cdn.jsdelivr.net/npm/lucide-static/icons/link.svg", "ic_linkw.png", Color3.fromRGB(20, 20, 24), true)
+        loadSvgIcon(clIc, "cdn.jsdelivr.net/npm/lucide-static/icons/link.svg", "ic_linkw.png", BLACK, true)
         local clTxt = Instance.new("TextLabel")
         clTxt.Text = "Copy link"
         clTxt.Font = TITLE_FONT
         clTxt.TextSize = 15
-        clTxt.TextColor3 = Color3.fromRGB(20, 20, 24)
+        clTxt.TextColor3 = BLACK
         clTxt.BackgroundTransparency = 1
         clTxt.AutomaticSize = Enum.AutomaticSize.X
         clTxt.Size = UDim2.fromOffset(0, 20)
@@ -839,38 +888,41 @@ function Scripts.open()
         clTxt.ZIndex = 83
         clTxt.Parent = clRow
 
-        -- no hover animation; on click the icon swaps to a check and the label
-        -- reads "Copied!" (stays white / black, matching the reference), with a
-        -- quick icon+text fade so the swap feels smooth, then reverts.
         local clScale = Instance.new("UIScale"); clScale.Parent = copyLink
-        local BLACK = Color3.fromRGB(20, 20, 24)
         local clCopied = false
         copyLink.MouseButton1Click:Connect(function()
             if clCopied then return end
             clCopied = true
             pcall(function() setclipboard(shareUrl) end)
-            -- fade icon+text out, swap to check + "Copied!", fade back in
+            -- morph: white -> dark teal-tinted with a teal ring, link -> check,
+            -- text -> teal "Copied!" (matches the reference recording)
+            Util.tween(copyLink, { BackgroundColor3 = TEALBG, BackgroundTransparency = 0.08 }, 0.2)
+            Util.tween(clStroke, { Transparency = 0.35 }, 0.2)
             Util.tween(clIc, { ImageTransparency = 1 }, 0.09)
             Util.tween(clTxt, { TextTransparency = 1 }, 0.09)
             clScale.Scale = 1.04
             Util.tween(clScale, { Scale = 1 }, 0.3, Enum.EasingStyle.Back)
-            task.delay(0.1, function()
+            task.delay(0.11, function()
                 if not copyLink.Parent then return end
-                loadSvgIcon(clIc, "cdn.jsdelivr.net/npm/lucide-static/icons/check.svg", "ic_checkw.png", BLACK, true)
-                clIc.ImageColor3 = BLACK
+                loadSvgIcon(clIc, "cdn.jsdelivr.net/npm/lucide-static/icons/check.svg", "ic_checkw.png", TEAL, true)
+                clIc.ImageColor3 = TEAL
                 clTxt.Text = "Copied!"
+                clTxt.TextColor3 = TEAL
                 Util.tween(clIc, { ImageTransparency = 0 }, 0.12)
                 Util.tween(clTxt, { TextTransparency = 0 }, 0.12)
             end)
-            task.delay(1.3, function()
+            task.delay(1.35, function()
                 if not copyLink.Parent then return end
+                Util.tween(copyLink, { BackgroundColor3 = WHITE, BackgroundTransparency = 0 }, 0.2)
+                Util.tween(clStroke, { Transparency = 1 }, 0.2)
                 Util.tween(clIc, { ImageTransparency = 1 }, 0.09)
                 Util.tween(clTxt, { TextTransparency = 1 }, 0.09)
-                task.delay(0.1, function()
+                task.delay(0.11, function()
                     if not copyLink.Parent then return end
                     loadSvgIcon(clIc, "cdn.jsdelivr.net/npm/lucide-static/icons/link.svg", "ic_linkw.png", BLACK, true)
                     clIc.ImageColor3 = BLACK
                     clTxt.Text = "Copy link"
+                    clTxt.TextColor3 = BLACK
                     Util.tween(clIc, { ImageTransparency = 0 }, 0.12)
                     Util.tween(clTxt, { TextTransparency = 0 }, 0.12)
                     clCopied = false
