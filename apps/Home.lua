@@ -278,6 +278,37 @@ function Home.open()
     avatarBtn.ZIndex = 5
     avatarBtn.Parent = avatarHolder
     Util.corner(avatarBtn, 62)
+
+    -- hover affordance: scale the avatar up + a copy-hint overlay
+    local avatarScale = Instance.new("UIScale")
+    avatarScale.Parent = avatarHolder
+    local copyHint = Instance.new("Frame")
+    copyHint.Size = UDim2.fromScale(1, 1)
+    copyHint.BackgroundColor3 = Color3.new(0, 0, 0)
+    copyHint.BackgroundTransparency = 1
+    copyHint.ZIndex = 5
+    copyHint.Parent = avatarHolder
+    Util.corner(copyHint, 62)
+    local copyHintIcon = Instance.new("ImageLabel")
+    copyHintIcon.Size = UDim2.fromOffset(24, 24)
+    copyHintIcon.AnchorPoint = Vector2.new(0.5, 0.5)
+    copyHintIcon.Position = UDim2.fromScale(0.5, 0.5)
+    copyHintIcon.BackgroundTransparency = 1
+    copyHintIcon.ImageTransparency = 1
+    copyHintIcon.ZIndex = 6
+    copyHintIcon.Parent = copyHint
+    Icons.apply(copyHintIcon, "file-text", WHITE)
+    avatarBtn.MouseEnter:Connect(function()
+        Util.tween(avatarScale, { Scale = 1.05 }, 0.14, Enum.EasingStyle.Back)
+        Util.tween(copyHint, { BackgroundTransparency = 0.45 }, 0.14)
+        Util.tween(copyHintIcon, { ImageTransparency = 0 }, 0.14)
+    end)
+    avatarBtn.MouseLeave:Connect(function()
+        Util.tween(avatarScale, { Scale = 1 }, 0.14)
+        Util.tween(copyHint, { BackgroundTransparency = 1 }, 0.14)
+        Util.tween(copyHintIcon, { ImageTransparency = 1 }, 0.14)
+    end)
+
     local copyResetAt = 0
     avatarBtn.MouseButton1Click:Connect(function()
         local ok = pcall(function()
