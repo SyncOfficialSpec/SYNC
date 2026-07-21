@@ -4891,10 +4891,11 @@ function Scripts.open()
     sortChipLabel.Text = SORTS[sortIdx].label
 
     local function statusDefault()
+        local count = itemCount > 0 and (" · " .. itemCount .. " shown") or ""
         if curQuery and curQuery ~= "" then
-            return "Results for \"" .. curQuery .. "\" · Powered by RScripts.io"
+            return "Results for \"" .. curQuery .. "\"" .. count .. " · Powered by RScripts.io"
         end
-        return curSort().heading .. " · Powered by RScripts.io"
+        return curSort().heading .. count .. " · Powered by RScripts.io"
     end
 
     local function buildCard(s, index)
