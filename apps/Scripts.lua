@@ -810,22 +810,6 @@ function Scripts.open()
         local shareW, copyW, gap = 50, 50, 10
         local execW = (winW - pad * 2) - shareW - copyW - gap * 2
 
-        local function runScript()
-            if not s.rawScript then return end
-            status.Text = "Running " .. (s.title or "script") .. "..."
-            status.TextColor3 = SUB
-            task.spawn(function()
-                local ok, err = Executor.runUrl(s.rawScript, s.title)
-                if ok then
-                    status.Text = "Executed " .. (s.title or "script"); status.TextColor3 = GREEN
-                    if s.rawScript then ranSet[s.rawScript] = true end
-                    if onRan then pcall(onRan) end
-                else
-                    status.Text = (s.title or "script") .. ": " .. tostring(err):sub(1, 90); status.TextColor3 = RED
-                end
-            end)
-        end
-
         local exec = Instance.new("TextButton")
         exec.Text = "  Execute"
         exec.Font = TITLE_FONT
@@ -834,6 +818,7 @@ function Scripts.open()
         exec.Size = UDim2.fromOffset(execW, 50)
         exec.Position = UDim2.fromOffset(pad, actY)
         exec.BackgroundColor3 = GREEN
+        exec.AutoButtonColor = false
         exec.ZIndex = 42
         exec.Parent = scroll
         Util.corner(exec, 15)
@@ -842,6 +827,37 @@ function Scripts.open()
         execIc.Position = UDim2.new(0.5, -46, 0.5, 0); execIc.BackgroundTransparency = 1
         execIc.ZIndex = 43; execIc.Parent = exec
         Icons.apply(execIc, "chevron-right", Color3.fromRGB(10, 24, 16))
+
+        local execSpin = game:GetService("TweenService"):Create(
+            execIc, TweenInfo.new(0.8, Enum.EasingStyle.Linear, Enum.EasingDirection.Out, -1), { Rotation = 360 })
+        local execRunning = false
+        local function runScript()
+            if execRunning or not s.rawScript then return end
+            execRunning = true
+            exec.Text = "  Running..."
+            Util.tween(exec, { BackgroundColor3 = Color3.fromRGB(46, 150, 108) }, 0.15)
+            Icons.apply(execIc, "orbit", Color3.fromRGB(10, 24, 16))
+            execSpin:Play()
+            status.Text = "Running " .. (s.title or "script") .. "..."
+            status.TextColor3 = SUB
+            task.spawn(function()
+                local ok, err = Executor.runUrl(s.rawScript, s.title)
+                execRunning = false
+                execSpin:Pause(); execIc.Rotation = 0
+                Icons.apply(execIc, "chevron-right", Color3.fromRGB(10, 24, 16))
+                exec.Text = "  Execute"
+                if ok then
+                    Util.tween(exec, { BackgroundColor3 = GREEN }, 0.15)
+                    status.Text = "Executed " .. (s.title or "script"); status.TextColor3 = GREEN
+                    if s.rawScript then ranSet[s.rawScript] = true end
+                    if onRan then pcall(onRan) end
+                else
+                    Util.tween(exec, { BackgroundColor3 = RED }, 0.15)
+                    task.delay(0.7, function() if exec.Parent then Util.tween(exec, { BackgroundColor3 = GREEN }, 0.3) end end)
+                    status.Text = (s.title or "script") .. ": " .. tostring(err):sub(1, 90); status.TextColor3 = RED
+                end
+            end)
+        end
         exec.MouseButton1Click:Connect(runScript)
 
         local function sideBtn(x, iconName, cb)
