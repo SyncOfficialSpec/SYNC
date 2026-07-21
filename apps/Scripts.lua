@@ -56,6 +56,29 @@ local function formatCount(n)
     return tostring(math.floor(n))
 end
 
+-- ISO date string -> "3d ago" / "1mo ago" / "2y ago"
+local function relativeAge(iso)
+    if type(iso) ~= "string" then return "" end
+    local y, mo, d = iso:match("(%d+)-(%d+)-(%d+)")
+    if not y then return "" end
+    local t = os.time({ year = tonumber(y), month = tonumber(mo), day = tonumber(d), hour = 12 })
+    local secs = os.time() - t
+    if secs < 0 then secs = 0 end
+    local day = 86400
+    if secs < day then return "today" end
+    if secs < 30 * day then return math.floor(secs / day) .. "d ago" end
+    if secs < 365 * day then return math.floor(secs / (30 * day)) .. "mo ago" end
+    return math.floor(secs / (365 * day)) .. "y ago"
+end
+
+-- Roblox can't decode rscripts' .webp, so route it through images.weserv.nl
+-- which returns a PNG that getcustomasset can load.
+local function weservPng(imgUrl, w)
+    return "https://images.weserv.nl/?url="
+        .. game:GetService("HttpService"):UrlEncode(tostring(imgUrl))
+        .. "&output=png&w=" .. (w or 768)
+end
+
 Scripts._gui = nil
 
 function Scripts.open()
@@ -473,6 +496,460 @@ function Scripts.open()
         return curSort().heading .. count .. " · Powered by RScripts.io"
     end
 
+    -- ------------------------------------------------------------------
+    -- Script detail view (opens over the grid on card click)
+    -- ------------------------------------------------------------------
+    local detailLayer
+
+    local function closeDetail()
+        if detailLayer then
+            local d = detailLayer
+            detailLayer = nil
+            Util.tween(d, { BackgroundTransparency = 1 }, 0.15)
+            for _, ch in ipairs(d:GetDescendants()) do
+                pcall(function()
+                    if ch:IsA("GuiObject") then Util.tween(ch, { BackgroundTransparency = 1 }, 0.12) end
+                end)
+            end
+            task.delay(0.16, function() if d and d.Parent then d:Destroy() end end)
+        end
+    end
+
+    local function pill(parent, w, iconName, text, x)
+        local p = Instance.new("Frame")
+        p.Size = UDim2.fromOffset(w, 30)
+        p.Position = UDim2.fromOffset(x, 0)
+        p.BackgroundColor3 = FIELD
+        p.BackgroundTransparency = 0.3
+        p.ZIndex = 62
+        p.Parent = parent
+        Util.corner(p, 10)
+        local ic = Instance.new("ImageLabel")
+        ic.Size = UDim2.fromOffset(14, 14)
+        ic.Position = UDim2.fromOffset(12, 8)
+        ic.BackgroundTransparency = 1
+        ic.ZIndex = 63
+        ic.Parent = p
+        Icons.apply(ic, iconName, SUB)
+        local t = Instance.new("TextLabel")
+        t.Text = text
+        t.Font = BODY_BOLD
+        t.TextSize = 12
+        t.TextColor3 = Color3.fromRGB(215, 215, 220)
+        t.TextXAlignment = Enum.TextXAlignment.Left
+        t.BackgroundTransparency = 1
+        t.Position = UDim2.fromOffset(32, 0)
+        t.Size = UDim2.new(1, -38, 1, 0)
+        t.ZIndex = 63
+        t.Parent = p
+        return p
+    end
+
+    local function openShare(s)
+        local layer = Instance.new("Frame")
+        layer.Size = UDim2.fromScale(1, 1)
+        layer.BackgroundColor3 = Color3.new(0, 0, 0)
+        layer.BackgroundTransparency = 1
+        layer.ZIndex = 80
+        layer.Parent = win
+        Util.tween(layer, { BackgroundTransparency = 0.5 }, 0.15)
+        local catch = Instance.new("TextButton")
+        catch.Text = ""; catch.AutoButtonColor = false
+        catch.Size = UDim2.fromScale(1, 1)
+        catch.BackgroundTransparency = 1
+        catch.ZIndex = 80
+        catch.Parent = layer
+
+        local modal = Instance.new("Frame")
+        modal.AnchorPoint = Vector2.new(0.5, 0.5)
+        modal.Position = UDim2.fromScale(0.5, 0.5)
+        modal.Size = UDim2.fromOffset(440, 320)
+        modal.BackgroundColor3 = Color3.fromRGB(24, 25, 29)
+        modal.ZIndex = 81
+        modal.Parent = layer
+        Util.corner(modal, 18)
+        Util.rimStroke(modal, 1, 0.6, 0.95)
+        local msc = Instance.new("UIScale"); msc.Scale = 0.9; msc.Parent = modal
+        Util.tween(msc, { Scale = 1 }, 0.18, Enum.EasingStyle.Back)
+
+        local function closeShare()
+            Util.tween(msc, { Scale = 0.9 }, 0.12)
+            Util.tween(layer, { BackgroundTransparency = 1 }, 0.14)
+            task.delay(0.15, function() if layer.Parent then layer:Destroy() end end)
+        end
+        catch.MouseButton1Click:Connect(closeShare)
+
+        local sh = Instance.new("TextLabel")
+        sh.Text = "Share script"
+        sh.Font = TITLE_FONT
+        sh.TextSize = 22
+        sh.TextColor3 = WHITE
+        sh.TextXAlignment = Enum.TextXAlignment.Left
+        sh.BackgroundTransparency = 1
+        sh.Position = UDim2.fromOffset(24, 22)
+        sh.Size = UDim2.fromOffset(300, 26)
+        sh.ZIndex = 82
+        sh.Parent = modal
+        local shSub = Instance.new("TextLabel")
+        shSub.Text = "Check out " .. (s.title or "this script") .. " on Rscripts"
+        shSub.Font = Theme.fonts.caption
+        shSub.TextSize = 13
+        shSub.TextColor3 = SUB
+        shSub.TextXAlignment = Enum.TextXAlignment.Left
+        shSub.TextTruncate = Enum.TextTruncate.AtEnd
+        shSub.BackgroundTransparency = 1
+        shSub.Position = UDim2.fromOffset(24, 50)
+        shSub.Size = UDim2.fromOffset(392, 18)
+        shSub.ZIndex = 82
+        shSub.Parent = modal
+
+        local xBtn = Instance.new("TextButton")
+        xBtn.Text = ""; xBtn.AutoButtonColor = false
+        xBtn.Size = UDim2.fromOffset(30, 30)
+        xBtn.AnchorPoint = Vector2.new(1, 0)
+        xBtn.Position = UDim2.new(1, -16, 0, 18)
+        xBtn.BackgroundColor3 = FIELD
+        xBtn.BackgroundTransparency = 0.3
+        xBtn.ZIndex = 82
+        xBtn.Parent = modal
+        Util.corner(xBtn, 10)
+        local xg = Instance.new("ImageLabel")
+        xg.Size = UDim2.fromOffset(13, 13); xg.AnchorPoint = Vector2.new(0.5, 0.5)
+        xg.Position = UDim2.fromScale(0.5, 0.5); xg.BackgroundTransparency = 1
+        xg.ZIndex = 83; xg.Parent = xBtn
+        Icons.apply(xg, "x", SUB)
+        xBtn.MouseButton1Click:Connect(closeShare)
+
+        local shareUrl = "https://rscripts.net/script/" .. (s.slug or "")
+        local via = Instance.new("TextLabel")
+        via.Text = "SHARE VIA"
+        via.Font = BODY_BOLD
+        via.TextSize = 11
+        via.TextColor3 = SUB
+        via.TextXAlignment = Enum.TextXAlignment.Left
+        via.BackgroundTransparency = 1
+        via.Position = UDim2.fromOffset(24, 84)
+        via.Size = UDim2.fromOffset(200, 14)
+        via.ZIndex = 82
+        via.Parent = modal
+
+        local socials = { "X", "Facebook", "Reddit", "Telegram" }
+        for i, name in ipairs(socials) do
+            local b = Instance.new("TextButton")
+            b.Text = name
+            b.AutoButtonColor = false
+            b.Font = BODY_BOLD
+            b.TextSize = 12
+            b.TextColor3 = Color3.fromRGB(210, 210, 216)
+            b.Size = UDim2.fromOffset(94, 46)
+            b.Position = UDim2.fromOffset(24 + (i - 1) * 100, 106)
+            b.BackgroundColor3 = FIELD
+            b.BackgroundTransparency = 0.35
+            b.ZIndex = 82
+            b.Parent = modal
+            Util.corner(b, 12)
+            b.MouseButton1Click:Connect(function()
+                pcall(function() setclipboard(shareUrl) end)
+                b.Text = "Copied"
+                task.delay(1, function() if b.Parent then b.Text = name end end)
+            end)
+        end
+
+        local sys = Instance.new("TextButton")
+        sys.Text = ""
+        sys.AutoButtonColor = false
+        sys.Size = UDim2.fromOffset(392, 52)
+        sys.Position = UDim2.fromOffset(24, 164)
+        sys.BackgroundColor3 = FIELD
+        sys.BackgroundTransparency = 0.35
+        sys.ZIndex = 82
+        sys.Parent = modal
+        Util.corner(sys, 12)
+        local sysT = Instance.new("TextLabel")
+        sysT.Text = "System share"
+        sysT.Font = BODY_BOLD
+        sysT.TextSize = 15
+        sysT.TextColor3 = WHITE
+        sysT.TextXAlignment = Enum.TextXAlignment.Left
+        sysT.BackgroundTransparency = 1
+        sysT.Position = UDim2.fromOffset(58, 8)
+        sysT.Size = UDim2.fromOffset(300, 18)
+        sysT.ZIndex = 83
+        sysT.Parent = sys
+        local sysS = Instance.new("TextLabel")
+        sysS.Text = "Copy the script link"
+        sysS.Font = Theme.fonts.caption
+        sysS.TextSize = 12
+        sysS.TextColor3 = SUB
+        sysS.TextXAlignment = Enum.TextXAlignment.Left
+        sysS.BackgroundTransparency = 1
+        sysS.Position = UDim2.fromOffset(58, 27)
+        sysS.Size = UDim2.fromOffset(300, 16)
+        sysS.ZIndex = 83
+        sysS.Parent = sys
+        sys.MouseButton1Click:Connect(function()
+            pcall(function() setclipboard(shareUrl) end)
+            sysS.Text = "Link copied to clipboard"
+            sysS.TextColor3 = GREEN
+        end)
+
+        local copyLink = Instance.new("TextButton")
+        copyLink.Text = "  Copy link"
+        copyLink.Font = TITLE_FONT
+        copyLink.TextSize = 15
+        copyLink.TextColor3 = Color3.fromRGB(20, 20, 24)
+        copyLink.Size = UDim2.fromOffset(392, 44)
+        copyLink.Position = UDim2.fromOffset(24, 232)
+        copyLink.BackgroundColor3 = WHITE
+        copyLink.ZIndex = 82
+        copyLink.Parent = modal
+        Util.corner(copyLink, 14)
+        copyLink.MouseButton1Click:Connect(function()
+            pcall(function() setclipboard(shareUrl) end)
+            copyLink.Text = "  Copied!"
+            task.delay(1, function() if copyLink.Parent then copyLink.Text = "  Copy link" end end)
+        end)
+    end
+
+    local function showDetail(s)
+        closeDetail()
+        local layer = Instance.new("Frame")
+        layer.Size = UDim2.new(1, 0, 1, -TB)
+        layer.Position = UDim2.fromOffset(0, TB)
+        layer.BackgroundColor3 = WIN
+        layer.BackgroundTransparency = 1
+        layer.ZIndex = 40
+        layer.ClipsDescendants = true
+        layer.Parent = win
+        detailLayer = layer
+        Util.tween(layer, { BackgroundTransparency = 0 }, 0.15)
+
+        local scroll = Instance.new("ScrollingFrame")
+        scroll.Size = UDim2.fromScale(1, 1)
+        scroll.BackgroundTransparency = 1
+        scroll.BorderSizePixel = 0
+        scroll.ScrollBarThickness = 0
+        scroll.CanvasSize = UDim2.new()
+        scroll.ZIndex = 41
+        scroll.Parent = layer
+        local pad = 24
+
+        -- Back button
+        local back = Instance.new("TextButton")
+        back.Text = "  Back"
+        back.Font = BODY_BOLD
+        back.TextSize = 13
+        back.TextColor3 = WHITE
+        back.TextXAlignment = Enum.TextXAlignment.Center
+        back.Size = UDim2.fromOffset(76, 30)
+        back.Position = UDim2.fromOffset(pad, 14)
+        back.BackgroundColor3 = FIELD
+        back.BackgroundTransparency = 0.25
+        back.ZIndex = 44
+        back.Parent = scroll
+        Util.corner(back, 10)
+        local backIc = Instance.new("ImageLabel")
+        backIc.Size = UDim2.fromOffset(13, 13); backIc.Position = UDim2.fromOffset(10, 8)
+        backIc.BackgroundTransparency = 1; backIc.ZIndex = 45; backIc.Parent = back
+        Icons.apply(backIc, "chevron-left", WHITE)
+        back.MouseButton1Click:Connect(closeDetail)
+
+        -- Banner
+        local bannerH = 210
+        local banner = Instance.new("ImageLabel")
+        banner.Size = UDim2.new(1, -pad * 2, 0, bannerH)
+        banner.Position = UDim2.fromOffset(pad, 54)
+        banner.BackgroundColor3 = FIELD
+        banner.ScaleType = Enum.ScaleType.Crop
+        banner.Image = BANNERS[hashStr(s.title or "?") % #BANNERS + 1]
+        banner.ZIndex = 41
+        banner.Parent = scroll
+        Util.corner(banner, 14)
+        Util.stroke(banner, WHITE, 1, 0.88)
+        -- real script art (webp -> weserv PNG), replaces the wallpaper if it loads
+        if s.image and tostring(s.image):find("%.webp") then
+            task.spawn(function()
+                local key = "scrb_" .. (s._id or tostring(hashStr(s.image))) .. ".png"
+                local id = Util.remoteImage(weservPng(s.image, 768), key)
+                if id and banner.Parent then
+                    banner.ImageTransparency = 1
+                    banner.Image = id
+                    Util.tween(banner, { ImageTransparency = 0 }, 0.3)
+                end
+            end)
+        end
+
+        -- Title + creator
+        local title = Instance.new("TextLabel")
+        title.Text = s.title or "Untitled"
+        title.Font = TITLE_FONT
+        title.TextSize = 24
+        title.TextColor3 = WHITE
+        title.TextXAlignment = Enum.TextXAlignment.Left
+        title.TextTruncate = Enum.TextTruncate.AtEnd
+        title.BackgroundTransparency = 1
+        title.Position = UDim2.fromOffset(pad, 54 + bannerH + 12)
+        title.Size = UDim2.new(1, -pad * 2, 0, 28)
+        title.ZIndex = 41
+        title.Parent = scroll
+
+        local creator = Instance.new("TextLabel")
+        creator.Text = "by " .. ((s.user and s.user.username) or "Unknown")
+        creator.Font = BODY_BOLD
+        creator.TextSize = 13
+        creator.TextColor3 = SUB
+        creator.TextXAlignment = Enum.TextXAlignment.Left
+        creator.BackgroundTransparency = 1
+        creator.Position = UDim2.fromOffset(pad, 54 + bannerH + 44)
+        creator.Size = UDim2.new(1, -pad * 2, 0, 16)
+        creator.ZIndex = 41
+        creator.Parent = scroll
+
+        -- Actions: Execute (big) + Copy + Share
+        local actY = 54 + bannerH + 74
+        local shareW, copyW, gap = 50, 50, 10
+        local execW = (winW - pad * 2) - shareW - copyW - gap * 2
+
+        local function runScript()
+            if not s.rawScript then return end
+            status.Text = "Running " .. (s.title or "script") .. "..."
+            status.TextColor3 = SUB
+            task.spawn(function()
+                local ok, err = Executor.runUrl(s.rawScript, s.title)
+                if ok then
+                    status.Text = "Executed " .. (s.title or "script"); status.TextColor3 = GREEN
+                else
+                    status.Text = (s.title or "script") .. ": " .. tostring(err):sub(1, 90); status.TextColor3 = RED
+                end
+            end)
+        end
+
+        local exec = Instance.new("TextButton")
+        exec.Text = "  Execute"
+        exec.Font = TITLE_FONT
+        exec.TextSize = 16
+        exec.TextColor3 = Color3.fromRGB(10, 24, 16)
+        exec.Size = UDim2.fromOffset(execW, 50)
+        exec.Position = UDim2.fromOffset(pad, actY)
+        exec.BackgroundColor3 = GREEN
+        exec.ZIndex = 42
+        exec.Parent = scroll
+        Util.corner(exec, 15)
+        local execIc = Instance.new("ImageLabel")
+        execIc.Size = UDim2.fromOffset(18, 18); execIc.AnchorPoint = Vector2.new(1, 0.5)
+        execIc.Position = UDim2.new(0.5, -46, 0.5, 0); execIc.BackgroundTransparency = 1
+        execIc.ZIndex = 43; execIc.Parent = exec
+        Icons.apply(execIc, "chevron-right", Color3.fromRGB(10, 24, 16))
+        exec.MouseButton1Click:Connect(runScript)
+
+        local function sideBtn(x, iconName, cb)
+            local b = Instance.new("TextButton")
+            b.Text = ""; b.AutoButtonColor = false
+            b.Size = UDim2.fromOffset(50, 50)
+            b.Position = UDim2.fromOffset(x, actY)
+            b.BackgroundColor3 = FIELD
+            b.BackgroundTransparency = 0.25
+            b.ZIndex = 42
+            b.Parent = scroll
+            Util.corner(b, 15)
+            Util.stroke(b, WHITE, 1, 0.9)
+            local g = Instance.new("ImageLabel")
+            g.Size = UDim2.fromOffset(20, 20); g.AnchorPoint = Vector2.new(0.5, 0.5)
+            g.Position = UDim2.fromScale(0.5, 0.5); g.BackgroundTransparency = 1
+            g.ZIndex = 43; g.Parent = b
+            Icons.apply(g, iconName, SUB)
+            b.MouseEnter:Connect(function() Util.tween(b, { BackgroundTransparency = 0 }, 0.12); g.ImageColor3 = WHITE end)
+            b.MouseLeave:Connect(function() Util.tween(b, { BackgroundTransparency = 0.25 }, 0.12); g.ImageColor3 = SUB end)
+            b.MouseButton1Click:Connect(cb)
+            return b
+        end
+        sideBtn(pad + execW + gap, "file-text", function()
+            if s.rawScript then
+                pcall(function() setclipboard('loadstring(game:HttpGet("' .. s.rawScript .. '"))()') end)
+                status.Text = "Copied loadstring for " .. (s.title or "script"); status.TextColor3 = GREEN
+            end
+        end)
+        sideBtn(pad + execW + gap + copyW + gap, "sliders-horizontal", function() openShare(s) end)
+
+        -- Stats chips
+        local statY = actY + 62
+        local stats = Instance.new("Frame")
+        stats.Size = UDim2.new(1, -pad * 2, 0, 30)
+        stats.Position = UDim2.fromOffset(pad, statY)
+        stats.BackgroundTransparency = 1
+        stats.ZIndex = 41
+        stats.Parent = scroll
+        pill(stats, 60, "chevron-up", tostring(s.likes or 0), 0)
+        pill(stats, 60, "chevron-down", tostring(s.dislikes or 0), 68)
+        pill(stats, 96, "search", formatCount(s.views or 0), 136)
+        pill(stats, 96, "clock", relativeAge(s.createdAt), 240)
+
+        -- Script Preview
+        local prevY = statY + 44
+        local prevCard = Instance.new("Frame")
+        prevCard.Size = UDim2.new(1, -pad * 2, 0, 190)
+        prevCard.Position = UDim2.fromOffset(pad, prevY)
+        prevCard.BackgroundColor3 = Color3.fromRGB(18, 19, 22)
+        prevCard.ZIndex = 41
+        prevCard.Parent = scroll
+        Util.corner(prevCard, 14)
+        Util.stroke(prevCard, WHITE, 1, 0.92)
+
+        local prevTitle = Instance.new("TextLabel")
+        prevTitle.Text = "Script Preview"
+        prevTitle.Font = TITLE_FONT
+        prevTitle.TextSize = 15
+        prevTitle.TextColor3 = WHITE
+        prevTitle.TextXAlignment = Enum.TextXAlignment.Left
+        prevTitle.BackgroundTransparency = 1
+        prevTitle.Position = UDim2.fromOffset(16, 12)
+        prevTitle.Size = UDim2.fromOffset(200, 18)
+        prevTitle.ZIndex = 42
+        prevTitle.Parent = prevCard
+        local prevMeta = Instance.new("TextLabel")
+        prevMeta.Text = "loading..."
+        prevMeta.Font = Theme.fonts.caption
+        prevMeta.TextSize = 11
+        prevMeta.TextColor3 = SUB
+        prevMeta.TextXAlignment = Enum.TextXAlignment.Left
+        prevMeta.BackgroundTransparency = 1
+        prevMeta.Position = UDim2.fromOffset(16, 30)
+        prevMeta.Size = UDim2.fromOffset(200, 14)
+        prevMeta.ZIndex = 42
+        prevMeta.Parent = prevCard
+
+        local codeBox = Instance.new("TextLabel")
+        codeBox.Text = ""
+        codeBox.Font = Enum.Font.Code
+        codeBox.TextSize = 13
+        codeBox.TextColor3 = Color3.fromRGB(220, 220, 226)
+        codeBox.TextXAlignment = Enum.TextXAlignment.Left
+        codeBox.TextYAlignment = Enum.TextYAlignment.Top
+        codeBox.TextWrapped = true
+        codeBox.BackgroundColor3 = Color3.fromRGB(12, 13, 15)
+        codeBox.Position = UDim2.fromOffset(14, 52)
+        codeBox.Size = UDim2.new(1, -28, 1, -66)
+        codeBox.ZIndex = 42
+        codeBox.Parent = prevCard
+        Util.corner(codeBox, 10)
+        Util.padding(codeBox, 12)
+
+        task.spawn(function()
+            local src = s.rawScript and Util.httpGet(s.rawScript)
+            if not detailLayer then return end
+            if src and src ~= "" then
+                local lines = select(2, src:gsub("\n", "\n")) + 1
+                prevMeta.Text = lines .. (lines == 1 and " line · " or " lines · ") .. #src .. " B"
+                codeBox.Text = #src > 1200 and (src:sub(1, 1200) .. "\n...") or src
+            else
+                prevMeta.Text = "unavailable"
+                codeBox.Text = "-- couldn't load the script source"
+            end
+        end)
+
+        scroll.CanvasSize = UDim2.fromOffset(0, prevY + 190 + pad)
+    end
+
     local function buildCard(s, index)
         local col = (index - 1) % 2
         local row = math.floor((index - 1) / 2)
@@ -737,41 +1214,10 @@ function Scripts.open()
         local busyTween = game:GetService("TweenService"):Create(
             busySpin, TweenInfo.new(0.9, Enum.EasingStyle.Linear, Enum.EasingDirection.Out, -1), { Rotation = 360 })
 
-        local running = false
+        -- left click opens the script's detail view (banner, stats, preview,
+        -- execute / copy / share) instead of running it directly
         c.MouseButton1Click:Connect(function()
-            if running then return end
-            if not s.rawScript then
-                status.Text = "No raw script for \"" .. (s.title or "?") .. "\""
-                status.TextColor3 = RED
-                return
-            end
-            running = true
-            busy.Visible = true
-            busyTween:Play()
-            Util.tween(busy, { BackgroundTransparency = 0.45 }, 0.15)
-            status.Text = "Running " .. (s.title or "script") .. "..."
-            status.TextColor3 = SUB
-            task.spawn(function()
-                -- SYNC runs it in-game itself (no paste): fetch with retries,
-                -- then loadstring + protected run via the shared executor.
-                local ok, err = Executor.runUrl(s.rawScript, s.title)
-                running = false
-                busyTween:Pause()
-                busy.Visible = false
-                busy.BackgroundTransparency = 1
-                if not alive then return end
-                if ok then
-                    status.Text = "Executed " .. (s.title or "script")
-                    status.TextColor3 = GREEN
-                    flash(GREEN)
-                    if s.rawScript then ranSet[s.rawScript] = true end
-                    markRan()
-                else
-                    status.Text = (s.title or "script") .. ": " .. tostring(err):sub(1, 90)
-                    status.TextColor3 = RED
-                    flash(RED)
-                end
-            end)
+            showDetail(s)
         end)
 
         -- right click: copy a ready loadstring
