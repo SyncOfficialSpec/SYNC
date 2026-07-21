@@ -1422,8 +1422,15 @@ function Home.open()
             serverRows[1].Text = ('<font color="%s">%d / %d</font> <font color="%s">players</font>')
                 :format(white, #Players:GetPlayers(), Players.MaxPlayers, SUB_HEX)
             local mins = math.floor(time() / 60)
-            serverRows[2].Text = ('<font color="%s">%d %s</font> <font color="%s">elapsed</font>')
-                :format(white, mins, mins == 1 and "minute" or "minutes", SUB_HEX)
+            local elapsedStr
+            if mins < 60 then
+                elapsedStr = mins .. (mins == 1 and " minute" or " minutes")
+            else
+                local h, m = mins // 60, mins % 60
+                elapsedStr = ("%dh %02dm"):format(h, m)
+            end
+            serverRows[2].Text = ('<font color="%s">%s</font> <font color="%s">elapsed</font>')
+                :format(white, elapsedStr, SUB_HEX)
             local ms = ping()
             -- ping value color-coded: green under 80, amber under 150, red above
             local pingHex = white
