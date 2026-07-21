@@ -8,6 +8,7 @@ local Settings    = SYNC.import("os/Settings")
 local MenuBar     = SYNC.import("os/MenuBar")
 local Home        = SYNC.import("apps/Home")
 local Scripts     = SYNC.import("apps/Scripts")
+local Joiner      = SYNC.import("apps/Joiner")
 local DesktopMode = SYNC.import("os/DesktopMode")
 
 local Desktop = {}
@@ -42,6 +43,9 @@ function Desktop.start()
         elseif appName == "Scripts" then
             Scripts.open()
             raise("Scripts")
+        elseif appName == "Joiner" then
+            Joiner.open()
+            raise("Joiner")
         elseif appName == "Settings" then
             Settings.open({
                 position = dock.getPosition(),
