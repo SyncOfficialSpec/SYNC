@@ -141,6 +141,8 @@ function Scripts.open()
     barCorner.Parent = bar
 
     local lights = { Theme.red, Theme.yellow, Theme.green }
+    local lightGlyphs = { "x", "minus", "plus" }
+    local trafficGlyphs = {}
     for i, col in ipairs(lights) do
         -- red closes, green re-centers a window dragged off-screen
         local clickable = (i == 1 or i == 3)
@@ -153,6 +155,17 @@ function Scripts.open()
         dot.ZIndex = 4
         dot.Parent = bar
         Util.corner(dot, 6)
+        -- symbol revealed on hover over the cluster (macOS style)
+        local gl = Instance.new("ImageLabel")
+        gl.Size = UDim2.fromOffset(8, 8)
+        gl.AnchorPoint = Vector2.new(0.5, 0.5)
+        gl.Position = UDim2.fromScale(0.5, 0.5)
+        gl.BackgroundTransparency = 1
+        gl.ImageTransparency = 1
+        gl.ZIndex = 5
+        gl.Parent = dot
+        Icons.apply(gl, lightGlyphs[i], Color3.fromRGB(60, 40, 10))
+        trafficGlyphs[i] = gl
         if i == 1 then dot.MouseButton1Click:Connect(close) end
         if i == 3 then
             dot.MouseButton1Click:Connect(function()
@@ -160,6 +173,12 @@ function Scripts.open()
             end)
         end
     end
+    bar.MouseEnter:Connect(function()
+        for _, gl in ipairs(trafficGlyphs) do Util.tween(gl, { ImageTransparency = 0.15 }, 0.12) end
+    end)
+    bar.MouseLeave:Connect(function()
+        for _, gl in ipairs(trafficGlyphs) do Util.tween(gl, { ImageTransparency = 1 }, 0.12) end
+    end)
 
     Util.draggable(win, bar)
     Util.persistPosition(win, "ScriptsWin")
