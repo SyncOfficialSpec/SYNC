@@ -1470,6 +1470,21 @@ function Home.open()
         friendsEmpty.Visible = #friends == 0
         for i, fr in ipairs(friends) do
             if i > 15 then break end
+            -- last slot becomes a "+N more" chip when the list overflows
+            if i == 15 and #friends > 15 then
+                local more = Instance.new("TextLabel")
+                more.Text = "+" .. (#friends - 14)
+                more.Font = BODY_BOLD
+                more.TextSize = 12
+                more.TextColor3 = Color3.fromRGB(210, 210, 216)
+                more.BackgroundColor3 = FIELD
+                more.LayoutOrder = 15
+                more.ZIndex = 5
+                more.Parent = friendsGrid
+                Util.corner(more, 19)
+                Util.stroke(more, Color3.fromRGB(90, 90, 96), 2, 0.55)
+                break
+            end
             local av = Instance.new("ImageButton")
             av.Image = headshot(fr.VisitorId, 100)
             av.AutoButtonColor = false
