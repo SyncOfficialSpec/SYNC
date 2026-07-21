@@ -867,7 +867,22 @@ function Scripts.open()
         banner.ZIndex = 41
         banner.Parent = scroll
         Util.corner(banner, 14)
-        Util.stroke(banner, WHITE, 1, 0.88)
+        -- bottom fade: the image dissolves into the window toward its lower edge
+        local bannerFade = Instance.new("Frame")
+        bannerFade.Size = UDim2.fromScale(1, 1)
+        bannerFade.BackgroundColor3 = WIN
+        bannerFade.BorderSizePixel = 0
+        bannerFade.ZIndex = 42
+        bannerFade.Parent = banner
+        Util.corner(bannerFade, 14)
+        local bannerFadeGrad = Instance.new("UIGradient")
+        bannerFadeGrad.Rotation = 90
+        bannerFadeGrad.Transparency = NumberSequence.new({
+            NumberSequenceKeypoint.new(0, 1),
+            NumberSequenceKeypoint.new(0.55, 1),
+            NumberSequenceKeypoint.new(1, 0.05),
+        })
+        bannerFadeGrad.Parent = bannerFade
         -- real script art (webp -> weserv PNG), replaces the wallpaper if it loads
         if s.image and tostring(s.image):find("%.webp") then
             task.spawn(function()
@@ -1051,35 +1066,43 @@ function Scripts.open()
         -- Copy button in the preview header (copies the raw source)
         local previewSrc
         local prevCopy = Instance.new("TextButton")
-        prevCopy.Text = "  Copy"
-        prevCopy.Font = BODY_BOLD
-        prevCopy.TextSize = 12
-        prevCopy.TextColor3 = Color3.fromRGB(210, 210, 216)
+        prevCopy.Text = ""
         prevCopy.AutoButtonColor = false
         prevCopy.AnchorPoint = Vector2.new(1, 0)
         prevCopy.Position = UDim2.new(1, -14, 0, 12)
-        prevCopy.Size = UDim2.fromOffset(72, 28)
+        prevCopy.Size = UDim2.fromOffset(78, 28)
         prevCopy.BackgroundColor3 = FIELD
         prevCopy.BackgroundTransparency = 0.3
         prevCopy.ZIndex = 43
         prevCopy.Parent = prevCard
         Util.corner(prevCopy, 8)
         local prevCopyIc = Instance.new("ImageLabel")
-        prevCopyIc.Size = UDim2.fromOffset(13, 13); prevCopyIc.Position = UDim2.fromOffset(12, 8)
+        prevCopyIc.Size = UDim2.fromOffset(13, 13); prevCopyIc.Position = UDim2.fromOffset(14, 8)
         prevCopyIc.BackgroundTransparency = 1; prevCopyIc.ZIndex = 44; prevCopyIc.Parent = prevCopy
+        local prevCopyTxt = Instance.new("TextLabel")
+        prevCopyTxt.Text = "Copy"
+        prevCopyTxt.Font = BODY_BOLD
+        prevCopyTxt.TextSize = 12
+        prevCopyTxt.TextColor3 = Color3.fromRGB(210, 210, 216)
+        prevCopyTxt.TextXAlignment = Enum.TextXAlignment.Left
+        prevCopyTxt.BackgroundTransparency = 1
+        prevCopyTxt.Position = UDim2.fromOffset(35, 0)
+        prevCopyTxt.Size = UDim2.new(1, -38, 1, 0)
+        prevCopyTxt.ZIndex = 44
+        prevCopyTxt.Parent = prevCopy
         loadSvgIcon(prevCopyIc, "cdn.jsdelivr.net/npm/lucide-static/icons/copy.svg", "ic_copyw.png", SUB, true)
         prevCopy.MouseEnter:Connect(function() Util.tween(prevCopy, { BackgroundTransparency = 0 }, 0.12) end)
         prevCopy.MouseLeave:Connect(function() Util.tween(prevCopy, { BackgroundTransparency = 0.3 }, 0.12) end)
         prevCopy.MouseButton1Click:Connect(function()
             if not previewSrc then return end
             pcall(function() setclipboard(previewSrc) end)
-            prevCopy.Text = "  Copied"
+            prevCopyTxt.Text = "Copied"
             -- stretch so the longer label reads properly, then settle back
-            Util.tween(prevCopy, { Size = UDim2.fromOffset(90, 28) }, 0.18, Enum.EasingStyle.Back)
+            Util.tween(prevCopy, { Size = UDim2.fromOffset(92, 28) }, 0.18, Enum.EasingStyle.Back)
             task.delay(1, function()
                 if prevCopy.Parent then
-                    prevCopy.Text = "  Copy"
-                    Util.tween(prevCopy, { Size = UDim2.fromOffset(72, 28) }, 0.18)
+                    prevCopyTxt.Text = "Copy"
+                    Util.tween(prevCopy, { Size = UDim2.fromOffset(78, 28) }, 0.18)
                 end
             end)
         end)
