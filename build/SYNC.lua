@@ -804,6 +804,14 @@ function Select.create(parent, options, value, onChange)
         Util.rimStroke(menu, 1, 0.5, 0.92)
         Util.shadow(menu, { blur = 40, transparency = 0.4, offset = UDim2.fromOffset(0, 10) })
 
+        -- entrance: scale up + fade in
+        local mScale = Instance.new("UIScale")
+        mScale.Scale = 0.9
+        mScale.Parent = menu
+        menu.BackgroundTransparency = 1
+        Util.tween(menu, { BackgroundTransparency = 0.08 }, 0.14)
+        Util.tween(mScale, { Scale = 1 }, 0.16, Enum.EasingStyle.Back)
+
         for i, opt in ipairs(options) do
             local row = Instance.new("TextButton")
             row.Text = ""
