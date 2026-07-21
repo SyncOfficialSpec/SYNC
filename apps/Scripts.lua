@@ -137,7 +137,11 @@ function Scripts.open()
     catcher.ZIndex = 1
     catcher.Parent = gui
     catcher.MouseButton1Click:Connect(close)
-    Util.closeOnEscape(gui, close)
+    -- forward-declared so Escape can close the detail view first (assigned below)
+    local detailLayer, closeDetail
+    Util.closeOnEscape(gui, function()
+        if detailLayer then closeDetail() else close() end
+    end)
 
     local win = Instance.new("TextButton")
     win.Text = ""
@@ -516,9 +520,8 @@ function Scripts.open()
     -- ------------------------------------------------------------------
     -- Script detail view (opens over the grid on card click)
     -- ------------------------------------------------------------------
-    local detailLayer
-
-    local function closeDetail()
+    -- detailLayer + closeDetail forward-declared near the top (for Escape)
+    closeDetail = function()
         if detailLayer then
             local d = detailLayer
             detailLayer = nil
