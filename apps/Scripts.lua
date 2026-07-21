@@ -103,17 +103,7 @@ function Scripts.open()
     win.Text = ""
     win.AutoButtonColor = false
     win.AnchorPoint = Vector2.new(0.5, 0.5)
-    -- restore the last dragged position (falls back to centered). Drag moves
-    -- the offset while keeping scale, so both are stored.
-    do
-        local ox = tonumber(Util.load("ScriptsWinOX"))
-        local oy = tonumber(Util.load("ScriptsWinOY"))
-        if ox and oy then
-            win.Position = UDim2.new(0.5, ox, 0.5, oy)
-        else
-            win.Position = UDim2.fromScale(0.5, 0.5)
-        end
-    end
+    win.Position = UDim2.fromScale(0.5, 0.5) -- persistPosition (below) overrides
     win.Size = UDim2.fromOffset(winW, winH)
     win.BackgroundColor3 = WIN
     win.BorderSizePixel = 0
@@ -165,22 +155,7 @@ function Scripts.open()
     end
 
     Util.draggable(win, bar)
-
-    -- Persist the window position (debounced) whenever it's dragged. Anchor is
-    -- centered (0.5,0.5), so store the pixel offset from center.
-    do
-        local saveVer = 0
-        win:GetPropertyChangedSignal("Position"):Connect(function()
-            saveVer += 1
-            local v = saveVer
-            local p = win.Position
-            task.delay(0.5, function()
-                if v ~= saveVer then return end
-                Util.save("ScriptsWinOX", tostring(p.X.Offset))
-                Util.save("ScriptsWinOY", tostring(p.Y.Offset))
-            end)
-        end)
-    end
+    Util.persistPosition(win, "ScriptsWin")
 
     local barTitle = Instance.new("TextLabel")
     barTitle.Size = UDim2.new(1, 0, 1, 0)
