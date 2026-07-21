@@ -5215,7 +5215,7 @@ function Scripts.open()
         end)
     end
 
-    local function showDetail(s)
+    local function showDetail(s, onRan)
         closeDetail()
         local layer = Instance.new("Frame")
         layer.Size = UDim2.new(1, 0, 1, -TB)
@@ -5322,6 +5322,8 @@ function Scripts.open()
                 local ok, err = Executor.runUrl(s.rawScript, s.title)
                 if ok then
                     status.Text = "Executed " .. (s.title or "script"); status.TextColor3 = GREEN
+                    if s.rawScript then ranSet[s.rawScript] = true end
+                    if onRan then pcall(onRan) end
                 else
                     status.Text = (s.title or "script") .. ": " .. tostring(err):sub(1, 90); status.TextColor3 = RED
                 end
@@ -5698,30 +5700,10 @@ function Scripts.open()
             pressed = false
             updateBody()
         end)
-        -- per-card busy overlay (dim + spinner) while this card is executing
-        local busy = Instance.new("Frame")
-        busy.Size = UDim2.fromScale(1, 1)
-        busy.BackgroundColor3 = Color3.new(0, 0, 0)
-        busy.BackgroundTransparency = 1
-        busy.Visible = false
-        busy.ZIndex = 8
-        busy.Parent = body
-        Util.corner(busy, 12)
-        local busySpin = Instance.new("ImageLabel")
-        busySpin.Size = UDim2.fromOffset(28, 28)
-        busySpin.AnchorPoint = Vector2.new(0.5, 0.5)
-        busySpin.Position = UDim2.fromScale(0.5, 0.5)
-        busySpin.BackgroundTransparency = 1
-        busySpin.ZIndex = 9
-        busySpin.Parent = busy
-        Icons.apply(busySpin, "orbit", WHITE)
-        local busyTween = game:GetService("TweenService"):Create(
-            busySpin, TweenInfo.new(0.9, Enum.EasingStyle.Linear, Enum.EasingDirection.Out, -1), { Rotation = 360 })
-
         -- left click opens the script's detail view (banner, stats, preview,
-        -- execute / copy / share) instead of running it directly
+        -- execute / copy / share). Executing from there marks this card ran.
         c.MouseButton1Click:Connect(function()
-            showDetail(s)
+            showDetail(s, markRan)
         end)
 
         -- right click: copy a ready loadstring
