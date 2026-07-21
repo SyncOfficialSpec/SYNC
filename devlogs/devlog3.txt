@@ -1,0 +1,35 @@
+SYNC
+
+Devlog 3 • July 21, 2026
+
+A big polish pass across the Home and Scripts apps. New views, real icons everywhere, smoother animations, and a lot of small fixes.
+
+New Elements:
+Script Detail View
+Clicking a script now opens a full page instead of running it straight away. It shows the script's real banner art, the creator, the title, a big Execute button with Copy and Share beside it, like and dislike counts, views and age, and a Script Preview that shows the actual source with its own Copy and line count.
+
+Share Menu
+A share popup on every script with X, Facebook, Reddit and Telegram buttons using their real logos, a System share option, and a Copy link button that morphs into a teal Copied state when you use it.
+
+Friends Card
+Home now has a Friends card showing your online friends as avatars. A green ring means they are in a game so you can click to join them, otherwise clicking copies their profile link, and hovering shows who they are. If more than fifteen are online it shows a plus more chip.
+
+Copy Server Link
+A button on the Server card copies a link straight to the exact server you are in, so you can share it with friends.
+
+Persistent Chat History
+The Universal chat now keeps its own local history, so messages stay in SYNC even after they get deleted in Discord or the bridge restarts.
+
+Improvements:
+Real icons everywhere: thumbs up and down, eye, lock on key scripts, verified badges, share logos and more, all proper icons instead of plain text.
+Scripts can be sorted by Recent, Popular or Top rated, and the choice is remembered.
+Search now clears with one tap and has a clean focus highlight, and results keep loading as you scroll with a live count.
+Script banners and card grids now fade softly at the edges as they scroll instead of a hard cut.
+Hovering a script card grows it smoothly with a shine, without covering its neighbours.
+Running a script from the detail page shows a Running state on the button and reports success or a clear reason if it fails.
+Every window can be dragged, remembers where you left it, re centres with the green light, and closes with Escape.
+The Home profile ring spins gently and the avatar can be clicked to copy your profile link.
+Friend Activity has a refresh button, a count of who is playing, and game art you can click to copy the game link.
+The Server card colour codes your ping and shows session time in hours and minutes.
+Chat gained Server and Universal tabs, an unread badge, message timestamps, a live bridge indicator, and a send button that wakes up when you type.
+Fixed friend names getting cropped on hover, script banners showing a hard bottom edge, and the chat scrollbar cluttering the view.
