@@ -549,9 +549,9 @@ function Scripts.open()
     local function statusDefault()
         local count = itemCount > 0 and (" · " .. itemCount .. " shown") or ""
         if curQuery and curQuery ~= "" then
-            return "Results for \"" .. curQuery .. "\"" .. count .. " · Powered by RScripts.io"
+            return "Results for \"" .. curQuery .. "\"" .. count .. " · Powered by RScripts.net"
         end
-        return curSort().heading .. count .. " · Powered by RScripts.io"
+        return curSort().heading .. count .. " · Powered by RScripts.net"
     end
 
     -- ------------------------------------------------------------------
