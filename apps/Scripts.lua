@@ -1374,18 +1374,32 @@ function Scripts.open()
         end
 
         if s.user and s.user.verified then
-            local pill = Instance.new("TextLabel")
-            pill.Text = "VERIFIED"
-            pill.Font = BODY_BOLD
-            pill.TextSize = 10
-            pill.TextColor3 = WHITE
+            local pill = Instance.new("Frame")
             pill.BackgroundColor3 = BLURPLE
             pill.AnchorPoint = Vector2.new(1, 0)
             pill.Position = UDim2.new(1, -10, 0, 10)
-            pill.Size = UDim2.fromOffset(64, 20)
+            pill.Size = UDim2.fromOffset(80, 20)
             pill.ZIndex = 6
             pill.Parent = body
             Util.corner(pill, 6)
+            local vchk = Instance.new("ImageLabel")
+            vchk.Size = UDim2.fromOffset(11, 11)
+            vchk.Position = UDim2.fromOffset(9, 4)
+            vchk.BackgroundTransparency = 1
+            vchk.ZIndex = 7
+            vchk.Parent = pill
+            loadSvgIcon(vchk, "cdn.jsdelivr.net/npm/lucide-static/icons/badge-check.svg", "ic_badgecheckw.png", WHITE, true)
+            local vtxt = Instance.new("TextLabel")
+            vtxt.Text = "VERIFIED"
+            vtxt.Font = BODY_BOLD
+            vtxt.TextSize = 10
+            vtxt.TextColor3 = WHITE
+            vtxt.TextXAlignment = Enum.TextXAlignment.Left
+            vtxt.BackgroundTransparency = 1
+            vtxt.Position = UDim2.fromOffset(24, 0)
+            vtxt.Size = UDim2.new(1, -26, 1, 0)
+            vtxt.ZIndex = 7
+            vtxt.Parent = pill
         end
 
         -- view count badge, bottom-right over the fade
