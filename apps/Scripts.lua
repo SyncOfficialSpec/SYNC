@@ -1017,6 +1017,42 @@ function Scripts.open()
             task.delay(1, function() if prevCopy.Parent then prevCopy.Text = "  Copy" end end)
         end)
 
+        -- Download button: saves the source to a file the executor can reach
+        local prevDl = Instance.new("TextButton")
+        prevDl.Text = "  Save"
+        prevDl.Font = BODY_BOLD
+        prevDl.TextSize = 12
+        prevDl.TextColor3 = Color3.fromRGB(210, 210, 216)
+        prevDl.AutoButtonColor = false
+        prevDl.AnchorPoint = Vector2.new(1, 0)
+        prevDl.Position = UDim2.new(1, -94, 0, 12)
+        prevDl.Size = UDim2.fromOffset(72, 28)
+        prevDl.BackgroundColor3 = FIELD
+        prevDl.BackgroundTransparency = 0.3
+        prevDl.ZIndex = 43
+        prevDl.Parent = prevCard
+        Util.corner(prevDl, 8)
+        local prevDlIc = Instance.new("ImageLabel")
+        prevDlIc.Size = UDim2.fromOffset(12, 12); prevDlIc.Position = UDim2.fromOffset(12, 8)
+        prevDlIc.BackgroundTransparency = 1; prevDlIc.ZIndex = 44; prevDlIc.Parent = prevDl
+        Icons.apply(prevDlIc, "chevron-down", SUB)
+        prevDl.MouseEnter:Connect(function() Util.tween(prevDl, { BackgroundTransparency = 0 }, 0.12) end)
+        prevDl.MouseLeave:Connect(function() Util.tween(prevDl, { BackgroundTransparency = 0.3 }, 0.12) end)
+        prevDl.MouseButton1Click:Connect(function()
+            if not previewSrc then return end
+            local safe = (s.title or "script"):gsub("[^%w%-_ ]", ""):gsub("%s+", "_"):sub(1, 40)
+            local ok = pcall(function()
+                if typeof(makefolder) == "function" and typeof(isfolder) == "function" and not isfolder("SYNC/scripts") then
+                    makefolder("SYNC/scripts")
+                end
+                writefile("SYNC/scripts/" .. safe .. ".lua", previewSrc)
+            end)
+            prevDl.Text = ok and "  Saved" or "  Failed"
+            status.Text = ok and ("Saved to SYNC/scripts/" .. safe .. ".lua") or "Save failed (no file API)"
+            status.TextColor3 = ok and GREEN or RED
+            task.delay(1.2, function() if prevDl.Parent then prevDl.Text = "  Save" end end)
+        end)
+
         local codeBox = Instance.new("TextLabel")
         codeBox.Text = ""
         codeBox.Font = Enum.Font.Code
