@@ -2,12 +2,13 @@
 -- The desktop you land on after choosing "Desktop": a wallpaper plus the dock.
 -- Menu bar and windows come next. Desktop.start() -> { destroy }.
 
-local Util     = SYNC.import("core/Util")
-local Dock     = SYNC.import("os/Dock")
-local Settings = SYNC.import("os/Settings")
-local MenuBar  = SYNC.import("os/MenuBar")
-local Home     = SYNC.import("apps/Home")
-local Scripts  = SYNC.import("apps/Scripts")
+local Util        = SYNC.import("core/Util")
+local Dock        = SYNC.import("os/Dock")
+local Settings    = SYNC.import("os/Settings")
+local MenuBar     = SYNC.import("os/MenuBar")
+local Home        = SYNC.import("apps/Home")
+local Scripts     = SYNC.import("apps/Scripts")
+local DesktopMode = SYNC.import("os/DesktopMode")
 
 local Desktop = {}
 
@@ -63,16 +64,26 @@ function Desktop.start()
                     dock.setDockSize(f)
                     Util.save("DockSizeFrac", tostring(f))
                 end,
+                desktopMode = DesktopMode.isOn(),
+                onDesktopMode = function(v)
+                    DesktopMode.set(v)
+                end,
             })
             raise("Settings")
         end
     end)
+
+    -- Restore Desktop mode if it was left on
+    if DesktopMode.isOn() then
+        task.defer(function() DesktopMode.enable() end)
+    end
 
     return {
         gui = gui,
         destroy = function()
             if dock then dock.destroy() end
             if menubar then menubar.destroy() end
+            DesktopMode.disable()
             gui:Destroy()
         end,
     }

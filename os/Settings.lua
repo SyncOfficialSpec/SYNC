@@ -313,8 +313,8 @@ function Settings.open(opts)
     dmHolder.BackgroundTransparency = 1
     dmHolder.ZIndex = 4
     dmHolder.Parent = expGroup
-    Switch.create(dmHolder, Util.load("DesktopMode") == "true", function(v)
-        Util.save("DesktopMode", v)
+    Switch.create(dmHolder, opts.desktopMode, function(v)
+        if opts.onDesktopMode then opts.onDesktopMode(v) end
     end)
 
     -- About footer: version left, tagline right
