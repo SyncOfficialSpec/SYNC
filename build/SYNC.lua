@@ -4482,6 +4482,7 @@ function Home.open()
     local friendsY = contentY + 190 + GAPX + 62 + GAPX
     local friendsCard = makeCard(col3X, friendsY, COL3, contentH - (friendsY - contentY))
     local friendsTitle = cardTitle(friendsCard, "Friends")
+    friendsTitle.TextTruncate = Enum.TextTruncate.AtEnd -- long hover names show … not a hard crop
 
     local friendsGrid = Instance.new("Frame")
     friendsGrid.Position = UDim2.fromOffset(20, 50)
@@ -4546,8 +4547,9 @@ function Home.open()
 
             -- hover shows who it is; green = joinable, otherwise copy profile
             av.MouseEnter:Connect(function()
+                -- short hint so the name + action fits the card (no crop)
                 friendsTitle.Text = (fr.DisplayName or fr.UserName or "?")
-                    .. (inGame and "  ·  click to join" or "  ·  click to copy profile")
+                    .. (inGame and "  ·  join" or "  ·  copy")
             end)
             av.MouseLeave:Connect(function()
                 friendsTitle.Text = titleDefault
