@@ -709,16 +709,19 @@ function Scripts.open()
             b.ZIndex = 82
             b.Parent = modal
             Util.corner(b, 12)
+            -- X shows the logo centered with no label (like the reference);
+            -- the others have the logo on top and a label below
+            local xOnly = (soc.slug == "x")
             local logo = Instance.new("ImageLabel")
             logo.Size = UDim2.fromOffset(22, 22)
-            logo.AnchorPoint = Vector2.new(0.5, 0)
-            logo.Position = UDim2.new(0.5, 0, 0, 12)
+            logo.AnchorPoint = Vector2.new(0.5, xOnly and 0.5 or 0)
+            logo.Position = xOnly and UDim2.fromScale(0.5, 0.5) or UDim2.new(0.5, 0, 0, 12)
             logo.BackgroundTransparency = 1
             logo.ZIndex = 83
             logo.Parent = b
             loadSvgIcon(logo, "cdn.simpleicons.org/" .. soc.slug .. "/ffffff", "ic_soc_" .. soc.slug .. ".png", WHITE)
             local lbl = Instance.new("TextLabel")
-            lbl.Text = soc.name
+            lbl.Text = xOnly and "" or soc.name
             lbl.Font = BODY_BOLD
             lbl.TextSize = 12
             lbl.TextColor3 = Color3.fromRGB(210, 210, 216)
@@ -802,7 +805,8 @@ function Scripts.open()
         copyLink.ZIndex = 82
         copyLink.Parent = modal
         Util.corner(copyLink, 14)
-        local clStroke = Util.stroke(copyLink, GREEN, 1.5, 1) -- appears on copied
+        -- soft blue accent border (matches the reference)
+        Util.stroke(copyLink, Color3.fromRGB(120, 150, 240), 1.5, 0.45)
         -- centered icon + label group
         local clRow = Instance.new("Frame")
         clRow.Size = UDim2.fromScale(1, 1)
@@ -835,32 +839,42 @@ function Scripts.open()
         clTxt.ZIndex = 83
         clTxt.Parent = clRow
 
+        -- no hover animation; on click the icon swaps to a check and the label
+        -- reads "Copied!" (stays white / black, matching the reference), with a
+        -- quick icon+text fade so the swap feels smooth, then reverts.
         local clScale = Instance.new("UIScale"); clScale.Parent = copyLink
-        copyLink.MouseEnter:Connect(function() Util.tween(clScale, { Scale = 1.02 }, 0.12) end)
-        copyLink.MouseLeave:Connect(function() Util.tween(clScale, { Scale = 1 }, 0.12) end)
+        local BLACK = Color3.fromRGB(20, 20, 24)
         local clCopied = false
         copyLink.MouseButton1Click:Connect(function()
             if clCopied then return end
             clCopied = true
             pcall(function() setclipboard(shareUrl) end)
-            -- morph: white -> dark with green outline, link -> check, text green
-            Util.tween(copyLink, { BackgroundColor3 = Color3.fromRGB(18, 26, 22), BackgroundTransparency = 0.15 }, 0.2)
-            Util.tween(clStroke, { Transparency = 0.2 }, 0.2)
-            loadSvgIcon(clIc, "cdn.jsdelivr.net/npm/lucide-static/icons/check.svg", "ic_checkw.png", GREEN, true)
-            clIc.ImageColor3 = GREEN
-            clTxt.Text = "Copied!"
-            clTxt.TextColor3 = GREEN
-            clScale.Scale = 1.06
-            Util.tween(clScale, { Scale = 1 }, 0.28, Enum.EasingStyle.Back)
-            task.delay(1.2, function()
+            -- fade icon+text out, swap to check + "Copied!", fade back in
+            Util.tween(clIc, { ImageTransparency = 1 }, 0.09)
+            Util.tween(clTxt, { TextTransparency = 1 }, 0.09)
+            clScale.Scale = 1.04
+            Util.tween(clScale, { Scale = 1 }, 0.3, Enum.EasingStyle.Back)
+            task.delay(0.1, function()
                 if not copyLink.Parent then return end
-                Util.tween(copyLink, { BackgroundColor3 = WHITE, BackgroundTransparency = 0 }, 0.2)
-                Util.tween(clStroke, { Transparency = 1 }, 0.2)
-                loadSvgIcon(clIc, "cdn.jsdelivr.net/npm/lucide-static/icons/link.svg", "ic_linkw.png", Color3.fromRGB(20, 20, 24), true)
-                clIc.ImageColor3 = Color3.fromRGB(20, 20, 24)
-                clTxt.Text = "Copy link"
-                clTxt.TextColor3 = Color3.fromRGB(20, 20, 24)
-                clCopied = false
+                loadSvgIcon(clIc, "cdn.jsdelivr.net/npm/lucide-static/icons/check.svg", "ic_checkw.png", BLACK, true)
+                clIc.ImageColor3 = BLACK
+                clTxt.Text = "Copied!"
+                Util.tween(clIc, { ImageTransparency = 0 }, 0.12)
+                Util.tween(clTxt, { TextTransparency = 0 }, 0.12)
+            end)
+            task.delay(1.3, function()
+                if not copyLink.Parent then return end
+                Util.tween(clIc, { ImageTransparency = 1 }, 0.09)
+                Util.tween(clTxt, { TextTransparency = 1 }, 0.09)
+                task.delay(0.1, function()
+                    if not copyLink.Parent then return end
+                    loadSvgIcon(clIc, "cdn.jsdelivr.net/npm/lucide-static/icons/link.svg", "ic_linkw.png", BLACK, true)
+                    clIc.ImageColor3 = BLACK
+                    clTxt.Text = "Copy link"
+                    Util.tween(clIc, { ImageTransparency = 0 }, 0.12)
+                    Util.tween(clTxt, { TextTransparency = 0 }, 0.12)
+                    clCopied = false
+                end)
             end)
         end)
     end
