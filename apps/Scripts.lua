@@ -961,6 +961,17 @@ function Scripts.open()
             end)
         end
         exec.MouseButton1Click:Connect(runScript)
+        -- idle hover brighten + press feedback
+        local execScale = Instance.new("UIScale"); execScale.Parent = exec
+        exec.MouseEnter:Connect(function()
+            if not execRunning then Util.tween(exec, { BackgroundColor3 = Color3.fromRGB(86, 224, 160) }, 0.12) end
+        end)
+        exec.MouseLeave:Connect(function()
+            if not execRunning then Util.tween(exec, { BackgroundColor3 = GREEN }, 0.12) end
+            Util.tween(execScale, { Scale = 1 }, 0.1)
+        end)
+        exec.MouseButton1Down:Connect(function() Util.tween(execScale, { Scale = 0.98 }, 0.08) end)
+        exec.MouseButton1Up:Connect(function() Util.tween(execScale, { Scale = 1 }, 0.1) end)
 
         local function sideBtn(x, iconName, cb)
             local b = Instance.new("TextButton")
