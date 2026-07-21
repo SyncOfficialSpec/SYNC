@@ -77,14 +77,24 @@ end
 
 function DesktopMode.enable()
     if DesktopMode._gui then return end
-    local vp = Util.viewport()
-    local W, H = vp.X, vp.Y
 
     local gui = Instance.new("ScreenGui")
     gui.Name = "SYNC_DesktopMode"
     Util.mount(gui)
     gui.DisplayOrder = 1000000000 -- sit above every SYNC window
     DesktopMode._gui = gui
+
+    -- Fill the true screen (the IgnoreGuiInset canvas) and measure THAT, not the
+    -- camera viewport. The viewport is shorter than the canvas by the top inset,
+    -- so sizing to it pushes the menu bar above the visible top.
+    local root = Instance.new("Frame")
+    root.BackgroundTransparency = 1
+    root.Size = UDim2.fromScale(1, 1)
+    root.ZIndex = 1
+    root.Parent = gui
+    task.wait() -- let AbsoluteSize populate
+    local W, H = root.AbsoluteSize.X, root.AbsoluteSize.Y
+    if W < 1 or H < 1 then local vp = Util.viewport(); W, H = vp.X, vp.Y end
 
     -- Cover-crop the wallpaper to the screen aspect (true macOS "Fill", no stretch)
     local ia, sa = IMG_W / IMG_H, W / H
@@ -114,16 +124,23 @@ function DesktopMode.enable()
             im.ImageRectOffset = Vector2.new(cropX + (sx / W) * cropW, cropY + (sy / H) * cropH)
             im.ImageRectSize = Vector2.new((sw / W) * cropW, (sh / H) * cropH)
         end
-        im.Parent = gui
+        im.Parent = root
         return im
     end
 
-    -- Centered window geometry. Body (below the title bar) is the see-through gap.
-    local ww = math.floor(W * 0.56)
-    local wh = math.floor(H * 0.62)
-    local wx = math.floor((W - ww) / 2)
-    local wy = math.floor((H - wh) / 2) - 6
-    local TBH = 30
+    -- Near-maximized window: the game fills the frame with only a thin wallpaper
+    -- border and the menu bar across the top. Roblox renders the live game at full
+    -- screen, so a big window is what lets you actually see the whole game; the gap
+    -- below the title bar is left empty so the game shows through it.
+    local MBH = 24            -- menu bar height (also used by the menu below)
+    local TBH = 30            -- window title bar height
+    local marginX = math.floor(W * 0.035)
+    local topGap  = math.floor(H * 0.028)
+    local botGap  = math.floor(H * 0.045)
+    local wx = marginX
+    local wy = MBH + topGap
+    local ww = W - marginX * 2
+    local wh = H - wy - botGap
     local bodyTop = wy + TBH
 
     -- Four wallpaper strips around the gap
@@ -140,7 +157,7 @@ function DesktopMode.enable()
     border.Position = UDim2.fromOffset(wx, wy)
     border.Size = UDim2.fromOffset(ww, wh)
     border.ZIndex = 3
-    border.Parent = gui
+    border.Parent = root
     Util.corner(border, 10)
     Util.stroke(border, Color3.fromRGB(255, 255, 255), 1, 0.55)
 
@@ -152,7 +169,7 @@ function DesktopMode.enable()
     bar.BackgroundTransparency = 0.06
     bar.BorderSizePixel = 0
     bar.ZIndex = 4
-    bar.Parent = gui
+    bar.Parent = root
     local bc = Instance.new("UICorner")
     local okc = pcall(function()
         bc.TopLeftRadius = UDim.new(0, 10); bc.TopRightRadius = UDim.new(0, 10)
@@ -205,14 +222,13 @@ function DesktopMode.enable()
     title.Parent = titleWrap
 
     -- ---- Menu bar (frosted light, dark glyphs, like macOS over a bright wallpaper)
-    local MBH = 24
     local menu = Instance.new("Frame")
     menu.Size = UDim2.fromOffset(W, MBH)
     menu.BackgroundColor3 = Color3.fromRGB(248, 248, 250)
     menu.BackgroundTransparency = 0.42
     menu.BorderSizePixel = 0
     menu.ZIndex = 6
-    menu.Parent = gui
+    menu.Parent = root
     Util.stroke(menu, Color3.fromRGB(0, 0, 0), 1, 0.9)
 
     -- Left cluster: apple + app menus
@@ -313,7 +329,7 @@ function DesktopMode.enable()
     hint.TextSize = 12
     hint.TextColor3 = Color3.fromRGB(240, 240, 245)
     hint.ZIndex = 8
-    hint.Parent = gui
+    hint.Parent = root
     Util.corner(hint, 11)
     task.delay(4, function()
         if hint.Parent then
