@@ -836,29 +836,68 @@ function Home.open()
 
     -- Universal chat: poll the relay --------------------------------------
     local lastUniversalId = nil
-
-    local function renderUniversal(list)
-        for _, m in ipairs(list) do
-            lastUniversalId = m.id
-            local name = m.author or "?"
-            local isRoblox = m.roblox == true
-            if isRoblox then name = name:gsub("%s*%(Roblox%)%s*$", "") end
-            local isYou = isRoblox and name == lp.Name
-            local text = m.content or ""
-            if m.images and #m.images > 0 then
-                text = (text ~= "" and text .. " " or "") .. "[image]"
+    -- Persistent local log so messages stay in SYNC even after they're deleted
+    -- in Discord or the relay restarts (relay re-seeds from live history only).
+    local UNI_LOG = "SYNC/universal_log.json"
+    local seenUni = {}
+    local function loadUniLog()
+        local ok, data = pcall(function()
+            if typeof(isfile) == "function" and isfile(UNI_LOG) then
+                return HttpService:JSONDecode(readfile(UNI_LOG))
             end
-            if text ~= "" then
-                local color = isYou and ACCENT or (isRoblox and ACCENT or BLURPLE)
-                local avatarSpec
-                if isRoblox and isYou then
-                    avatarSpec = { userId = lp.UserId }
-                elseif m.avatar then
-                    avatarSpec = { url = m.avatar, key = "dcav_" .. tostring(m.authorId or name) .. ".png" }
-                else
-                    avatarSpec = { initial = name:sub(1, 1) }
+        end)
+        return (ok and type(data) == "table") and data or {}
+    end
+    local uniLog = loadUniLog()
+    local uniSaveVer = 0
+    local function persistUniLog()
+        uniSaveVer += 1
+        local v = uniSaveVer
+        task.delay(0.6, function()
+            if v ~= uniSaveVer or typeof(writefile) ~= "function" then return end
+            pcall(function()
+                while #uniLog > 150 do table.remove(uniLog, 1) end
+                if typeof(makefolder) == "function" and typeof(isfolder) == "function" and not isfolder("SYNC") then
+                    makefolder("SYNC")
                 end
-                addMessage("universal", isYou and "You" or name, text, color, avatarSpec)
+                writefile(UNI_LOG, HttpService:JSONEncode(uniLog))
+            end)
+        end)
+    end
+
+    -- render a list of relay-format messages; dedupes by id, so a message shown
+    -- from the local log won't double up when the relay returns it again.
+    -- persist=true also records new messages into the local log.
+    local function renderUniversal(list, persist, force)
+        for _, m in ipairs(list) do
+            if m.id then lastUniversalId = m.id end
+            if force or not (m.id and seenUni[m.id]) then
+                if m.id then seenUni[m.id] = true end
+                local name = m.author or "?"
+                local isRoblox = m.roblox == true
+                if isRoblox then name = name:gsub("%s*%(Roblox%)%s*$", "") end
+                local isYou = isRoblox and name == lp.Name
+                local text = m.content or ""
+                if m.images and #m.images > 0 then
+                    text = (text ~= "" and text .. " " or "") .. "[image]"
+                end
+                if text ~= "" then
+                    local color = isYou and ACCENT or (isRoblox and ACCENT or BLURPLE)
+                    local avatarSpec
+                    if isRoblox and isYou then
+                        avatarSpec = { userId = lp.UserId }
+                    elseif m.avatar then
+                        avatarSpec = { url = m.avatar, key = "dcav_" .. tostring(m.authorId or name) .. ".png" }
+                    else
+                        avatarSpec = { initial = name:sub(1, 1) }
+                    end
+                    addMessage("universal", isYou and "You" or name, text, color, avatarSpec)
+                    if persist then
+                        uniLog[#uniLog + 1] = { id = m.id, author = m.author, content = m.content,
+                            roblox = m.roblox, avatar = m.avatar, authorId = m.authorId, images = m.images }
+                        persistUniLog()
+                    end
+                end
             end
         end
     end
@@ -875,19 +914,18 @@ function Home.open()
     end
 
     task.spawn(function()
-        -- first fetch dumps recent history; render only the tail
-        local first = fetchUniversal()
-        if first and alive then
-            if #first > 15 then
-                local tail = {}
-                for i = #first - 14, #first do tail[#tail + 1] = first[i] end
-                -- keep pagination anchored to the true newest message
-                for _, m in ipairs(first) do lastUniversalId = m.id end
-                renderUniversal(tail)
-            else
-                renderUniversal(first)
-            end
+        -- 1) paint the saved local log first (survives Discord deletes / relay
+        -- restarts). Mark the whole log seen so the relay can't re-render older
+        -- entries, but force-render the visible tail.
+        for _, m in ipairs(uniLog) do if m.id then seenUni[m.id] = true end end
+        if #uniLog > 0 and alive then
+            local tail = {}
+            for i = math.max(1, #uniLog - 24), #uniLog do tail[#tail + 1] = uniLog[i] end
+            renderUniversal(tail, false, true)
         end
+        -- 2) first relay fetch: dedupe against the log, persist anything new
+        local first = fetchUniversal()
+        if first and alive then renderUniversal(first, true) end
         while alive and gui.Parent do
             -- 2.5s when the chat is open, 6s in the background (unread badge)
             local ticks = chatView.Visible and 5 or 12
@@ -896,7 +934,7 @@ function Home.open()
                 task.wait(0.5)
             end
             local list = fetchUniversal()
-            if list and alive then renderUniversal(list) end
+            if list and alive then renderUniversal(list, true) end
         end
     end)
 
