@@ -725,6 +725,21 @@ function Scripts.open()
                 status.Text = "Copied loadstring for " .. (s.title or "script")
                 status.TextColor3 = GREEN
                 flash(GREEN)
+                -- floating "Copied!" bubble that rises off the card and fades
+                local toast = Instance.new("TextLabel")
+                toast.Text = "Copied!"
+                toast.Font = BODY_BOLD
+                toast.TextSize = 13
+                toast.TextColor3 = WHITE
+                toast.BackgroundColor3 = GREEN
+                toast.AnchorPoint = Vector2.new(0.5, 0.5)
+                toast.Position = UDim2.fromScale(0.5, 0.5)
+                toast.Size = UDim2.fromOffset(78, 26)
+                toast.ZIndex = 12
+                toast.Parent = body
+                Util.corner(toast, 8)
+                Util.tween(toast, { Position = UDim2.new(0.5, 0, 0.5, -30), TextTransparency = 1, BackgroundTransparency = 1 }, 0.7, Enum.EasingStyle.Quad)
+                task.delay(0.72, function() if toast.Parent then toast:Destroy() end end)
             end
         end)
     end
