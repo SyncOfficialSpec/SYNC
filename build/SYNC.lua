@@ -5385,22 +5385,32 @@ function Scripts.open()
 
         -- Back button
         local back = Instance.new("TextButton")
-        back.Text = "  Back"
-        back.Font = BODY_BOLD
-        back.TextSize = 13
-        back.TextColor3 = WHITE
-        back.TextXAlignment = Enum.TextXAlignment.Center
-        back.Size = UDim2.fromOffset(76, 30)
+        back.Text = ""
+        back.Size = UDim2.fromOffset(80, 30)
         back.Position = UDim2.fromOffset(pad, 14)
         back.BackgroundColor3 = FIELD
         back.BackgroundTransparency = 0.25
+        back.AutoButtonColor = false
         back.ZIndex = 44
         back.Parent = scroll
         Util.corner(back, 10)
         local backIc = Instance.new("ImageLabel")
-        backIc.Size = UDim2.fromOffset(13, 13); backIc.Position = UDim2.fromOffset(10, 8)
+        backIc.Size = UDim2.fromOffset(13, 13); backIc.Position = UDim2.fromOffset(12, 8)
         backIc.BackgroundTransparency = 1; backIc.ZIndex = 45; backIc.Parent = back
         Icons.apply(backIc, "chevron-left", WHITE)
+        local backTxt = Instance.new("TextLabel")
+        backTxt.Text = "Back"
+        backTxt.Font = BODY_BOLD
+        backTxt.TextSize = 13
+        backTxt.TextColor3 = WHITE
+        backTxt.TextXAlignment = Enum.TextXAlignment.Left
+        backTxt.BackgroundTransparency = 1
+        backTxt.Position = UDim2.fromOffset(32, 0)
+        backTxt.Size = UDim2.new(1, -36, 1, 0)
+        backTxt.ZIndex = 45
+        backTxt.Parent = back
+        back.MouseEnter:Connect(function() Util.tween(back, { BackgroundTransparency = 0.05 }, 0.12) end)
+        back.MouseLeave:Connect(function() Util.tween(back, { BackgroundTransparency = 0.25 }, 0.12) end)
         back.MouseButton1Click:Connect(closeDetail)
 
         -- Banner
