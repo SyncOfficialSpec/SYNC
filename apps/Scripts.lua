@@ -420,6 +420,7 @@ function Scripts.open()
     local maxPages = 1
     local loadingMore = false
     local itemCount = 0
+    local ranSet = {} -- rawScript -> true for scripts run this session (badge)
 
     -- Sort modes cycled by the sort chip
     local SORTS = {
@@ -473,6 +474,35 @@ function Scripts.open()
         body.Parent = c
         Util.corner(body, 12)
         local cStroke = Util.stroke(body, WHITE, 1, 0.85)
+
+        -- "ran this session" check badge, left-middle edge (clear of the KEY /
+        -- VERIFIED / views badges), shown after a run
+        local ranBadge = Instance.new("Frame")
+        ranBadge.Size = UDim2.fromOffset(22, 22)
+        ranBadge.AnchorPoint = Vector2.new(0, 0.5)
+        ranBadge.Position = UDim2.new(0, 10, 0.5, 0)
+        ranBadge.BackgroundColor3 = GREEN
+        ranBadge.BorderSizePixel = 0
+        ranBadge.Visible = ranSet[s.rawScript] == true
+        ranBadge.ZIndex = 7
+        ranBadge.Parent = body
+        Util.corner(ranBadge, 11)
+        local ranCheck = Instance.new("ImageLabel")
+        ranCheck.Size = UDim2.fromOffset(13, 13)
+        ranCheck.AnchorPoint = Vector2.new(0.5, 0.5)
+        ranCheck.Position = UDim2.fromScale(0.5, 0.5)
+        ranCheck.BackgroundTransparency = 1
+        ranCheck.ZIndex = 8
+        ranCheck.Parent = ranBadge
+        Icons.apply(ranCheck, "check", WHITE)
+        local function markRan()
+            if ranBadge.Visible then return end
+            ranBadge.Visible = true
+            local sc = Instance.new("UIScale")
+            sc.Scale = 0
+            sc.Parent = ranBadge
+            Util.tween(sc, { Scale = 1 }, 0.25, Enum.EasingStyle.Back)
+        end
 
         local art = Instance.new("ImageLabel")
         art.Image = BANNERS[hashStr(s.title or tostring(index)) % #BANNERS + 1]
@@ -707,6 +737,8 @@ function Scripts.open()
                     status.Text = "Executed " .. (s.title or "script")
                     status.TextColor3 = GREEN
                     flash(GREEN)
+                    if s.rawScript then ranSet[s.rawScript] = true end
+                    markRan()
                 else
                     status.Text = (s.title or "script") .. ": " .. tostring(err):sub(1, 90)
                     status.TextColor3 = RED
