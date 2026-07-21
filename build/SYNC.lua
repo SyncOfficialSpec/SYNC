@@ -110,6 +110,27 @@ function Executor.fetch(url, tries)
     return nil, lastReason
 end
 
+-- Recent-run history (newest first), capped. `at` is os.time() so callers can
+-- render a relative time. Read a copy via Executor.recent().
+local _recent = {}
+local RECENT_MAX = 12
+
+local function pushRecent(name)
+    local nm = tostring(name or "script")
+    -- drop an existing entry with the same name so it moves to the top
+    for i = #_recent, 1, -1 do
+        if _recent[i].name == nm then table.remove(_recent, i) end
+    end
+    table.insert(_recent, 1, { name = nm, at = os.time() })
+    while #_recent > RECENT_MAX do table.remove(_recent) end
+end
+
+function Executor.recent()
+    local copy = {}
+    for i, e in ipairs(_recent) do copy[i] = { name = e.name, at = e.at } end
+    return copy
+end
+
 -- Run Lua source. loadstring compiles it; we run in a fresh thread under pcall
 -- so a script that errors (dead link wrappers are common) can't take SYNC down
 -- and the failure is reported. Returns (ok, err). err is a compile message when
@@ -147,6 +168,7 @@ function Executor.run(source, name)
         end
         return false, "runtime error: " .. msg
     end
+    pushRecent(name)
     return true, nil
 end
 
