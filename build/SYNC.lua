@@ -4766,7 +4766,7 @@ function Scripts.open()
     status.TextColor3 = SUB
     status.TextXAlignment = Enum.TextXAlignment.Left
     status.BackgroundTransparency = 1
-    status.Position = UDim2.fromOffset(PAD + 6, TB + 140)
+    status.Position = UDim2.fromOffset(PAD + 6, TB + 156)
     status.Size = UDim2.new(1, -PAD * 2 - 110, 0, 16)
     status.ZIndex = 3
     status.Parent = win
@@ -4776,7 +4776,7 @@ function Scripts.open()
     sortChip.AutoButtonColor = false
     sortChip.Text = ""
     sortChip.AnchorPoint = Vector2.new(1, 0.5)
-    sortChip.Position = UDim2.new(1, -PAD, 0, TB + 148)
+    sortChip.Position = UDim2.new(1, -PAD, 0, TB + 164)
     sortChip.Size = UDim2.fromOffset(104, 24)
     sortChip.BackgroundColor3 = FIELD
     sortChip.BackgroundTransparency = 0.15
@@ -4811,7 +4811,7 @@ function Scripts.open()
     end)
 
     -- Grid
-    local gridY = TB + 164
+    local gridY = TB + 182
     local grid = Instance.new("ScrollingFrame")
     grid.Position = UDim2.fromOffset(PAD, gridY)
     grid.Size = UDim2.new(1, -PAD * 2 + 8, 1, -gridY - 16)
