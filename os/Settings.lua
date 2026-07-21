@@ -27,7 +27,7 @@ function Settings.open(opts)
     opts = opts or {}
     if Settings._gui then return end
 
-    local cardW, cardH = 440, 316
+    local cardW, cardH = 440, 396
     local TB = 40 -- title bar height
     local VERSION = "SYNC 1.0"
 
@@ -267,8 +267,58 @@ function Settings.open(opts)
         if opts.onDockSize then opts.onDockSize(f) end
     end)
 
+    -- EXPERIMENTAL section: a shelf for in-progress ideas
+    local expSectionY = TB + 34 + rowH * 4 + 16
+    local expSection = Instance.new("TextLabel")
+    expSection.Text = "EXPERIMENTAL"
+    expSection.Size = UDim2.fromOffset(cardW - 40, 14)
+    expSection.Position = UDim2.fromOffset(20, expSectionY)
+    expSection.BackgroundTransparency = 1
+    expSection.Font = Theme.fonts.body
+    expSection.TextSize = 11
+    expSection.TextColor3 = SUB
+    expSection.TextXAlignment = Enum.TextXAlignment.Left
+    expSection.ZIndex = 3
+    expSection.Parent = win
+
+    local expGroupY = expSectionY + 20
+    local expGroup = Instance.new("Frame")
+    expGroup.Size = UDim2.fromOffset(cardW - 32, rowH)
+    expGroup.Position = UDim2.fromOffset(16, expGroupY)
+    expGroup.BackgroundColor3 = GROUP
+    expGroup.BorderSizePixel = 0
+    expGroup.ZIndex = 3
+    expGroup.Parent = win
+    Util.corner(expGroup, 10)
+    Util.stroke(expGroup, WHITE, 1, 0.9)
+
+    -- Desktop mode toggle. Placeholder for now: flipping it just remembers the
+    -- choice, nothing is wired to it yet.
+    local dmLabel = Instance.new("TextLabel")
+    dmLabel.Text = "Desktop mode"
+    dmLabel.Size = UDim2.fromOffset(200, 20)
+    dmLabel.Position = UDim2.fromOffset(16, (rowH - 20) / 2)
+    dmLabel.BackgroundTransparency = 1
+    dmLabel.Font = Theme.fonts.body
+    dmLabel.TextSize = 15
+    dmLabel.TextColor3 = WHITE
+    dmLabel.TextXAlignment = Enum.TextXAlignment.Left
+    dmLabel.ZIndex = 4
+    dmLabel.Parent = expGroup
+
+    local dmHolder = Instance.new("Frame")
+    dmHolder.Size = UDim2.fromOffset(54, 26)
+    dmHolder.AnchorPoint = Vector2.new(1, 0.5)
+    dmHolder.Position = UDim2.new(1, -14, 0.5, 0)
+    dmHolder.BackgroundTransparency = 1
+    dmHolder.ZIndex = 4
+    dmHolder.Parent = expGroup
+    Switch.create(dmHolder, Util.load("DesktopMode") == "true", function(v)
+        Util.save("DesktopMode", v)
+    end)
+
     -- About footer: version left, tagline right
-    local aboutY = TB + 34 + rowH * 4 + 14
+    local aboutY = expGroupY + rowH + 16
     local hairline = Instance.new("Frame")
     hairline.Size = UDim2.new(1, -32, 0, 1)
     hairline.Position = UDim2.fromOffset(16, aboutY)
