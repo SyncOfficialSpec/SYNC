@@ -637,6 +637,30 @@ function Util.closeOnEscape(gui, closeFn)
     return conn
 end
 
+-- Remember a centered window's dragged position. Restores the saved pixel
+-- offset from center immediately (falls back to centered), then saves the
+-- offset, debounced, whenever the window moves. `key` namespaces the storage.
+function Util.persistPosition(win, key)
+    local ox = tonumber(Util.load(key .. "OX"))
+    local oy = tonumber(Util.load(key .. "OY"))
+    if ox and oy then
+        win.Position = UDim2.new(0.5, ox, 0.5, oy)
+    else
+        win.Position = UDim2.fromScale(0.5, 0.5)
+    end
+    local saveVer = 0
+    win:GetPropertyChangedSignal("Position"):Connect(function()
+        saveVer += 1
+        local v = saveVer
+        local p = win.Position
+        task.delay(0.5, function()
+            if v ~= saveVer then return end
+            Util.save(key .. "OX", tostring(p.X.Offset))
+            Util.save(key .. "OY", tostring(p.Y.Offset))
+        end)
+    end)
+end
+
 -- Make a window draggable by its title bar (mouse + touch). Cleans up its
 -- global input connection when the window is destroyed.
 function Util.draggable(frame, handle)
@@ -3026,7 +3050,7 @@ function Home.open()
     win.Text = ""
     win.AutoButtonColor = false
     win.AnchorPoint = Vector2.new(0.5, 0.5)
-    win.Position = UDim2.fromScale(0.5, 0.5)
+    win.Position = UDim2.fromScale(0.5, 0.5) -- persistPosition overrides below
     win.Size = UDim2.fromOffset(winW, winH)
     win.BackgroundColor3 = WIN
     win.BorderSizePixel = 0
@@ -3079,6 +3103,7 @@ function Home.open()
     end
 
     Util.draggable(win, bar)
+    Util.persistPosition(win, "HomeWin")
 
     local barTitle = Instance.new("TextLabel")
     barTitle.Size = UDim2.new(1, 0, 1, 0)

@@ -105,7 +105,7 @@ function Home.open()
     win.Text = ""
     win.AutoButtonColor = false
     win.AnchorPoint = Vector2.new(0.5, 0.5)
-    win.Position = UDim2.fromScale(0.5, 0.5)
+    win.Position = UDim2.fromScale(0.5, 0.5) -- persistPosition overrides below
     win.Size = UDim2.fromOffset(winW, winH)
     win.BackgroundColor3 = WIN
     win.BorderSizePixel = 0
@@ -158,6 +158,7 @@ function Home.open()
     end
 
     Util.draggable(win, bar)
+    Util.persistPosition(win, "HomeWin")
 
     local barTitle = Instance.new("TextLabel")
     barTitle.Size = UDim2.new(1, 0, 1, 0)
