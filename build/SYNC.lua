@@ -4601,8 +4601,10 @@ function Scripts.open()
 
     local lights = { Theme.red, Theme.yellow, Theme.green }
     for i, col in ipairs(lights) do
-        local dot = Instance.new(i == 1 and "TextButton" or "Frame")
-        if i == 1 then dot.Text = ""; dot.AutoButtonColor = false end
+        -- red closes, green re-centers a window dragged off-screen
+        local clickable = (i == 1 or i == 3)
+        local dot = Instance.new(clickable and "TextButton" or "Frame")
+        if clickable then dot.Text = ""; dot.AutoButtonColor = false end
         dot.Size = UDim2.fromOffset(12, 12)
         dot.Position = UDim2.fromOffset(14 + (i - 1) * 20, (TB - 12) / 2)
         dot.BackgroundColor3 = col
@@ -4611,6 +4613,11 @@ function Scripts.open()
         dot.Parent = bar
         Util.corner(dot, 6)
         if i == 1 then dot.MouseButton1Click:Connect(close) end
+        if i == 3 then
+            dot.MouseButton1Click:Connect(function()
+                Util.tween(win, { Position = UDim2.fromScale(0.5, 0.5) }, 0.3, Enum.EasingStyle.Quint)
+            end)
+        end
     end
 
     Util.draggable(win, bar)
