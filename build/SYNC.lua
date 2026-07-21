@@ -5440,6 +5440,35 @@ function Scripts.open()
         prevMeta.ZIndex = 42
         prevMeta.Parent = prevCard
 
+        -- Copy button in the preview header (copies the raw source)
+        local previewSrc
+        local prevCopy = Instance.new("TextButton")
+        prevCopy.Text = "  Copy"
+        prevCopy.Font = BODY_BOLD
+        prevCopy.TextSize = 12
+        prevCopy.TextColor3 = Color3.fromRGB(210, 210, 216)
+        prevCopy.AutoButtonColor = false
+        prevCopy.AnchorPoint = Vector2.new(1, 0)
+        prevCopy.Position = UDim2.new(1, -14, 0, 12)
+        prevCopy.Size = UDim2.fromOffset(72, 28)
+        prevCopy.BackgroundColor3 = FIELD
+        prevCopy.BackgroundTransparency = 0.3
+        prevCopy.ZIndex = 43
+        prevCopy.Parent = prevCard
+        Util.corner(prevCopy, 8)
+        local prevCopyIc = Instance.new("ImageLabel")
+        prevCopyIc.Size = UDim2.fromOffset(12, 12); prevCopyIc.Position = UDim2.fromOffset(12, 8)
+        prevCopyIc.BackgroundTransparency = 1; prevCopyIc.ZIndex = 44; prevCopyIc.Parent = prevCopy
+        Icons.apply(prevCopyIc, "file-text", SUB)
+        prevCopy.MouseEnter:Connect(function() Util.tween(prevCopy, { BackgroundTransparency = 0 }, 0.12) end)
+        prevCopy.MouseLeave:Connect(function() Util.tween(prevCopy, { BackgroundTransparency = 0.3 }, 0.12) end)
+        prevCopy.MouseButton1Click:Connect(function()
+            if not previewSrc then return end
+            pcall(function() setclipboard(previewSrc) end)
+            prevCopy.Text = "  Copied"
+            task.delay(1, function() if prevCopy.Parent then prevCopy.Text = "  Copy" end end)
+        end)
+
         local codeBox = Instance.new("TextLabel")
         codeBox.Text = ""
         codeBox.Font = Enum.Font.Code
@@ -5460,6 +5489,7 @@ function Scripts.open()
             local src = s.rawScript and Util.httpGet(s.rawScript)
             if not detailLayer then return end
             if src and src ~= "" then
+                previewSrc = src
                 local lines = select(2, src:gsub("\n", "\n")) + 1
                 prevMeta.Text = lines .. (lines == 1 and " line · " or " lines · ") .. #src .. " B"
                 codeBox.Text = #src > 1200 and (src:sub(1, 1200) .. "\n...") or src
