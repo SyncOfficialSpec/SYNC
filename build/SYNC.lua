@@ -290,6 +290,113 @@ end
 return Icons
 end)
 
+SYNC.define("core/SyncCodec", function()
+-- SYNC / core / SyncCodec
+-- A tiny reversible codec for "SYNC codes": free-tier invite links that only the
+-- SYNC Joiner can read. A place + server id is XOR-scrambled with a fixed key and
+-- re-encoded over a shuffled 64-char alphabet, then prefixed "SYNC-". The result
+-- is NOT a valid Roblox link, so it does nothing outside SYNC - which is the point.
+-- Premium users skip this and share the real roblox.com link instead.
+--
+-- SyncCodec.encode(placeId, jobId) -> "SYNC-...."
+-- SyncCodec.decode(token) -> placeId (number), jobId (string) | nil
+
+local SyncCodec = {}
+
+-- Shuffled, URL-safe 64-char alphabet (deterministic permutation of the standard
+-- set, so encode and decode agree without shipping a literal scrambled string).
+local BASE = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_"
+local ALPHA = ""
+do
+    local n = #BASE
+    local idx = 0
+    for _ = 1, n do
+        idx = (idx + 37) % n -- 37 is coprime with 64 -> visits every index once
+        ALPHA = ALPHA .. BASE:sub(idx + 1, idx + 1)
+    end
+end
+local REV = {}
+for i = 1, #ALPHA do REV[ALPHA:sub(i, i)] = i - 1 end
+
+local KEY = { 83, 121, 110, 99, 79, 83, 42, 173, 55, 200 } -- fixed scramble key
+
+local function xorApply(bytes)
+    local out = {}
+    for i, b in ipairs(bytes) do
+        out[i] = bit32.bxor(b, KEY[((i - 1) % #KEY) + 1])
+    end
+    return out
+end
+
+-- bytes -> chars (6-bit repacking over ALPHA)
+local function packBytes(bytes)
+    local out, buf, bits = {}, 0, 0
+    for _, b in ipairs(bytes) do
+        buf = buf * 256 + b
+        bits = bits + 8
+        while bits >= 6 do
+            bits = bits - 6
+            local idx = math.floor(buf / (2 ^ bits)) % 64
+            out[#out + 1] = ALPHA:sub(idx + 1, idx + 1)
+            buf = buf % (2 ^ bits) -- drop the bits we just emitted (keep buf small + exact)
+        end
+    end
+    if bits > 0 then
+        local idx = (buf * (2 ^ (6 - bits))) % 64
+        out[#out + 1] = ALPHA:sub(idx + 1, idx + 1)
+    end
+    return table.concat(out)
+end
+
+-- chars -> bytes (inverse of packBytes)
+local function unpackChars(str)
+    local out, buf, bits = {}, 0, 0
+    for i = 1, #str do
+        local v = REV[str:sub(i, i)]
+        if v then
+            buf = buf * 64 + v
+            bits = bits + 6
+            if bits >= 8 then
+                bits = bits - 8
+                out[#out + 1] = math.floor(buf / (2 ^ bits)) % 256
+                buf = buf % (2 ^ bits)
+            end
+        end
+    end
+    return out
+end
+
+function SyncCodec.encode(placeId, jobId)
+    local payload = tostring(placeId) .. "|" .. tostring(jobId)
+    local bytes = {}
+    for i = 1, #payload do bytes[i] = payload:byte(i) end
+    return "SYNC-" .. packBytes(xorApply(bytes))
+end
+
+-- Returns placeId, jobId, or nil if this isn't a SYNC code.
+function SyncCodec.decode(token)
+    token = tostring(token or ""):gsub("%s+", "")
+    local body = token:match("^SYNC%-(.+)$")
+    if not body then return nil end
+    local ok, pid, jid = pcall(function()
+        local bytes = xorApply(unpackChars(body))
+        local chars = {}
+        for _, b in ipairs(bytes) do chars[#chars + 1] = string.char(b) end
+        local payload = table.concat(chars)
+        local p, j = payload:match("^(%d+)|(.+)$")
+        return p and tonumber(p) or nil, j
+    end)
+    if ok then return pid, jid end
+    return nil
+end
+
+function SyncCodec.isSyncCode(token)
+    return tostring(token or ""):match("^%s*SYNC%-") ~= nil
+end
+
+return SyncCodec
+end)
+
 SYNC.define("core/Theme", function()
 -- SYNC / core / Theme
 -- macOS-style palette, fonts and metrics. Light + dark variants.
@@ -5559,10 +5666,19 @@ local Players         = game:GetService("Players")
 local TeleportService = game:GetService("TeleportService")
 local HttpService     = game:GetService("HttpService")
 
-local Theme = SYNC.import("core/Theme")
-local Util  = SYNC.import("core/Util")
+local Theme     = SYNC.import("core/Theme")
+local Util      = SYNC.import("core/Util")
+local SyncCodec = SYNC.import("core/SyncCodec")
 
 local Joiner = {}
+
+-- Premium status. Free users create SYNC codes; premium users get real links.
+-- Flip it for a paying user with Util.save("SyncPremium", "true") (a real gamepass
+-- check can replace this later) or getgenv().SYNCPremium = true.
+local function isPremium()
+    if getgenv and getgenv().SYNCPremium == true then return true end
+    return Util.load("SyncPremium") == "true"
+end
 
 local WHITE  = Color3.fromRGB(245, 245, 247)
 local SUB    = Color3.fromRGB(150, 150, 158)
@@ -5598,10 +5714,15 @@ local function inviteLink()
 end
 
 -- Pull a placeId (+ optional server instance) out of whatever the user pasted:
--- start links, /games/<id> links, or a bare id. Returns placeId, jobId|nil.
+-- a SYNC code, start links, /games/<id> links, or a bare id. Returns placeId,
+-- jobId|nil, plus whether it was a SYNC code.
 local function parseLink(text)
     text = tostring(text or ""):gsub("%s+", "")
     if text == "" then return nil end
+    if SyncCodec.isSyncCode(text) then
+        local pid, jid = SyncCodec.decode(text)
+        return pid, jid, true
+    end
     local pid = text:match("placeId=(%d+)")
         or text:match("/games/(%d+)")
         or text:match("/games/start.-(%d%d%d%d+)")
@@ -5616,7 +5737,7 @@ function Joiner.open()
     local host = (gethui and gethui()) or game:GetService("CoreGui")
     if host:FindFirstChild("SYNC_Joiner") then return end
 
-    local cardW, cardH = 480, 452
+    local cardW, cardH = 480, 462
     local TB = 40
 
     local gui = Instance.new("ScreenGui")
@@ -5747,23 +5868,77 @@ function Joiner.open()
         return c
     end
 
+    -- rounded gradient app-icon tile with a lucide glyph centered
+    local function iconTile(parent, top, bot, iconName)
+        local tile = Instance.new("Frame")
+        tile.Size = UDim2.fromOffset(42, 42)
+        tile.Position = UDim2.fromOffset(16, 16)
+        tile.BackgroundColor3 = top
+        tile.BorderSizePixel = 0
+        tile.ZIndex = 4
+        tile.Parent = parent
+        Util.corner(tile, 12)
+        local g = Instance.new("UIGradient")
+        g.Rotation = 90
+        g.Color = ColorSequence.new(top, bot)
+        g.Parent = tile
+        Util.stroke(tile, Color3.fromRGB(255, 255, 255), 1, 0.7)
+        local ic = Instance.new("ImageLabel")
+        ic.Size = UDim2.fromOffset(22, 22)
+        ic.AnchorPoint = Vector2.new(0.5, 0.5)
+        ic.Position = UDim2.fromScale(0.5, 0.5)
+        ic.BackgroundTransparency = 1
+        ic.ZIndex = 5
+        ic.Parent = tile
+        loadIcon(ic, iconName, WHITE)
+        return tile
+    end
+
+    -- gradient pill button with a subtle grow on hover
+    local function gradBtn(parent, x, y, w, h, top, bot, txt, txtCol)
+        local b = Instance.new("TextButton")
+        b.Position = UDim2.fromOffset(x, y)
+        b.Size = UDim2.fromOffset(w, h)
+        b.AnchorPoint = Vector2.new(0, 0)
+        b.BackgroundColor3 = top
+        b.AutoButtonColor = false
+        b.Font = Theme.fonts.title
+        b.Text = txt
+        b.TextSize = 13
+        b.TextColor3 = txtCol
+        b.BorderSizePixel = 0
+        b.ZIndex = 4
+        b.Parent = parent
+        Util.corner(b, 10)
+        local g = Instance.new("UIGradient")
+        g.Rotation = 90
+        g.Color = ColorSequence.new(top, bot)
+        g.Parent = b
+        local sc = Instance.new("UIScale")
+        sc.Parent = b
+        b.MouseEnter:Connect(function() Util.tween(sc, { Scale = 1.02 }, 0.12) end)
+        b.MouseLeave:Connect(function() Util.tween(sc, { Scale = 1.0 }, 0.12) end)
+        return b
+    end
+
+    local IN = 16 -- inner card padding
+    local CW = cardW - 32 - IN * 2 -- content width inside a card
+
+    local premium = isPremium()
+    local function currentToken()
+        if isPremium() then return inviteLink() end
+        return SyncCodec.encode(game.PlaceId, game.JobId)
+    end
+
     -- ============ 1. INVITE ============
     section("YOUR SERVER", TB + 12)
-    local c1 = card(TB + 32, 150)
-
-    local i1 = Instance.new("ImageLabel")
-    i1.Size = UDim2.fromOffset(18, 18)
-    i1.Position = UDim2.fromOffset(16, 16)
-    i1.BackgroundTransparency = 1
-    i1.ImageColor3 = VIOLET
-    i1.ZIndex = 4
-    i1.Parent = c1
-    loadIcon(i1, "link", VIOLET)
+    local c1 = card(TB + 32, 186)
+    iconTile(c1, Color3.fromRGB(188, 168, 255), Color3.fromRGB(150, 118, 242), "link")
 
     local t1 = Instance.new("TextLabel")
-    t1.Text = "Invite someone to your server"
-    t1.Position = UDim2.fromOffset(42, 14)
-    t1.Size = UDim2.fromOffset(cardW - 90, 20)
+    t1.Text = "Invite to your server"
+    t1.Position = UDim2.fromOffset(70, 16)
+    t1.Size = UDim2.fromOffset(cardW - 200, 20)
     t1.BackgroundTransparency = 1
     t1.Font = Theme.fonts.title
     t1.TextSize = 15
@@ -5772,75 +5947,115 @@ function Joiner.open()
     t1.ZIndex = 4
     t1.Parent = c1
 
-    local d1 = Instance.new("TextLabel")
-    d1.Text = "Copy this link and send it. They'll join the exact server you're in right now."
-    d1.Position = UDim2.fromOffset(16, 40)
-    d1.Size = UDim2.fromOffset(cardW - 64, 32)
-    d1.BackgroundTransparency = 1
-    d1.Font = Theme.fonts.caption
-    d1.TextSize = 12
-    d1.TextColor3 = SUB
-    d1.TextWrapped = true
-    d1.TextXAlignment = Enum.TextXAlignment.Left
-    d1.TextYAlignment = Enum.TextYAlignment.Top
-    d1.ZIndex = 4
-    d1.Parent = c1
+    local gameLabel = Instance.new("TextLabel")
+    gameLabel.Text = "Reading this server..."
+    gameLabel.Position = UDim2.fromOffset(70, 39)
+    gameLabel.Size = UDim2.fromOffset(cardW - 130, 16)
+    gameLabel.BackgroundTransparency = 1
+    gameLabel.Font = Theme.fonts.caption
+    gameLabel.TextSize = 12
+    gameLabel.TextColor3 = SUB
+    gameLabel.TextXAlignment = Enum.TextXAlignment.Left
+    gameLabel.TextTruncate = Enum.TextTruncate.AtEnd
+    gameLabel.ZIndex = 4
+    gameLabel.Parent = c1
+    task.spawn(function()
+        local name = "this experience"
+        pcall(function()
+            local info = game:GetService("MarketplaceService"):GetProductInfo(game.PlaceId)
+            if info and info.Name then name = info.Name end
+        end)
+        local n, mx = #Players:GetPlayers(), Players.MaxPlayers
+        if gameLabel.Parent then
+            gameLabel.Text = ("%s   ·   %d/%d players"):format(name, n, mx > 0 and mx or n)
+        end
+    end)
 
-    -- link preview pill (read-only, truncated)
+    -- tier badge (top-right): PRO for premium, tappable Upgrade for free
+    local badge = Instance.new("TextButton")
+    badge.AnchorPoint = Vector2.new(1, 0)
+    badge.Position = UDim2.fromOffset(cardW - 32 - 14, 16)
+    badge.Size = UDim2.fromOffset(premium and 52 or 74, 22)
+    badge.AutoButtonColor = false
+    badge.BackgroundColor3 = premium and Color3.fromRGB(240, 196, 92) or Color3.fromRGB(40, 40, 46)
+    badge.Font = Theme.fonts.title
+    badge.Text = premium and "PRO" or "Upgrade"
+    badge.TextSize = 11
+    badge.TextColor3 = premium and Color3.fromRGB(40, 30, 6) or VIOLET
+    badge.BorderSizePixel = 0
+    badge.ZIndex = 5
+    badge.Parent = c1
+    Util.corner(badge, 11)
+    if not premium then Util.stroke(badge, VIOLET, 1, 0.4) end
+
+    -- link / code preview pill (read-only, truncated)
     local prev = Instance.new("TextLabel")
-    prev.Position = UDim2.fromOffset(16, 80)
-    prev.Size = UDim2.fromOffset(cardW - 64, 26)
+    prev.Position = UDim2.fromOffset(IN, 70)
+    prev.Size = UDim2.fromOffset(CW, 32)
     prev.BackgroundColor3 = FIELD
-    prev.BackgroundTransparency = 0.15
+    prev.BackgroundTransparency = 0.1
     prev.Font = Enum.Font.Code
-    prev.Text = "  " .. inviteLink()
+    prev.Text = "   " .. currentToken()
     prev.TextSize = 11
-    prev.TextColor3 = Color3.fromRGB(170, 170, 178)
+    prev.TextColor3 = Color3.fromRGB(165, 165, 175)
     prev.TextXAlignment = Enum.TextXAlignment.Left
     prev.TextTruncate = Enum.TextTruncate.AtEnd
     prev.ClipsDescendants = true
     prev.ZIndex = 4
     prev.Parent = c1
-    Util.corner(prev, 7)
+    Util.corner(prev, 8)
+    Util.stroke(prev, STROKE, 1, 0.6)
 
-    local copyBtn = Instance.new("TextButton")
-    copyBtn.Position = UDim2.fromOffset(16, 114)
-    copyBtn.Size = UDim2.fromOffset(cardW - 64, 24)
-    copyBtn.BackgroundColor3 = VIOLET
-    copyBtn.AutoButtonColor = false
-    copyBtn.Font = Theme.fonts.title
-    copyBtn.Text = "Copy invite link"
-    copyBtn.TextSize = 13
-    copyBtn.TextColor3 = Color3.fromRGB(26, 22, 40)
-    copyBtn.BorderSizePixel = 0
-    copyBtn.ZIndex = 4
-    copyBtn.Parent = c1
-    Util.corner(copyBtn, 8)
-    copyBtn.MouseEnter:Connect(function() Util.tween(copyBtn, { BackgroundColor3 = Color3.fromRGB(186, 166, 255) }, 0.12) end)
-    copyBtn.MouseLeave:Connect(function() Util.tween(copyBtn, { BackgroundColor3 = VIOLET }, 0.12) end)
+    -- mode note
+    local note = Instance.new("TextLabel")
+    note.Position = UDim2.fromOffset(IN, 108)
+    note.Size = UDim2.fromOffset(CW, 28)
+    note.BackgroundTransparency = 1
+    note.Font = Theme.fonts.caption
+    note.Text = premium
+        and "A normal Roblox link. Works in the app and anywhere you send it."
+        or "A SYNC code. Only people using SYNC Joiner can open it. Go PRO for a link that works anywhere."
+    note.TextSize = 11
+    note.TextColor3 = premium and Color3.fromRGB(120, 210, 150) or SUB
+    note.TextWrapped = true
+    note.TextXAlignment = Enum.TextXAlignment.Left
+    note.TextYAlignment = Enum.TextYAlignment.Top
+    note.ZIndex = 4
+    note.Parent = c1
+
+    local copyBtn = gradBtn(c1, IN, 140, CW, 38,
+        Color3.fromRGB(186, 166, 255), Color3.fromRGB(150, 120, 240),
+        premium and "Copy invite link" or "Copy SYNC code", Color3.fromRGB(26, 22, 40))
     copyBtn.MouseButton1Click:Connect(function()
-        local ok = pcall(function() setclipboard(inviteLink()) end)
+        local ok = pcall(function() setclipboard(currentToken()) end)
         copyBtn.Text = ok and "Copied to clipboard" or "Clipboard not available"
-        task.delay(1.4, function() if copyBtn.Parent then copyBtn.Text = "Copy invite link" end end)
+        task.delay(1.4, function()
+            if copyBtn.Parent then copyBtn.Text = isPremium() and "Copy invite link" or "Copy SYNC code" end
+        end)
     end)
 
-    -- ============ 2. JOIN ============
-    section("JOIN A FRIEND", TB + 200)
-    local c2 = card(TB + 220, 150)
+    if not premium then
+        badge.MouseButton1Click:Connect(function()
+            note.Text = "Premium unlocks a universal link anyone can open. Subscription coming soon."
+            note.TextColor3 = VIOLET
+            task.delay(2.6, function()
+                if note.Parent then
+                    note.Text = "A SYNC code. Only people using SYNC Joiner can open it. Go PRO for a link that works anywhere."
+                    note.TextColor3 = SUB
+                end
+            end)
+        end)
+    end
 
-    local i2 = Instance.new("ImageLabel")
-    i2.Size = UDim2.fromOffset(18, 18)
-    i2.Position = UDim2.fromOffset(16, 16)
-    i2.BackgroundTransparency = 1
-    i2.ImageColor3 = GREEN
-    i2.ZIndex = 4
-    i2.Parent = c2
-    loadIcon(i2, "log-in", GREEN)
+    -- ============ 2. JOIN ============
+    section("JOIN A FRIEND", TB + 32 + 186 + 14)
+    local c2 = card(TB + 32 + 186 + 34, 150)
+    iconTile(c2, Color3.fromRGB(110, 222, 168), Color3.fromRGB(52, 182, 132), "log-in")
 
     local t2 = Instance.new("TextLabel")
-    t2.Text = "Join someone's game"
-    t2.Position = UDim2.fromOffset(42, 14)
-    t2.Size = UDim2.fromOffset(cardW - 90, 20)
+    t2.Text = "Join a friend's game"
+    t2.Position = UDim2.fromOffset(70, 18)
+    t2.Size = UDim2.fromOffset(cardW - 120, 20)
     t2.BackgroundTransparency = 1
     t2.Font = Theme.fonts.title
     t2.TextSize = 15
@@ -5850,9 +6065,9 @@ function Joiner.open()
     t2.Parent = c2
 
     local d2 = Instance.new("TextLabel")
-    d2.Text = "Paste their game or server link below, then hit Join to jump into it."
-    d2.Position = UDim2.fromOffset(16, 40)
-    d2.Size = UDim2.fromOffset(cardW - 64, 16)
+    d2.Text = "Paste their link and hop straight into their server."
+    d2.Position = UDim2.fromOffset(70, 41)
+    d2.Size = UDim2.fromOffset(cardW - 120, 16)
     d2.BackgroundTransparency = 1
     d2.Font = Theme.fonts.caption
     d2.TextSize = 12
@@ -5861,20 +6076,21 @@ function Joiner.open()
     d2.ZIndex = 4
     d2.Parent = c2
 
-    -- paste field
+    -- paste field + join button on one row
+    local btnW = 96
     local fh = Instance.new("Frame")
-    fh.Position = UDim2.fromOffset(16, 66)
-    fh.Size = UDim2.fromOffset(cardW - 158, 30)
+    fh.Position = UDim2.fromOffset(IN, 74)
+    fh.Size = UDim2.fromOffset(CW - btnW - 10, 38)
     fh.BackgroundColor3 = FIELD
     fh.BorderSizePixel = 0
     fh.ZIndex = 4
     fh.Parent = c2
-    Util.corner(fh, 8)
+    Util.corner(fh, 10)
     local fSt = Util.stroke(fh, STROKE, 1, 0.45)
 
     local input = Instance.new("TextBox")
     input.Position = UDim2.fromOffset(12, 0)
-    input.Size = UDim2.fromOffset(cardW - 158 - 24, 30)
+    input.Size = UDim2.fromOffset(CW - btnW - 10 - 24, 38)
     input.BackgroundTransparency = 1
     input.Font = Theme.fonts.body
     input.PlaceholderText = "Paste a game or server link"
@@ -5890,25 +6106,13 @@ function Joiner.open()
     input.Focused:Connect(function() Util.tween(fSt, { Transparency = 0, Color = GREEN }, 0.15) end)
     input.FocusLost:Connect(function() Util.tween(fSt, { Transparency = 0.45, Color = STROKE }, 0.15) end)
 
-    local joinBtn = Instance.new("TextButton")
-    joinBtn.Position = UDim2.fromOffset(cardW - 132, 66)
-    joinBtn.Size = UDim2.fromOffset(100, 30)
-    joinBtn.BackgroundColor3 = GREEN
-    joinBtn.AutoButtonColor = false
-    joinBtn.Font = Theme.fonts.title
-    joinBtn.Text = "Join"
-    joinBtn.TextSize = 13
-    joinBtn.TextColor3 = Color3.fromRGB(12, 32, 22)
-    joinBtn.BorderSizePixel = 0
-    joinBtn.ZIndex = 4
-    joinBtn.Parent = c2
-    Util.corner(joinBtn, 8)
-    joinBtn.MouseEnter:Connect(function() Util.tween(joinBtn, { BackgroundColor3 = Color3.fromRGB(92, 220, 165) }, 0.12) end)
-    joinBtn.MouseLeave:Connect(function() Util.tween(joinBtn, { BackgroundColor3 = GREEN }, 0.12) end)
+    local joinBtn = gradBtn(c2, IN + CW - btnW, 74, btnW, 38,
+        Color3.fromRGB(104, 216, 162), Color3.fromRGB(54, 184, 134),
+        "Join", Color3.fromRGB(10, 34, 24))
 
     local status = Instance.new("TextLabel")
-    status.Position = UDim2.fromOffset(16, 106)
-    status.Size = UDim2.fromOffset(cardW - 64, 30)
+    status.Position = UDim2.fromOffset(IN, 120)
+    status.Size = UDim2.fromOffset(CW, 24)
     status.BackgroundTransparency = 1
     status.Font = Theme.fonts.caption
     status.Text = ""
@@ -5928,15 +6132,18 @@ function Joiner.open()
     local joining = false
     local function doJoin()
         if joining then return end
-        local pid, jid = parseLink(input.Text)
+        local pid, jid, isCode = parseLink(input.Text)
         if not pid then
-            setStatus("Couldn't find a game in that link. Paste a roblox.com game or server link.", Color3.fromRGB(255, 120, 110))
+            local msg = SyncCodec.isSyncCode(input.Text)
+                and "That SYNC code looks broken. Ask them to copy it again."
+                or "Couldn't find a game in that link. Paste a roblox.com link or a SYNC code."
+            setStatus(msg, Color3.fromRGB(255, 120, 110))
             return
         end
         joining = true
         joinBtn.Text = "Joining"
         if jid then
-            setStatus("Joining their exact server...", GREEN)
+            setStatus(isCode and "Decoded a SYNC code, joining their server..." or "Joining their exact server...", GREEN)
             local ok, err = pcall(function() TeleportService:TeleportToPlaceInstance(pid, jid, lp) end)
             if not ok then
                 setStatus("That server may be full or closed. Trying a normal join...", Color3.fromRGB(240, 190, 90))
