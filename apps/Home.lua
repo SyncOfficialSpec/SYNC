@@ -533,6 +533,23 @@ function Home.open()
     chatLayout.SortOrder = Enum.SortOrder.LayoutOrder
     chatLayout.Padding = UDim.new(0, 10)
     chatLayout.Parent = chatScroll
+
+    -- top fade so messages dissolve under the channel tabs as they scroll up
+    local chatFade = Instance.new("Frame")
+    chatFade.Position = UDim2.fromOffset(12, 82)
+    chatFade.Size = UDim2.new(1, -24, 0, 22)
+    chatFade.BackgroundColor3 = CARD
+    chatFade.BorderSizePixel = 0
+    chatFade.Active = false
+    chatFade.ZIndex = 6
+    chatFade.Parent = chatView
+    local chatFadeGrad = Instance.new("UIGradient")
+    chatFadeGrad.Rotation = 90
+    chatFadeGrad.Transparency = NumberSequence.new({
+        NumberSequenceKeypoint.new(0, 0.1),
+        NumberSequenceKeypoint.new(1, 1),
+    })
+    chatFadeGrad.Parent = chatFade
     Util.autoCanvas(chatScroll, "Y")
 
     local chatEmpty = Instance.new("TextLabel")
