@@ -1204,6 +1204,23 @@ function Boot.run(onDone)
     screen.Parent = gui
     Util.tween(screen, { BackgroundTransparency = 0 }, 0.55, Enum.EasingStyle.Sine)
 
+    -- faint version stamp, bottom-center
+    local verStamp = Instance.new("TextLabel")
+    verStamp.AnchorPoint = Vector2.new(0.5, 1)
+    verStamp.Position = UDim2.new(0.5, 0, 1, -px(22))
+    verStamp.Size = UDim2.fromOffset(px(200), px(16))
+    verStamp.BackgroundTransparency = 1
+    verStamp.Font = Theme.fonts.caption
+    verStamp.Text = spaced("SYNC  v1.0")
+    verStamp.TextSize = px(12)
+    verStamp.TextColor3 = Color3.fromRGB(90, 90, 98)
+    verStamp.TextTransparency = 1
+    verStamp.ZIndex = 3
+    verStamp.Parent = screen
+    task.delay(0.8, function()
+        if screen.Parent then Util.tween(verStamp, { TextTransparency = 0 }, 0.6, Enum.EasingStyle.Sine) end
+    end)
+
     local alive   = true
     local closing = false
     local QUINT, QUAD, SINE = Enum.EasingStyle.Quint, Enum.EasingStyle.Quad, Enum.EasingStyle.Sine
