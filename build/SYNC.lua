@@ -4109,7 +4109,8 @@ function Home.open()
         for gi, g in ipairs(games) do
             local y = (gi - 1) * ENTRY_H
 
-            local thumb = Instance.new("ImageLabel")
+            local thumb = Instance.new("ImageButton")
+            thumb.AutoButtonColor = false
             thumb.Size = UDim2.fromOffset(THUMB_W, THUMB_H)
             thumb.Position = UDim2.fromOffset(0, y)
             thumb.BackgroundColor3 = FIELD
@@ -4118,6 +4119,19 @@ function Home.open()
             thumb.Parent = faScroll
             Util.corner(thumb, 12)
             Util.stroke(thumb, WHITE, 1, 0.86)
+            -- click the game art (behind the friend chips) to copy its link
+            local gpid = g.placeId
+            thumb.MouseButton1Click:Connect(function()
+                local ok = pcall(function()
+                    setclipboard(("https://www.roblox.com/games/%d"):format(gpid))
+                end)
+                if ok then
+                    faTitle.Text = "Game link copied"
+                    task.delay(1.2, function()
+                        if faTitle.Parent then faTitle.Text = "Friend Activity" end
+                    end)
+                end
+            end)
 
             -- Fallback name shows until (unless) the thumbnail loads
             local nameLabel = Instance.new("TextLabel")
