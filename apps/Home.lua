@@ -882,6 +882,40 @@ function Home.open()
     local faCard = makeCard(PAD + COL1 + GAPX, contentY, COL2, contentH)
     local faTitle = cardTitle(faCard, "Friend Activity")
 
+    -- Manual refresh button (top-right of the card): breaks the poll wait
+    local faRefreshRequested = false
+    local faRefreshBtn = Instance.new("TextButton")
+    faRefreshBtn.Text = ""
+    faRefreshBtn.AutoButtonColor = false
+    faRefreshBtn.Size = UDim2.fromOffset(26, 26)
+    faRefreshBtn.AnchorPoint = Vector2.new(1, 0)
+    faRefreshBtn.Position = UDim2.new(1, -16, 0, 16)
+    faRefreshBtn.BackgroundColor3 = FIELD
+    faRefreshBtn.BackgroundTransparency = 0.3
+    faRefreshBtn.ZIndex = 5
+    faRefreshBtn.Parent = faCard
+    Util.corner(faRefreshBtn, 9)
+    local faRefreshGlyph = Instance.new("ImageLabel")
+    faRefreshGlyph.Size = UDim2.fromOffset(14, 14)
+    faRefreshGlyph.AnchorPoint = Vector2.new(0.5, 0.5)
+    faRefreshGlyph.Position = UDim2.fromScale(0.5, 0.5)
+    faRefreshGlyph.BackgroundTransparency = 1
+    faRefreshGlyph.ZIndex = 6
+    faRefreshGlyph.Parent = faRefreshBtn
+    Icons.apply(faRefreshGlyph, "orbit", SUB)
+    faRefreshBtn.MouseEnter:Connect(function()
+        Util.tween(faRefreshBtn, { BackgroundTransparency = 0 }, 0.12)
+        faRefreshGlyph.ImageColor3 = WHITE
+    end)
+    faRefreshBtn.MouseLeave:Connect(function()
+        Util.tween(faRefreshBtn, { BackgroundTransparency = 0.3 }, 0.12)
+        faRefreshGlyph.ImageColor3 = SUB
+    end)
+    faRefreshBtn.MouseButton1Click:Connect(function()
+        faRefreshRequested = true
+        Util.tween(faRefreshGlyph, { Rotation = faRefreshGlyph.Rotation + 360 }, 0.5)
+    end)
+
     local faEmpty = Instance.new("TextLabel")
     faEmpty.Text = "Your friends will appear here when they're in-game."
     faEmpty.Font = Theme.fonts.caption
@@ -1416,6 +1450,7 @@ function Home.open()
             local delaySec = (games and #games > 0) and 30 or 5
             for _ = 1, delaySec * 2 do
                 if not alive then return end
+                if faRefreshRequested then faRefreshRequested = false; break end
                 task.wait(0.5)
             end
         end
