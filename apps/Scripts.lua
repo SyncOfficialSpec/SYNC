@@ -732,6 +732,9 @@ function Scripts.open()
         scroll.CanvasSize = UDim2.new()
         scroll.ZIndex = 41
         scroll.Parent = layer
+        -- slide-up entrance for the content
+        scroll.Position = UDim2.fromOffset(0, 26)
+        Util.tween(scroll, { Position = UDim2.fromOffset(0, 0) }, 0.28, Enum.EasingStyle.Quint)
         local pad = 24
 
         -- Back button
