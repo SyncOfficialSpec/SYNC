@@ -4255,7 +4255,42 @@ function Home.open()
     -- -----------------------------------------------------------------------
     local col3X = PAD + COL1 + GAPX + COL2 + GAPX
     local serverCard = makeCard(col3X, contentY, COL3, 190)
-    cardTitle(serverCard, "Server")
+    local serverTitle = cardTitle(serverCard, "Server")
+
+    -- small copy-link button by the title: copies a deep link to this server
+    local srvCopy = Instance.new("TextButton")
+    srvCopy.Text = ""
+    srvCopy.AutoButtonColor = false
+    srvCopy.Size = UDim2.fromOffset(26, 26)
+    srvCopy.AnchorPoint = Vector2.new(1, 0)
+    srvCopy.Position = UDim2.new(1, -16, 0, 16)
+    srvCopy.BackgroundColor3 = FIELD
+    srvCopy.BackgroundTransparency = 0.35
+    srvCopy.ZIndex = 5
+    srvCopy.Parent = serverCard
+    Util.corner(srvCopy, 8)
+    local srvCopyIc = Instance.new("ImageLabel")
+    srvCopyIc.Size = UDim2.fromOffset(13, 13)
+    srvCopyIc.AnchorPoint = Vector2.new(0.5, 0.5)
+    srvCopyIc.Position = UDim2.fromScale(0.5, 0.5)
+    srvCopyIc.BackgroundTransparency = 1
+    srvCopyIc.ZIndex = 6
+    srvCopyIc.Parent = srvCopy
+    Icons.apply(srvCopyIc, "file-text", SUB)
+    srvCopy.MouseEnter:Connect(function()
+        Util.tween(srvCopy, { BackgroundTransparency = 0 }, 0.12); srvCopyIc.ImageColor3 = WHITE
+    end)
+    srvCopy.MouseLeave:Connect(function()
+        Util.tween(srvCopy, { BackgroundTransparency = 0.35 }, 0.12); srvCopyIc.ImageColor3 = SUB
+    end)
+    srvCopy.MouseButton1Click:Connect(function()
+        local link = ("https://www.roblox.com/games/start?placeId=%d&launchData=%s"):format(game.PlaceId, game.JobId)
+        local ok = pcall(function() setclipboard(link) end)
+        if ok then
+            serverTitle.Text = "Link copied"
+            task.delay(1.2, function() if serverTitle.Parent then serverTitle.Text = "Server" end end)
+        end
+    end)
 
     local serverRows = {}
     for i = 1, 3 do
