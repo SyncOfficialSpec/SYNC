@@ -152,17 +152,18 @@ local function buildMP3(parent, PW, PH, setSub)
     -- search box
     local sh = Instance.new("Frame")
     sh.Position = UDim2.fromOffset(16, 6); sh.Size = UDim2.fromOffset(PW - 32, 34)
-    sh.BackgroundColor3 = FIELD; sh.BackgroundTransparency = 0.1; sh.BorderSizePixel = 0; sh.Parent = parent
-    Util.corner(sh, 9); local sst = Util.stroke(sh, Color3.fromRGB(70, 70, 80), 1, 0.6)
+    sh.BackgroundColor3 = Color3.fromRGB(26, 27, 32); sh.BackgroundTransparency = 0; sh.BorderSizePixel = 0
+    sh.ZIndex = 4; sh.Parent = parent
+    Util.corner(sh, 9); local sst = Util.stroke(sh, Color3.fromRGB(70, 70, 80), 1, 0.5)
     local sBox = Instance.new("TextBox")
     sBox.Position = UDim2.fromOffset(14, 0); sBox.Size = UDim2.fromOffset(PW - 32 - 44, 34)
     sBox.BackgroundTransparency = 1; sBox.Font = Theme.fonts.body
     sBox.PlaceholderText = "Search your songs..."; sBox.PlaceholderColor3 = DIM
     sBox.Text = ""; sBox.TextSize = 13; sBox.TextColor3 = WHITE; sBox.TextXAlignment = Enum.TextXAlignment.Left
-    sBox.ClearTextOnFocus = false; sBox.Parent = sh
+    sBox.ClearTextOnFocus = false; sBox.ZIndex = 5; sBox.Parent = sh
     local sIco = Instance.new("ImageLabel")
     sIco.AnchorPoint = Vector2.new(1, 0.5); sIco.Position = UDim2.new(1, -12, 0.5, 0); sIco.Size = UDim2.fromOffset(15, 15)
-    sIco.BackgroundTransparency = 1; sIco.ImageColor3 = DIM; sIco.Parent = sh
+    sIco.BackgroundTransparency = 1; sIco.ImageColor3 = DIM; sIco.ZIndex = 5; sIco.Parent = sh
     loadIcon(sIco, "search", DIM)
     sBox.Focused:Connect(function() Util.tween(sst, { Transparency = 0.1, Color = BLUEP }, 0.15) end)
     sBox.FocusLost:Connect(function() Util.tween(sst, { Transparency = 0.6, Color = Color3.fromRGB(70, 70, 80) }, 0.15) end)
@@ -401,25 +402,25 @@ local function buildYT(parent, PW, PH, setSub)
     -- search bar
     local sh = Instance.new("Frame")
     sh.Position = UDim2.fromOffset(16, 6); sh.Size = UDim2.fromOffset(PW - 32, 40)
-    sh.BackgroundColor3 = Color3.fromRGB(24, 24, 28); sh.BorderSizePixel = 0; sh.Parent = parent
-    Util.corner(sh, 10); local sst = Util.stroke(sh, Color3.fromRGB(70, 70, 80), 1, 0.55)
+    sh.BackgroundColor3 = Color3.fromRGB(26, 27, 32); sh.BorderSizePixel = 0; sh.ZIndex = 4; sh.Parent = parent
+    Util.corner(sh, 10); local sst = Util.stroke(sh, Color3.fromRGB(70, 70, 80), 1, 0.5)
     local sBox = Instance.new("TextBox")
     sBox.Position = UDim2.fromOffset(16, 0); sBox.Size = UDim2.fromOffset(PW - 32 - 56, 40)
     sBox.BackgroundTransparency = 1; sBox.Font = Theme.fonts.body
     sBox.PlaceholderText = "Search YouTube or paste a link..."; sBox.PlaceholderColor3 = DIM
     sBox.Text = ""; sBox.TextSize = 14; sBox.TextColor3 = WHITE
-    sBox.TextXAlignment = Enum.TextXAlignment.Left; sBox.ClearTextOnFocus = false; sBox.Parent = sh
+    sBox.TextXAlignment = Enum.TextXAlignment.Left; sBox.ClearTextOnFocus = false; sBox.ZIndex = 5; sBox.Parent = sh
     sBox.Focused:Connect(function() Util.tween(sst, { Transparency = 0.1, Color = RED }, 0.15) end)
-    sBox.FocusLost:Connect(function() Util.tween(sst, { Transparency = 0.55, Color = Color3.fromRGB(70, 70, 80) }, 0.15) end)
+    sBox.FocusLost:Connect(function() Util.tween(sst, { Transparency = 0.5, Color = Color3.fromRGB(70, 70, 80) }, 0.15) end)
     local sBtn = Instance.new("TextButton")
     sBtn.AnchorPoint = Vector2.new(1, 0.5); sBtn.Position = UDim2.new(1, -6, 0.5, 0)
     sBtn.Size = UDim2.fromOffset(38, 30); sBtn.BackgroundColor3 = RED; sBtn.AutoButtonColor = false
-    sBtn.Text = ""; sBtn.BorderSizePixel = 0; sBtn.Parent = sh
+    sBtn.Text = ""; sBtn.BorderSizePixel = 0; sBtn.ZIndex = 5; sBtn.Parent = sh
     Util.corner(sBtn, 8)
     local sBtnIc = Instance.new("ImageLabel")
     sBtnIc.AnchorPoint = Vector2.new(0.5, 0.5); sBtnIc.Position = UDim2.fromScale(0.5, 0.5)
     sBtnIc.Size = UDim2.fromOffset(16, 16); sBtnIc.BackgroundTransparency = 1
-    sBtnIc.ImageColor3 = WHITE; sBtnIc.Parent = sBtn
+    sBtnIc.ImageColor3 = WHITE; sBtnIc.ZIndex = 6; sBtnIc.Parent = sBtn
     loadIcon(sBtnIc, "search", WHITE)
 
     -- results (padded so card strokes aren't clipped by the scroll edge)
@@ -662,13 +663,14 @@ function Music.open()
 
     local hSub = Instance.new("TextLabel")
     hSub.Text = "Connect Spotify"
-    hSub.Position = UDim2.fromOffset(48, TB + 35)
-    hSub.Size = UDim2.fromOffset(300, 18)
+    hSub.AnchorPoint = Vector2.new(1, 0.5)
+    hSub.Position = UDim2.fromOffset(cardW - 20, TB + 25)
+    hSub.Size = UDim2.fromOffset(240, 18)
     hSub.BackgroundTransparency = 1
     hSub.Font = Theme.fonts.caption
-    hSub.TextSize = 13
+    hSub.TextSize = 12.5
     hSub.TextColor3 = SUB
-    hSub.TextXAlignment = Enum.TextXAlignment.Left
+    hSub.TextXAlignment = Enum.TextXAlignment.Right
     hSub.TextTruncate = Enum.TextTruncate.AtEnd
     hSub.ZIndex = 3
     hSub.Parent = win
