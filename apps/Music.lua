@@ -33,7 +33,7 @@ local API = "https://api.spotify.com/v1"
 -- Our own audio backend (Railway). Public transcoders all died, so YouTube
 -- audio is fetched from here: GET /audio?v=<id> streams back an mp3.
 -- Override at runtime with Util.save("MusicApiUrl", "https://...") without a rebuild.
-local MUSIC_API = "https://REPLACE-WITH-RAILWAY-URL"
+local MUSIC_API = "https://sync-music-production-0fe9.up.railway.app"
 
 -- lucide icon -> white png (renders black, negate whitens), then tint
 local function loadIcon(img, name, tint)
