@@ -734,19 +734,24 @@ end
 -- Parented to `target`, it follows the element's rounded corners automatically
 -- with true gaussian blur. opts: { blur, spread, transparency, offset, color }.
 -- Returns the UIShadow, or nil on older clients that lack the class.
+-- Each property is set independently: on some client builds UIShadow.Spread is a
+-- UDim2 (not a number), and a single bad assignment inside one pcall used to
+-- abort the whole shadow, leaving elements with no shadow at all.
 function Util.shadow(target, opts)
     opts = opts or {}
-    local ok, sh = pcall(function()
-        local s = Instance.new("UIShadow")
-        s.Color = opts.color or Color3.fromRGB(0, 0, 0)
-        s.BlurRadius = UDim.new(0, opts.blur or 34)
-        s.Spread = opts.spread or 0
-        s.Offset = opts.offset or UDim2.fromOffset(0, 10)
-        s.Transparency = opts.transparency ~= nil and opts.transparency or 0.5
-        s.Parent = target
-        return s
+    local okNew, s = pcall(function() return Instance.new("UIShadow") end)
+    if not okNew or not s then return nil end
+    pcall(function() s.Color = opts.color or Color3.fromRGB(0, 0, 0) end)
+    pcall(function() s.BlurRadius = UDim.new(0, opts.blur or 34) end)
+    pcall(function()
+        local sp = opts.spread or 0
+        if typeof(sp) == "UDim2" then s.Spread = sp
+        else s.Spread = UDim2.fromOffset(sp, sp) end
     end)
-    return ok and sh or nil
+    pcall(function() s.Offset = opts.offset or UDim2.fromOffset(0, 10) end)
+    pcall(function() s.Transparency = opts.transparency ~= nil and opts.transparency or 0.5 end)
+    local okP = pcall(function() s.Parent = target end)
+    return okP and s or nil
 end
 
 -- Close a window when Escape is pressed. Ignores the keystroke while a TextBox
@@ -3383,6 +3388,7 @@ function Login.run(onDone)
         c.Parent = checks
         Util.corner(c, px(14))
         Util.stroke(c, Color3.fromRGB(60, 60, 70), 1, 0.7)
+        Util.shadow(c, { blur = 34, spread = 0, transparency = 0.55, offset = UDim2.fromOffset(0, px(10)) })
         local t = Instance.new("TextLabel")
         t.Position = UDim2.fromOffset(px(20), px(15))
         t.Size = UDim2.fromOffset(CKW - px(80), px(20))
@@ -3393,7 +3399,7 @@ function Login.run(onDone)
         t.TextColor3 = WHITE
         t.TextTransparency = 1
         t.TextXAlignment = Enum.TextXAlignment.Left
-        t.ZIndex = 6
+        t.ZIndex = 9
         t.Parent = c
         local d = Instance.new("TextLabel")
         d.Position = UDim2.fromOffset(px(20), px(40))
@@ -3405,7 +3411,7 @@ function Login.run(onDone)
         d.TextColor3 = DIM
         d.TextTransparency = 1
         d.TextXAlignment = Enum.TextXAlignment.Left
-        d.ZIndex = 6
+        d.ZIndex = 9
         d.Parent = c
         local ic = Instance.new("ImageLabel")
         ic.AnchorPoint = Vector2.new(1, 0.5)
@@ -3414,7 +3420,7 @@ function Login.run(onDone)
         ic.BackgroundTransparency = 1
         ic.ImageColor3 = DIM
         ic.ImageTransparency = 1
-        ic.ZIndex = 6
+        ic.ZIndex = 9
         ic.Parent = c
         loadIcon(ic, "rotate-cw", GRAY)
         return { frame = c, title = t, sub = d, icon = ic }
@@ -3452,10 +3458,11 @@ function Login.run(onDone)
     checkBar.BackgroundColor3 = CARD
     checkBar.BackgroundTransparency = 1
     checkBar.BorderSizePixel = 0
-    checkBar.ZIndex = 5
+    checkBar.ZIndex = 7
     checkBar.Parent = checks
     Util.corner(checkBar, px(12))
     Util.stroke(checkBar, Color3.fromRGB(60, 60, 70), 1, 0.7)
+    Util.shadow(checkBar, { blur = 34, spread = 0, transparency = 0.55, offset = UDim2.fromOffset(0, px(10)) })
     local checkBarTxt = Instance.new("TextLabel")
     checkBarTxt.Size = UDim2.fromScale(1, 1)
     checkBarTxt.BackgroundTransparency = 1
@@ -3464,7 +3471,7 @@ function Login.run(onDone)
     checkBarTxt.TextSize = px(13)
     checkBarTxt.TextColor3 = Color3.fromRGB(210, 210, 218)
     checkBarTxt.TextTransparency = 1
-    checkBarTxt.ZIndex = 6
+    checkBarTxt.ZIndex = 9
     checkBarTxt.Parent = checkBar
 
     -- ======================================================================

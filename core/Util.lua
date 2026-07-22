@@ -257,19 +257,24 @@ end
 -- Parented to `target`, it follows the element's rounded corners automatically
 -- with true gaussian blur. opts: { blur, spread, transparency, offset, color }.
 -- Returns the UIShadow, or nil on older clients that lack the class.
+-- Each property is set independently: on some client builds UIShadow.Spread is a
+-- UDim2 (not a number), and a single bad assignment inside one pcall used to
+-- abort the whole shadow, leaving elements with no shadow at all.
 function Util.shadow(target, opts)
     opts = opts or {}
-    local ok, sh = pcall(function()
-        local s = Instance.new("UIShadow")
-        s.Color = opts.color or Color3.fromRGB(0, 0, 0)
-        s.BlurRadius = UDim.new(0, opts.blur or 34)
-        s.Spread = opts.spread or 0
-        s.Offset = opts.offset or UDim2.fromOffset(0, 10)
-        s.Transparency = opts.transparency ~= nil and opts.transparency or 0.5
-        s.Parent = target
-        return s
+    local okNew, s = pcall(function() return Instance.new("UIShadow") end)
+    if not okNew or not s then return nil end
+    pcall(function() s.Color = opts.color or Color3.fromRGB(0, 0, 0) end)
+    pcall(function() s.BlurRadius = UDim.new(0, opts.blur or 34) end)
+    pcall(function()
+        local sp = opts.spread or 0
+        if typeof(sp) == "UDim2" then s.Spread = sp
+        else s.Spread = UDim2.fromOffset(sp, sp) end
     end)
-    return ok and sh or nil
+    pcall(function() s.Offset = opts.offset or UDim2.fromOffset(0, 10) end)
+    pcall(function() s.Transparency = opts.transparency ~= nil and opts.transparency or 0.5 end)
+    local okP = pcall(function() s.Parent = target end)
+    return okP and s or nil
 end
 
 -- Close a window when Escape is pressed. Ignores the keystroke while a TextBox

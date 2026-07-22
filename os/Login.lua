@@ -397,6 +397,7 @@ function Login.run(onDone)
         c.Parent = checks
         Util.corner(c, px(14))
         Util.stroke(c, Color3.fromRGB(60, 60, 70), 1, 0.7)
+        Util.shadow(c, { blur = 34, spread = 0, transparency = 0.55, offset = UDim2.fromOffset(0, px(10)) })
         local t = Instance.new("TextLabel")
         t.Position = UDim2.fromOffset(px(20), px(15))
         t.Size = UDim2.fromOffset(CKW - px(80), px(20))
@@ -407,7 +408,7 @@ function Login.run(onDone)
         t.TextColor3 = WHITE
         t.TextTransparency = 1
         t.TextXAlignment = Enum.TextXAlignment.Left
-        t.ZIndex = 6
+        t.ZIndex = 9
         t.Parent = c
         local d = Instance.new("TextLabel")
         d.Position = UDim2.fromOffset(px(20), px(40))
@@ -419,7 +420,7 @@ function Login.run(onDone)
         d.TextColor3 = DIM
         d.TextTransparency = 1
         d.TextXAlignment = Enum.TextXAlignment.Left
-        d.ZIndex = 6
+        d.ZIndex = 9
         d.Parent = c
         local ic = Instance.new("ImageLabel")
         ic.AnchorPoint = Vector2.new(1, 0.5)
@@ -428,7 +429,7 @@ function Login.run(onDone)
         ic.BackgroundTransparency = 1
         ic.ImageColor3 = DIM
         ic.ImageTransparency = 1
-        ic.ZIndex = 6
+        ic.ZIndex = 9
         ic.Parent = c
         loadIcon(ic, "rotate-cw", GRAY)
         return { frame = c, title = t, sub = d, icon = ic }
@@ -466,10 +467,11 @@ function Login.run(onDone)
     checkBar.BackgroundColor3 = CARD
     checkBar.BackgroundTransparency = 1
     checkBar.BorderSizePixel = 0
-    checkBar.ZIndex = 5
+    checkBar.ZIndex = 7
     checkBar.Parent = checks
     Util.corner(checkBar, px(12))
     Util.stroke(checkBar, Color3.fromRGB(60, 60, 70), 1, 0.7)
+    Util.shadow(checkBar, { blur = 34, spread = 0, transparency = 0.55, offset = UDim2.fromOffset(0, px(10)) })
     local checkBarTxt = Instance.new("TextLabel")
     checkBarTxt.Size = UDim2.fromScale(1, 1)
     checkBarTxt.BackgroundTransparency = 1
@@ -478,7 +480,7 @@ function Login.run(onDone)
     checkBarTxt.TextSize = px(13)
     checkBarTxt.TextColor3 = Color3.fromRGB(210, 210, 218)
     checkBarTxt.TextTransparency = 1
-    checkBarTxt.ZIndex = 6
+    checkBarTxt.ZIndex = 9
     checkBarTxt.Parent = checkBar
 
     -- ======================================================================
