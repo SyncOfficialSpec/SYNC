@@ -1,0 +1,24 @@
+SYNC
+
+Devlog 4 • July 22, 2026
+
+Three big additions this time: a real sign in screen, a Joiner app for hopping into servers, and an experimental Desktop mode that turns the whole screen into a Mac desktop. Plus a fix that finally turned shadows on everywhere.
+
+New Elements:
+Sign In Screen
+SYNC now opens with a proper sign in, right after the boot splash. You type a username and password (the password shows as dots), hit LOG IN, and the button smoothly turns from purple to green and shows a little loading spinner. Then a security panel fades in on the right and runs through a few checks one by one, Windows or macOS, Anti Virus, Driver Blacklist and Driver Check, each spinning and then ticking off. Once it clears, a verify screen slides in with your avatar, your name and UID, and a set of animated bars while it finishes. A wrong login turns the button red and shakes it. The whole thing runs over a blurred, dimmed backdrop.
+
+Joiner
+A new dock app with two tools. The top half copies an invite link to the exact server you are in right now, so a friend can drop straight into your game. The bottom half is the reverse: paste anyone's game or server link, hit Join, and it teleports you into their server. Free users generate a SYNC code that only the SYNC Joiner can read, while a premium unlock gives a normal link that works anywhere. It shows the game name and player count, and the whole thing has proper icons and gradient buttons.
+
+Desktop mode
+An experimental toggle in Settings that turns the entire screen into a macOS style desktop. It uses your real wallpaper, adds a menu bar with a live clock across the top, and frames the running game inside a Mac window in the middle. Flip it on to feel like the game is just another app on your desktop, and off to go back to normal.
+
+Improvements:
+The sign in detects your real device and names it in the first security check instead of guessing.
+Loading is slower and smoother now, with softer easing so nothing snaps.
+When the security panel comes in, the background gently dims behind it so the cards stand out.
+Real drop shadows now show up across the whole app, on windows and cards, giving everything more depth.
+The Joiner invite link points at the exact server instance, not just the game, so friends land next to you.
+Window corners stay nicely rounded even while panels slide in over them.
+Fixed the login cards showing blank, the corners going sharp mid animation, and the button turning red on a correct login.
