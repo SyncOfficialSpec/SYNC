@@ -3074,7 +3074,7 @@ function Login.run(onDone)
     dim.Parent = gui
 
     -- ---- window ----------------------------------------------------------
-    local W, H = px(1180), px(700)
+    local W, H = px(1060), px(648)
     local win = Instance.new("Frame")
     win.AnchorPoint = Vector2.new(0.5, 0.5)
     win.Position = UDim2.fromScale(0.5, 0.5)
@@ -3083,7 +3083,7 @@ function Login.run(onDone)
     win.BorderSizePixel = 0
     win.ClipsDescendants = true
     win.Parent = gui
-    Util.corner(win, px(20))
+    Util.corner(win, px(28))
     Util.stroke(win, Color3.fromRGB(255, 255, 255), 1, 0.92)
     Util.shadow(win, { blur = 70, spread = 0, transparency = 0.4, offset = UDim2.fromOffset(0, px(26)) })
     local wScale = Instance.new("UIScale"); wScale.Scale = 0.95; wScale.Parent = win
@@ -3102,7 +3102,7 @@ function Login.run(onDone)
     title.TextSize = px(24)
     title.TextColor3 = WHITE
     title.TextXAlignment = Enum.TextXAlignment.Left
-    title.ZIndex = 6
+    title.ZIndex = 8
     title.Parent = win
 
     local closeBtn = Instance.new("TextButton")
@@ -3115,7 +3115,7 @@ function Login.run(onDone)
     closeBtn.Text = "\195\151"
     closeBtn.TextSize = px(24)
     closeBtn.TextColor3 = Color3.fromRGB(180, 180, 188)
-    closeBtn.ZIndex = 6
+    closeBtn.ZIndex = 8
     closeBtn.Parent = win
     closeBtn.MouseEnter:Connect(function() closeBtn.TextColor3 = WHITE end)
     closeBtn.MouseLeave:Connect(function() closeBtn.TextColor3 = Color3.fromRGB(180, 180, 188) end)
@@ -3349,13 +3349,23 @@ function Login.run(onDone)
     forgot.ZIndex = 3
     forgot.Parent = form
 
+    -- scrim that fades in over the form when the checks appear (reads as the
+    -- background receding / blurring behind the cards)
+    local formDim = Instance.new("Frame")
+    formDim.Size = UDim2.fromScale(1, 1)
+    formDim.BackgroundColor3 = Color3.fromRGB(8, 8, 10)
+    formDim.BackgroundTransparency = 1
+    formDim.BorderSizePixel = 0
+    formDim.ZIndex = 5
+    formDim.Parent = win
+
     -- ======================================================================
-    -- Stage B: security checks (built hidden, slides in from the right)
+    -- Stage B: security checks (built hidden, fades in from the right)
     -- ======================================================================
     local checks = Instance.new("Frame")
     checks.Size = UDim2.fromScale(1, 1)
     checks.BackgroundTransparency = 1
-    checks.ZIndex = 4
+    checks.ZIndex = 7
     checks.Visible = false
     checks.Parent = win
 
@@ -3363,14 +3373,14 @@ function Login.run(onDone)
     local CKX = W - px(40) - CKW
     local function checkCard(i, y, name, sub)
         local c = Instance.new("Frame")
-        c.Position = UDim2.fromOffset(CKX + px(60), y) -- starts offset right, slides to CKX
+        c.Position = UDim2.fromOffset(CKX, y + px(16)) -- starts a touch low, fades + rises into place
         c.Size = UDim2.fromOffset(CKW, px(76))
         c.BackgroundColor3 = CARD
         c.BackgroundTransparency = 1
         c.BorderSizePixel = 0
-        c.ZIndex = 5
+        c.ZIndex = 7
         c.Parent = checks
-        Util.corner(c, px(12))
+        Util.corner(c, px(14))
         Util.stroke(c, Color3.fromRGB(60, 60, 70), 1, 0.7)
         local t = Instance.new("TextLabel")
         t.Position = UDim2.fromOffset(px(20), px(15))
@@ -3409,8 +3419,22 @@ function Login.run(onDone)
         return { frame = c, title = t, sub = d, icon = ic }
     end
 
+    -- detect the real OS so the first card names the actual device
+    local osName, osDetail = "Device", "System check"
+    pcall(function()
+        local p = game:GetService("UserInputService"):GetPlatform().Name
+        local map = {
+            Windows = { "Windows", "Windows 11 22h4" },
+            OSX     = { "macOS", "Apple macOS" },
+            Linux   = { "Linux", "Linux desktop" },
+            Android = { "Android", "Android device" },
+            IOS     = { "iOS", "Apple iOS" },
+        }
+        local m = map[p]
+        if m then osName, osDetail = m[1], m[2] else osName, osDetail = p, p end
+    end)
     local ckDefs = {
-        { "Windows", "Windows 11 22h4" },
+        { osName, osDetail },
         { "Anti-Virus", "Availability check..." },
         { "Driver Blacklist", "Availability check..." },
         { "Driver Check", "Availability check..." },
@@ -3422,7 +3446,7 @@ function Login.run(onDone)
 
     local checkBar = Instance.new("Frame")
     checkBar.AnchorPoint = Vector2.new(0, 1)
-    checkBar.Position = UDim2.fromOffset(CKX + px(60), H - px(40))
+    checkBar.Position = UDim2.fromOffset(CKX, H - px(40) + px(16))
     checkBar.Size = UDim2.fromOffset(CKW, px(50))
     checkBar.BackgroundColor3 = CARD
     checkBar.BackgroundTransparency = 1
@@ -3538,49 +3562,51 @@ function Login.run(onDone)
     local function spin(icon)
         task.spawn(function()
             while icon.Parent and icon:GetAttribute("spinning") do
-                Util.tween(icon, { Rotation = icon.Rotation + 180 }, 0.5, Enum.EasingStyle.Linear)
-                task.wait(0.5)
+                Util.tween(icon, { Rotation = icon.Rotation + 180 }, 0.7, Enum.EasingStyle.Linear)
+                task.wait(0.7)
             end
         end)
     end
 
     local function runChecks(afterAll)
         checks.Visible = true
-        -- fade the form back
+        -- background recedes: scrim fades in over the form, form eases back
+        Util.tween(formDim, { BackgroundTransparency = 0.42 }, 0.55, SINE)
         for _, o in ipairs(form:GetDescendants()) do
-            if o:IsA("TextLabel") then Util.tween(o, { TextTransparency = 0.75 }, 0.3)
-            elseif o:IsA("TextBox") then Util.tween(o, { TextTransparency = 0.75 }, 0.3)
-            elseif o:IsA("Frame") then Util.tween(o, { BackgroundTransparency = 0.85 }, 0.3) end
+            if o:IsA("TextLabel") then Util.tween(o, { TextTransparency = 0.85 }, 0.5)
+            elseif o:IsA("TextBox") then Util.tween(o, { TextTransparency = 0.85 }, 0.5) end
         end
-        Util.tween(loginBtn, { BackgroundTransparency = 0.7 }, 0.3)
-        -- slide cards in, staggered
+        Util.tween(loginBtn, { BackgroundTransparency = 0.55 }, 0.5)
+        -- cards fade + rise into place, gentle stagger
         for i, card in ipairs(cards) do
-            task.delay((i - 1) * 0.12, function()
-                Util.tween(card.frame, { Position = UDim2.fromOffset(CKX, px(90) + (i - 1) * px(90)), BackgroundTransparency = 0 }, 0.4, QUART, OUT)
-                Util.tween(card.title, { TextTransparency = 0 }, 0.4)
-                Util.tween(card.sub, { TextTransparency = 0 }, 0.4)
-                Util.tween(card.icon, { ImageTransparency = 0 }, 0.4)
+            task.delay((i - 1) * 0.14, function()
+                Util.tween(card.frame, { Position = UDim2.fromOffset(CKX, px(90) + (i - 1) * px(90)), BackgroundTransparency = 0 }, 0.55, QUART, OUT)
+                Util.tween(card.title, { TextTransparency = 0 }, 0.55)
+                Util.tween(card.sub, { TextTransparency = 0 }, 0.55)
+                Util.tween(card.icon, { ImageTransparency = 0 }, 0.55)
             end)
         end
-        Util.tween(checkBar, { Position = UDim2.fromOffset(CKX, H - px(40)), BackgroundTransparency = 0 }, 0.5, QUART, OUT)
-        Util.tween(checkBarTxt, { TextTransparency = 0 }, 0.5)
-        -- resolve sequentially
+        task.delay(0.14 * #cards, function()
+            Util.tween(checkBar, { Position = UDim2.fromOffset(CKX, H - px(40)), BackgroundTransparency = 0 }, 0.6, QUART, OUT)
+            Util.tween(checkBarTxt, { TextTransparency = 0 }, 0.6)
+        end)
+        -- resolve sequentially (slow, deliberate)
         task.spawn(function()
-            task.wait(0.7)
+            task.wait(1.3)
             for i, card in ipairs(cards) do
                 if i == 1 then
-                    loadIcon(card.icon, "check", VIOLET) -- Windows: instant done
+                    loadIcon(card.icon, "check", VIOLET) -- OS: verified straight away
                 else
                     card.icon:SetAttribute("spinning", true); spin(card.icon)
-                    task.wait(0.75)
+                    task.wait(1.4)
                     card.icon:SetAttribute("spinning", false)
                     card.icon.Rotation = 0
                     loadIcon(card.icon, "check", VIOLET)
                     card.sub.Text = "Passed"
                 end
-                task.wait(0.35)
+                task.wait(0.7)
             end
-            task.wait(0.4)
+            task.wait(0.8)
             if afterAll then afterAll() end
         end)
     end
@@ -3590,25 +3616,25 @@ function Login.run(onDone)
         vName.Text = (userBox.Text ~= "" and userBox.Text) or "Past Owl"
         vUid.Text = "UID: " .. tostring(Players.LocalPlayer.UserId)
         title.Visible = false
-        Util.tween(verify, { BackgroundTransparency = 0 }, 0.35)
-        -- animate the bars: a staggered up/down pulse (middle leads)
+        Util.tween(verify, { BackgroundTransparency = 0 }, 0.45, SINE)
+        -- animate the bars: a slow, smooth staggered up/down pulse (middle leads)
         task.spawn(function()
             while verify.Parent and verify.Visible do
                 for i, b in ipairs(bars) do
-                    task.delay((i - 1) * 0.12, function()
-                        if b.Parent then Util.tween(b, { Size = UDim2.fromOffset(barW, px(58)) }, 0.35, SINE, Enum.EasingDirection.InOut) end
+                    task.delay((i - 1) * 0.16, function()
+                        if b.Parent then Util.tween(b, { Size = UDim2.fromOffset(barW, px(56)) }, 0.55, SINE, Enum.EasingDirection.InOut) end
                     end)
                 end
-                task.wait(0.5)
+                task.wait(0.72)
                 for i, b in ipairs(bars) do
-                    task.delay((i - 1) * 0.12, function()
-                        if b.Parent then Util.tween(b, { Size = UDim2.fromOffset(barW, barH) }, 0.35, SINE, Enum.EasingDirection.InOut) end
+                    task.delay((i - 1) * 0.16, function()
+                        if b.Parent then Util.tween(b, { Size = UDim2.fromOffset(barW, barH) }, 0.55, SINE, Enum.EasingDirection.InOut) end
                     end)
                 end
-                task.wait(0.55)
+                task.wait(0.78)
             end
         end)
-        task.delay(2.6, function()
+        task.delay(3.6, function()
             Util.tween(win, { BackgroundTransparency = 1 }, 0.3)
             Util.tween(verify, { BackgroundTransparency = 1 }, 0.3)
             Util.tween(dim, { BackgroundTransparency = 1 }, 0.3)
@@ -3624,9 +3650,9 @@ function Login.run(onDone)
             busy = true
             btnLocked = true
             -- smoothly morph violet -> red (passes through pink) + loading spinner
-            Util.tween(loginBtn, { BackgroundColor3 = RED }, 0.4, SINE)
+            Util.tween(loginBtn, { BackgroundColor3 = RED }, 0.5, SINE)
             setSpinner(true)
-            task.delay(1.35, function()
+            task.delay(2.1, function()
                 setSpinner(false)
                 runChecks(showVerify)
             end)
