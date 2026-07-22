@@ -23,6 +23,7 @@ local RAW = "https://raw.githubusercontent.com/SyncOfficialSpec/SYNC/main/assets
 local VIOLET  = Color3.fromRGB(151, 151, 231)
 local VIOLETH = Color3.fromRGB(171, 171, 243)
 local RED     = Color3.fromRGB(237, 86, 100)
+local GREEN   = Color3.fromRGB(86, 202, 128)
 local WIN     = Color3.fromRGB(14, 14, 17)
 local FIELD   = Color3.fromRGB(23, 24, 29)
 local CARD    = Color3.fromRGB(20, 21, 26)
@@ -146,7 +147,11 @@ function Login.run(onDone)
     local FX = math.floor((W - FW) / 2)
     local py = px(250)
 
-    local function field(y, placeholder, iconName)
+    -- Floating-label field: the label sits centered when empty, floats to the top
+    -- when focused / filled, and the typed value shows below it. Passwords render
+    -- as dots. Returns box, holder, getValue().
+    local DOT = "\226\128\162" -- U+2022 bullet
+    local function field(y, labelText, iconName, isPassword)
         local holder = Instance.new("Frame")
         holder.Position = UDim2.fromOffset(FX, y)
         holder.Size = UDim2.fromOffset(FW, px(56))
@@ -158,20 +163,37 @@ function Login.run(onDone)
         holder.Parent = form
         Util.corner(holder, px(10))
         local st = Util.stroke(holder, Color3.fromRGB(70, 70, 80), 1, 0.55)
+
+        -- input value (lower part of the field)
         local box = Instance.new("TextBox")
-        box.Position = UDim2.fromOffset(px(18), 0)
-        box.Size = UDim2.fromOffset(FW - px(60), px(56))
+        box.Position = UDim2.fromOffset(px(18), px(24))
+        box.Size = UDim2.fromOffset(FW - px(60), px(26))
         box.BackgroundTransparency = 1
         box.Font = Theme.fonts.body
-        box.PlaceholderText = placeholder
-        box.PlaceholderColor3 = DIM
+        box.PlaceholderText = ""
         box.Text = ""
         box.TextSize = px(15)
         box.TextColor3 = WHITE
         box.TextXAlignment = Enum.TextXAlignment.Left
+        box.TextYAlignment = Enum.TextYAlignment.Center
         box.ClearTextOnFocus = false
         box.ZIndex = 4
         box.Parent = holder
+
+        -- floating label (starts centered, covering the field)
+        local lbl = Instance.new("TextLabel")
+        lbl.Position = UDim2.fromOffset(px(18), 0)
+        lbl.Size = UDim2.fromOffset(FW - px(60), px(56))
+        lbl.BackgroundTransparency = 1
+        lbl.Font = Theme.fonts.body
+        lbl.Text = labelText
+        lbl.TextSize = px(15)
+        lbl.TextColor3 = DIM
+        lbl.TextXAlignment = Enum.TextXAlignment.Left
+        lbl.TextYAlignment = Enum.TextYAlignment.Center
+        lbl.ZIndex = 4
+        lbl.Parent = holder
+
         local icon = Instance.new("ImageLabel")
         icon.AnchorPoint = Vector2.new(1, 0.5)
         icon.Position = UDim2.new(1, -px(16), 0.5, 0)
@@ -181,22 +203,60 @@ function Login.run(onDone)
         icon.ZIndex = 4
         icon.Parent = holder
         loadIcon(icon, iconName, DIM)
-        box.Focused:Connect(function() Util.tween(st, { Transparency = 0.1, Color = VIOLET }, 0.15); icon.ImageColor3 = VIOLET end)
-        box.FocusLost:Connect(function() Util.tween(st, { Transparency = 0.55, Color = Color3.fromRGB(70, 70, 80) }, 0.15); icon.ImageColor3 = DIM end)
-        return box, holder
+
+        -- password masking (utf8-safe, so the multibyte dot never corrupts input)
+        local realPass = ""
+        local getValue = function() return box.Text end
+        if isPassword then
+            local guard = false
+            box:GetPropertyChangedSignal("Text"):Connect(function()
+                if guard then return end
+                local shown = box.Text
+                local typed, total = {}, 0
+                local ok = pcall(function()
+                    for _, code in utf8.codes(shown) do
+                        total = total + 1
+                        local ch = utf8.char(code)
+                        if ch ~= DOT then typed[#typed + 1] = ch end
+                    end
+                end)
+                if not ok then realPass = shown; total = #shown end
+                if #typed > 0 then realPass = realPass .. table.concat(typed)
+                elseif total < #realPass then realPass = realPass:sub(1, total) end
+                guard = true
+                box.Text = string.rep(DOT, #realPass)
+                guard = false
+            end)
+            getValue = function() return realPass end
+        end
+
+        local floated = false
+        local function setFloat(f)
+            if f == floated then return end
+            floated = f
+            if f then
+                Util.tween(lbl, { Position = UDim2.fromOffset(px(18), px(9)), Size = UDim2.fromOffset(FW - px(60), px(14)), TextSize = px(11) }, 0.16, QUART, OUT)
+            else
+                Util.tween(lbl, { Position = UDim2.fromOffset(px(18), 0), Size = UDim2.fromOffset(FW - px(60), px(56)), TextSize = px(15) }, 0.16, QUART, OUT)
+            end
+        end
+        box:GetPropertyChangedSignal("Text"):Connect(function()
+            if box.Text ~= "" then setFloat(true) end
+        end)
+        box.Focused:Connect(function()
+            setFloat(true)
+            Util.tween(st, { Transparency = 0.1, Color = VIOLET }, 0.15); icon.ImageColor3 = VIOLET
+        end)
+        box.FocusLost:Connect(function()
+            if box.Text == "" then setFloat(false) end
+            Util.tween(st, { Transparency = 0.55, Color = Color3.fromRGB(70, 70, 80) }, 0.15); icon.ImageColor3 = DIM
+        end)
+
+        return box, holder, getValue
     end
 
-    local userBox = field(py, "Username", "user")
-    local passBox = field(py + px(72), "Password", "eye")
-
-    local realPass = ""
-    passBox:GetPropertyChangedSignal("Text"):Connect(function()
-        local t = passBox.Text
-        if t == string.rep("*", #realPass) then return end
-        if #t > #realPass then realPass = realPass .. t:sub(#realPass + 1)
-        else realPass = realPass:sub(1, #t) end
-        passBox.Text = string.rep("*", #realPass)
-    end)
+    local userBox, _, userGet = field(py, "Username", "user", false)
+    local passBox, _, passGet = field(py + px(72), "Password", "eye", true)
 
     -- LOG IN button (with an inner fill for the red loading sweep)
     local loginBtn = Instance.new("TextButton")
@@ -213,16 +273,46 @@ function Login.run(onDone)
     loginBtn.ZIndex = 3
     loginBtn.Parent = form
     Util.corner(loginBtn, px(10))
-    local fill = Instance.new("Frame")
-    fill.Size = UDim2.new(0, 0, 1, 0)
-    fill.BackgroundColor3 = Color3.fromRGB(255, 130, 140)
-    fill.BackgroundTransparency = 0.35
-    fill.BorderSizePixel = 0
-    fill.ZIndex = 3
-    fill.Visible = false
-    fill.Parent = loginBtn
-    loginBtn.MouseEnter:Connect(function() if loginBtn.BackgroundColor3 == VIOLET then Util.tween(loginBtn, { BackgroundColor3 = VIOLETH }, 0.12) end end)
-    loginBtn.MouseLeave:Connect(function() if loginBtn.BackgroundColor3 == VIOLETH then Util.tween(loginBtn, { BackgroundColor3 = VIOLET }, 0.12) end end)
+    local btnLocked = false
+    loginBtn.MouseEnter:Connect(function() if not btnLocked then Util.tween(loginBtn, { BackgroundColor3 = VIOLETH }, 0.12) end end)
+    loginBtn.MouseLeave:Connect(function() if not btnLocked then Util.tween(loginBtn, { BackgroundColor3 = VIOLET }, 0.12) end end)
+
+    -- click ripple: a light circle that expands from the click point and fades
+    local rippleX, rippleY = FW / 2, px(29)
+    loginBtn.MouseButton1Down:Connect(function(x, y)
+        rippleX = x - loginBtn.AbsolutePosition.X
+        rippleY = y - loginBtn.AbsolutePosition.Y
+    end)
+    local function ripple()
+        local r = Instance.new("Frame")
+        r.AnchorPoint = Vector2.new(0.5, 0.5)
+        r.Position = UDim2.fromOffset(rippleX, rippleY)
+        r.Size = UDim2.fromOffset(0, 0)
+        r.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+        r.BackgroundTransparency = 0.55
+        r.BorderSizePixel = 0
+        r.ZIndex = 4
+        r.Parent = loginBtn
+        Util.corner(r, 999)
+        local d = math.max(loginBtn.AbsoluteSize.X, px(300)) * 2.4
+        Util.tween(r, { Size = UDim2.fromOffset(d, d), BackgroundTransparency = 1 }, 0.5, QUART, OUT)
+        task.delay(0.55, function() if r.Parent then r:Destroy() end end)
+    end
+    -- color wipe: a coloured panel grows from the left, then becomes the bg
+    local function wipeTo(color, dur, cb)
+        local ov = Instance.new("Frame")
+        ov.Size = UDim2.new(0, 0, 1, 0)
+        ov.BackgroundColor3 = color
+        ov.BorderSizePixel = 0
+        ov.ZIndex = 3
+        ov.Parent = loginBtn
+        Util.tween(ov, { Size = UDim2.new(1, 0, 1, 0) }, dur, QUART, OUT)
+        task.delay(dur, function()
+            loginBtn.BackgroundColor3 = color
+            if ov.Parent then ov:Destroy() end
+            if cb then cb() end
+        end)
+    end
 
     -- bottom links
     local links = Instance.new("TextLabel")
@@ -520,29 +610,19 @@ function Login.run(onDone)
     local busy = false
     local function attempt()
         if busy then return end
-        if userBox.Text == USER and realPass == PASS then
+        ripple()
+        if userBox.Text == USER and passGet() == PASS then
             busy = true
-            -- red loading fill
-            Util.tween(loginBtn, { BackgroundColor3 = RED }, 0.15)
-            loginBtn.Text = ""
-            fill.Visible = true
-            fill.Size = UDim2.new(0, 0, 1, 0)
-            Util.tween(fill, { Size = UDim2.new(1, 0, 1, 0) }, 1.4, SINE)
-            task.delay(1.5, function()
-                runChecks(showVerify)
-            end)
+            btnLocked = true
+            -- correct: green wipes across the button, then the checks run
+            wipeTo(GREEN, 0.35)
+            task.delay(0.75, function() runChecks(showVerify) end)
         else
-            Util.tween(loginBtn, { BackgroundColor3 = RED }, 0.12)
-            loginBtn.Text = "WRONG LOGIN"
-            local base = win.Position
-            for i, dx in ipairs({ -12, 10, -8, 6, -3, 0 }) do
-                task.delay((i - 1) * 0.05, function()
-                    if win.Parent then Util.tween(win, { Position = base + UDim2.fromOffset(px(dx), 0) }, 0.05) end
-                end)
-            end
-            task.delay(1.2, function()
-                Util.tween(loginBtn, { BackgroundColor3 = VIOLET }, 0.2)
-                loginBtn.Text = "LOG IN"
+            btnLocked = true
+            -- wrong: red wipes in, holds, then wipes back to violet
+            wipeTo(RED, 0.28)
+            task.delay(1.1, function()
+                wipeTo(VIOLET, 0.4, function() btnLocked = false end)
             end)
         end
     end
