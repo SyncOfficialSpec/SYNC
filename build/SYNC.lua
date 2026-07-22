@@ -6881,6 +6881,283 @@ function Music.openMP3()
     return { close = close }
 end
 
+-- ============================================================================
+-- YOUTUBE: search videos (or paste a link), then download the audio to
+-- SYNC/songs so the MP3 player can play it. Search runs through public Piped
+-- instances; the audio itself is fetched through a media-extraction service
+-- (Cobalt) that transcodes to mp3 (Roblox can only play mp3/ogg).
+-- ============================================================================
+local RED = Color3.fromRGB(230, 66, 74)
+local PIPED = {
+    "https://api.piped.private.coffee",
+    "https://pipedapi.adminforge.de",
+    "https://pipedapi.kavin.rocks",
+    "https://pipedapi.reallyaweso.me",
+}
+local COBALT = {
+    "https://cobalt-backend.canine.tools",
+    "https://cobalt-api.kwiatekmiki.com",
+    "https://co.eepy.today",
+    "https://cobalt.255x.ru",
+}
+
+local function ytId(url)
+    url = tostring(url)
+    return url:match("[?&]v=([%w%-_]+)") or url:match("youtu%.be/([%w%-_]+)")
+        or url:match("/watch%?v=([%w%-_]+)") or url:match("/embed/([%w%-_]+)")
+        or url:match("/shorts/([%w%-_]+)") or url:match("^([%w%-_]+)$")
+end
+
+local function ytSearch(q)
+    for _, inst in ipairs(PIPED) do
+        local b = Util.httpGetH(inst .. "/search?q=" .. HttpService:UrlEncode(q) .. "&filter=videos", {})
+        if b then
+            local ok, d = pcall(function() return HttpService:JSONDecode(b) end)
+            if ok and d and d.items and #d.items > 0 then return d.items end
+        end
+    end
+    return nil
+end
+
+-- ask a Cobalt instance for a direct mp3 url. Returns url or nil.
+local function ytAudioUrl(youtubeUrl)
+    for _, inst in ipairs(COBALT) do
+        -- newer API shape
+        local _, _, body = Util.httpPost(inst .. "/", { ["Accept"] = "application/json" },
+            HttpService:JSONEncode({ url = youtubeUrl, downloadMode = "audio", audioFormat = "mp3" }))
+        local ok, d = pcall(function() return HttpService:JSONDecode(body or "") end)
+        if ok and d and d.url then return d.url end
+        -- older API shape
+        local _, _, body2 = Util.httpPost(inst .. "/api/json", { ["Accept"] = "application/json" },
+            HttpService:JSONEncode({ url = youtubeUrl, isAudioOnly = true, aFormat = "mp3" }))
+        local ok2, d2 = pcall(function() return HttpService:JSONDecode(body2 or "") end)
+        if ok2 and d2 and d2.url then return d2.url end
+    end
+    return nil
+end
+
+local function safeName(s)
+    return (tostring(s):gsub("[^%w%s%-_%.]", ""):gsub("%s+", " "):sub(1, 60))
+end
+
+function Music.openYT()
+    local host = (gethui and gethui()) or game:GetService("CoreGui")
+    if host:FindFirstChild("SYNC_YouTube") then return end
+    pcall(function()
+        if type(makefolder) == "function" then
+            if not isfolder("SYNC") then makefolder("SYNC") end
+            if not isfolder(SND_DIR) then makefolder(SND_DIR) end
+        end
+    end)
+
+    local W, H = 470, 524
+    local gui = Instance.new("ScreenGui")
+    gui.Name = "SYNC_YouTube"
+    Util.mount(gui)
+
+    local win = Instance.new("Frame")
+    win.AnchorPoint = Vector2.new(0.5, 0.5)
+    win.Position = UDim2.fromScale(0.5, 0.46)
+    win.Size = UDim2.fromOffset(W, H)
+    win.BackgroundColor3 = Color3.fromRGB(14, 14, 17)
+    win.BorderSizePixel = 0
+    win.ClipsDescendants = true
+    win.Parent = gui
+    Util.corner(win, 18)
+    Util.stroke(win, WHITE, 1, 0.9)
+    Util.shadow(win, { blur = 55, transparency = 0.35, offset = UDim2.fromOffset(0, 22) })
+    local sc = Instance.new("UIScale"); sc.Scale = 0.94; sc.Parent = win
+    win.BackgroundTransparency = 1
+    Util.tween(sc, { Scale = 1 }, 0.22, Enum.EasingStyle.Back)
+    Util.tween(win, { BackgroundTransparency = 0 }, 0.18)
+
+    local closing = false
+    local function close()
+        if closing then return end
+        closing = true
+        Util.tween(sc, { Scale = 0.94 }, 0.14)
+        Util.tween(win, { BackgroundTransparency = 1 }, 0.14)
+        task.delay(0.16, function() gui:Destroy() end)
+    end
+    Util.closeOnEscape(gui, close)
+
+    local ytIco = Instance.new("ImageLabel")
+    ytIco.Size = UDim2.fromOffset(20, 20); ytIco.Position = UDim2.fromOffset(20, 18)
+    ytIco.BackgroundTransparency = 1; ytIco.ImageColor3 = RED; ytIco.Parent = win
+    loadIcon(ytIco, "youtube", RED)
+    local hTitle = Instance.new("TextLabel")
+    hTitle.Text = "YouTube"; hTitle.Position = UDim2.fromOffset(48, 14)
+    hTitle.Size = UDim2.fromOffset(200, 22); hTitle.BackgroundTransparency = 1
+    hTitle.Font = Theme.fonts.title; hTitle.TextSize = 18; hTitle.TextColor3 = WHITE
+    hTitle.TextXAlignment = Enum.TextXAlignment.Left; hTitle.Parent = win
+    local hSub = Instance.new("TextLabel")
+    hSub.Text = "Search a song or paste a link"; hSub.Position = UDim2.fromOffset(48, 37)
+    hSub.Size = UDim2.fromOffset(300, 16); hSub.BackgroundTransparency = 1
+    hSub.Font = Theme.fonts.caption; hSub.TextSize = 12; hSub.TextColor3 = SUB
+    hSub.TextXAlignment = Enum.TextXAlignment.Left; hSub.Parent = win
+    local dragBar = Instance.new("Frame"); dragBar.Size = UDim2.new(1, 0, 0, 44)
+    dragBar.BackgroundTransparency = 1; dragBar.Parent = win
+    Util.draggable(win, dragBar)
+    local xBtn = Instance.new("TextButton")
+    xBtn.AnchorPoint = Vector2.new(1, 0); xBtn.Position = UDim2.fromOffset(W - 16, 14)
+    xBtn.Size = UDim2.fromOffset(22, 22); xBtn.BackgroundTransparency = 1; xBtn.AutoButtonColor = false
+    xBtn.Font = Theme.fonts.body; xBtn.Text = "\195\151"; xBtn.TextSize = 20
+    xBtn.TextColor3 = Color3.fromRGB(160, 160, 170); xBtn.Parent = win
+    xBtn.MouseEnter:Connect(function() xBtn.TextColor3 = WHITE end)
+    xBtn.MouseLeave:Connect(function() xBtn.TextColor3 = Color3.fromRGB(160, 160, 170) end)
+    xBtn.MouseButton1Click:Connect(close)
+
+    -- search bar
+    local sh = Instance.new("Frame")
+    sh.Position = UDim2.fromOffset(16, 60); sh.Size = UDim2.fromOffset(W - 32, 42)
+    sh.BackgroundColor3 = Color3.fromRGB(24, 24, 28); sh.BorderSizePixel = 0; sh.Parent = win
+    Util.corner(sh, 10); local sst = Util.stroke(sh, Color3.fromRGB(70, 70, 80), 1, 0.55)
+    local sBox = Instance.new("TextBox")
+    sBox.Position = UDim2.fromOffset(16, 0); sBox.Size = UDim2.fromOffset(W - 32 - 60, 42)
+    sBox.BackgroundTransparency = 1; sBox.Font = Theme.fonts.body
+    sBox.PlaceholderText = "Search YouTube or paste a link..."; sBox.PlaceholderColor3 = DIM
+    sBox.Text = ""; sBox.TextSize = 14; sBox.TextColor3 = WHITE
+    sBox.TextXAlignment = Enum.TextXAlignment.Left; sBox.ClearTextOnFocus = false; sBox.Parent = sh
+    sBox.Focused:Connect(function() Util.tween(sst, { Transparency = 0.1, Color = RED }, 0.15) end)
+    sBox.FocusLost:Connect(function() Util.tween(sst, { Transparency = 0.55, Color = Color3.fromRGB(70, 70, 80) }, 0.15) end)
+    local sBtn = Instance.new("TextButton")
+    sBtn.AnchorPoint = Vector2.new(1, 0.5); sBtn.Position = UDim2.new(1, -8, 0.5, 0)
+    sBtn.Size = UDim2.fromOffset(40, 30); sBtn.BackgroundColor3 = RED; sBtn.AutoButtonColor = false
+    sBtn.Text = ""; sBtn.BorderSizePixel = 0; sBtn.Parent = sh
+    Util.corner(sBtn, 8)
+    local sBtnIc = Instance.new("ImageLabel")
+    sBtnIc.AnchorPoint = Vector2.new(0.5, 0.5); sBtnIc.Position = UDim2.fromScale(0.5, 0.5)
+    sBtnIc.Size = UDim2.fromOffset(16, 16); sBtnIc.BackgroundTransparency = 1
+    sBtnIc.ImageColor3 = WHITE; sBtnIc.Parent = sBtn
+    loadIcon(sBtnIc, "search", WHITE)
+
+    -- results
+    local scroll = Instance.new("ScrollingFrame")
+    scroll.Position = UDim2.fromOffset(12, 114); scroll.Size = UDim2.fromOffset(W - 24, H - 114 - 14)
+    scroll.BackgroundTransparency = 1; scroll.BorderSizePixel = 0
+    scroll.ScrollBarThickness = 3; scroll.ScrollBarImageColor3 = Color3.fromRGB(80, 80, 90)
+    scroll.CanvasSize = UDim2.new(); scroll.Parent = win
+    local layout = Instance.new("UIListLayout")
+    layout.Padding = UDim.new(0, 8); layout.SortOrder = Enum.SortOrder.LayoutOrder; layout.Parent = scroll
+    Util.autoCanvas(scroll, "Y")
+    local status = Instance.new("TextLabel")
+    status.AnchorPoint = Vector2.new(0.5, 0); status.Position = UDim2.fromScale(0.5, 0.25)
+    status.Size = UDim2.fromOffset(W - 60, 40); status.BackgroundTransparency = 1
+    status.Font = Theme.fonts.caption; status.Text = "Search for a song or paste a YouTube link."
+    status.TextSize = 13; status.TextColor3 = SUB; status.TextWrapped = true
+    status.ZIndex = 2; status.Parent = scroll
+
+    local function clearResults()
+        for _, c in ipairs(scroll:GetChildren()) do
+            if c ~= layout and c ~= status then c:Destroy() end
+        end
+    end
+
+    local function resultCard(i, id, title, channel, dur)
+        local c = Instance.new("Frame")
+        c.Size = UDim2.new(1, -6, 0, 64); c.BackgroundColor3 = CARD; c.BorderSizePixel = 0
+        c.LayoutOrder = i; c.Parent = scroll
+        Util.corner(c, 10); Util.stroke(c, WHITE, 1, 0.93)
+        local thumb = Instance.new("ImageLabel")
+        thumb.Position = UDim2.fromOffset(8, 8); thumb.Size = UDim2.fromOffset(84, 48)
+        thumb.BackgroundColor3 = Color3.fromRGB(30, 30, 36); thumb.BorderSizePixel = 0
+        thumb.ScaleType = Enum.ScaleType.Crop; thumb.ZIndex = 2; thumb.Parent = c
+        Util.corner(thumb, 7)
+        task.spawn(function()
+            local url = "https://images.weserv.nl/?url=" .. HttpService:UrlEncode("i.ytimg.com/vi/" .. id .. "/mqdefault.jpg")
+                .. "&output=png&w=168&h=94&fit=cover"
+            local aid = Util.remoteImage(url, "yt_thumb_" .. id .. ".png")
+            if aid and thumb.Parent then thumb.Image = aid end
+        end)
+        local t = Instance.new("TextLabel")
+        t.Position = UDim2.fromOffset(102, 10); t.Size = UDim2.fromOffset(W - 24 - 102 - 44, 20)
+        t.BackgroundTransparency = 1; t.Font = Theme.fonts.body; t.Text = title
+        t.TextSize = 13; t.TextColor3 = WHITE; t.TextXAlignment = Enum.TextXAlignment.Left
+        t.TextTruncate = Enum.TextTruncate.AtEnd; t.ZIndex = 2; t.Parent = c
+        local sub = Instance.new("TextLabel")
+        sub.Position = UDim2.fromOffset(102, 32); sub.Size = UDim2.fromOffset(W - 24 - 102 - 44, 16)
+        sub.BackgroundTransparency = 1; sub.Font = Theme.fonts.caption
+        sub.Text = channel .. (dur and dur > 0 and ("  \195\151  " .. ("%d:%02d"):format(math.floor(dur / 60), dur % 60)) or "")
+        sub.TextSize = 11; sub.TextColor3 = SUB; sub.TextXAlignment = Enum.TextXAlignment.Left
+        sub.TextTruncate = Enum.TextTruncate.AtEnd; sub.ZIndex = 2; sub.Parent = c
+        local dl = Instance.new("TextButton")
+        dl.AnchorPoint = Vector2.new(1, 0.5); dl.Position = UDim2.new(1, -12, 0.5, 0)
+        dl.Size = UDim2.fromOffset(30, 30); dl.BackgroundColor3 = Color3.fromRGB(36, 36, 42)
+        dl.AutoButtonColor = false; dl.Text = ""; dl.BorderSizePixel = 0; dl.ZIndex = 2; dl.Parent = c
+        Util.corner(dl, 8)
+        local dlIc = Instance.new("ImageLabel")
+        dlIc.AnchorPoint = Vector2.new(0.5, 0.5); dlIc.Position = UDim2.fromScale(0.5, 0.5)
+        dlIc.Size = UDim2.fromOffset(15, 15); dlIc.BackgroundTransparency = 1
+        dlIc.ImageColor3 = RED; dlIc.ZIndex = 3; dlIc.Parent = dl
+        loadIcon(dlIc, "download", RED)
+
+        local busy = false
+        dl.MouseButton1Click:Connect(function()
+            if busy then return end
+            busy = true
+            sub.Text = "Downloading audio..."; sub.TextColor3 = RED
+            task.spawn(function()
+                local yurl = "https://www.youtube.com/watch?v=" .. id
+                local mp3url = ytAudioUrl(yurl)
+                if not mp3url then
+                    sub.Text = "Audio service unavailable, try again"; sub.TextColor3 = Color3.fromRGB(240, 160, 90)
+                    busy = false; return
+                end
+                local ok, data = pcall(function() return game:HttpGet(mp3url, true) end)
+                if ok and data and #data > 2000 then
+                    pcall(function() writefile(SND_DIR .. "/" .. safeName(title) .. ".mp3", data) end)
+                    sub.Text = "Downloaded to library"; sub.TextColor3 = Color3.fromRGB(120, 210, 150)
+                else
+                    sub.Text = "Download failed, try again"; sub.TextColor3 = Color3.fromRGB(240, 160, 90)
+                end
+                busy = false
+            end)
+        end)
+    end
+
+    local searching = false
+    local function doSearch()
+        local q = sBox.Text:gsub("^%s+", ""):gsub("%s+$", "")
+        if q == "" or searching then return end
+        searching = true
+        clearResults()
+        status.Text = "Searching..."
+        status.Visible = true
+        task.spawn(function()
+            -- a pasted link -> single result for that id
+            local direct = ytId(q)
+            if q:find("youtu") and direct then
+                status.Visible = false
+                resultCard(1, direct, "Video from link", "Paste  \195\151  tap download", 0)
+                searching = false
+                return
+            end
+            local items = ytSearch(q)
+            if not items then
+                status.Text = "Couldn't reach search. Try again in a moment."
+                searching = false
+                return
+            end
+            status.Visible = false
+            local n = 0
+            for _, it in ipairs(items) do
+                local id = ytId(it.url or "")
+                if id then
+                    n = n + 1
+                    resultCard(n, id, it.title or "Untitled", it.uploaderName or "Unknown", it.duration or 0)
+                    if n >= 20 then break end
+                end
+            end
+            if n == 0 then status.Text = "No results."; status.Visible = true end
+            searching = false
+        end)
+    end
+    sBtn.MouseButton1Click:Connect(doSearch)
+    sBox.FocusLost:Connect(function(enter) if enter then doSearch() end end)
+
+    return { close = close }
+end
+
 function Music.open()
     local host = (gethui and gethui()) or game:GetService("CoreGui")
     if host:FindFirstChild("SYNC_Music") then return end
@@ -7406,7 +7683,7 @@ function Music.open()
     end
     menuItem(6, "Spotify", "music", function() end)
     menuItem(44, "MP3 Player", "disc-3", function() Music.openMP3() end)
-    menuItem(84, "YouTube", "youtube", function() hSub.Text = "YouTube coming soon" end)
+    menuItem(84, "YouTube", "youtube", function() Music.openYT() end)
 
     plus.MouseButton1Click:Connect(function() menu.Visible = not menu.Visible end)
     win.MouseButton1Click:Connect(function() if menu.Visible then menu.Visible = false end end)
