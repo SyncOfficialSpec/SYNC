@@ -91,7 +91,7 @@ function Music.openMP3()
         end
     end)
 
-    local W, H = 364, 452
+    local W, H = 440, 474
     local gui = Instance.new("ScreenGui")
     gui.Name = "SYNC_MP3"
     Util.mount(gui)
@@ -105,13 +105,12 @@ function Music.openMP3()
     win.BorderSizePixel = 0
     win.ClipsDescendants = true
     win.Parent = gui
-    Util.corner(win, 16)
+    Util.corner(win, 18)
     Util.stroke(win, WHITE, 1, 0.9)
     Util.shadow(win, { blur = 55, spread = 0, transparency = 0.35, offset = UDim2.fromOffset(0, 22) })
-    -- subtle top-to-bottom gradient on the whole window
     local wg = Instance.new("UIGradient")
-    wg.Rotation = 90
-    wg.Color = ColorSequence.new(Color3.fromRGB(24, 28, 40), Color3.fromRGB(12, 12, 16))
+    wg.Rotation = 118
+    wg.Color = ColorSequence.new(Color3.fromRGB(26, 30, 44), Color3.fromRGB(11, 11, 15))
     wg.Parent = win
     local sc = Instance.new("UIScale"); sc.Scale = 0.94; sc.Parent = win
     win.BackgroundTransparency = 1
@@ -129,12 +128,12 @@ function Music.openMP3()
 
     local titleTxt = Instance.new("TextLabel")
     titleTxt.Text = "MP3 PLAYER"
-    titleTxt.Position = UDim2.fromOffset(18, 14)
+    titleTxt.Position = UDim2.fromOffset(20, 16)
     titleTxt.Size = UDim2.fromOffset(200, 18)
     titleTxt.BackgroundTransparency = 1
     titleTxt.Font = Theme.fonts.title
     titleTxt.TextSize = 12
-    titleTxt.TextColor3 = Color3.fromRGB(180, 180, 190)
+    titleTxt.TextColor3 = Color3.fromRGB(175, 175, 186)
     titleTxt.TextXAlignment = Enum.TextXAlignment.Left
     titleTxt.Parent = win
     local dragBar = Instance.new("Frame")
@@ -145,7 +144,7 @@ function Music.openMP3()
 
     local xBtn = Instance.new("TextButton")
     xBtn.AnchorPoint = Vector2.new(1, 0)
-    xBtn.Position = UDim2.fromOffset(W - 14, 12)
+    xBtn.Position = UDim2.fromOffset(W - 16, 13)
     xBtn.Size = UDim2.fromOffset(22, 22)
     xBtn.BackgroundTransparency = 1
     xBtn.AutoButtonColor = false
@@ -158,72 +157,91 @@ function Music.openMP3()
     xBtn.MouseLeave:Connect(function() xBtn.TextColor3 = Color3.fromRGB(160, 160, 170) end)
     xBtn.MouseButton1Click:Connect(close)
 
-    -- art / empty-state area
+    -- large album / empty-state area (top)
     local artArea = Instance.new("Frame")
-    artArea.Position = UDim2.fromOffset(16, 46)
-    artArea.Size = UDim2.fromOffset(W - 32, 176)
-    artArea.BackgroundColor3 = Color3.fromRGB(10, 11, 15)
-    artArea.BackgroundTransparency = 0.2
+    artArea.Position = UDim2.fromOffset(16, 44)
+    artArea.Size = UDim2.fromOffset(W - 32, 246)
+    artArea.BackgroundColor3 = Color3.fromRGB(9, 10, 14)
+    artArea.BackgroundTransparency = 0.15
     artArea.BorderSizePixel = 0
     artArea.Parent = win
-    Util.corner(artArea, 12)
+    Util.corner(artArea, 14)
+    local ag = Instance.new("UIGradient")
+    ag.Rotation = 125
+    ag.Color = ColorSequence.new(Color3.fromRGB(20, 23, 34), Color3.fromRGB(8, 8, 11))
+    ag.Parent = artArea
     local emptyTxt = Instance.new("TextLabel")
     emptyTxt.AnchorPoint = Vector2.new(0.5, 0.5)
     emptyTxt.Position = UDim2.fromScale(0.5, 0.5)
-    emptyTxt.Size = UDim2.fromOffset(W - 60, 44)
+    emptyTxt.Size = UDim2.fromOffset(W - 80, 44)
     emptyTxt.BackgroundTransparency = 1
     emptyTxt.Font = Theme.fonts.caption
     emptyTxt.Text = "Drop .mp3 files into\nSYNC/songs folder"
-    emptyTxt.TextSize = 13
-    emptyTxt.TextColor3 = Color3.fromRGB(120, 120, 130)
+    emptyTxt.TextSize = 14
+    emptyTxt.TextColor3 = Color3.fromRGB(118, 118, 130)
+    emptyTxt.ZIndex = 3
     emptyTxt.Parent = artArea
 
+    -- control panel (bottom, a distinct card)
+    local panel = Instance.new("Frame")
+    panel.Position = UDim2.fromOffset(16, 300)
+    panel.Size = UDim2.fromOffset(W - 32, H - 300 - 16)
+    panel.BackgroundColor3 = Color3.fromRGB(17, 18, 23)
+    panel.BackgroundTransparency = 0.1
+    panel.BorderSizePixel = 0
+    panel.Parent = win
+    Util.corner(panel, 14)
+    Util.stroke(panel, WHITE, 1, 0.92)
+    local PW = W - 32
+
     local trackTxt = Instance.new("TextLabel")
-    trackTxt.Position = UDim2.fromOffset(20, 236)
-    trackTxt.Size = UDim2.fromOffset(W - 40, 24)
+    trackTxt.Position = UDim2.fromOffset(20, 12)
+    trackTxt.Size = UDim2.fromOffset(PW - 40, 24)
     trackTxt.BackgroundTransparency = 1
     trackTxt.Font = Theme.fonts.title
     trackTxt.Text = "No Track"
     trackTxt.TextSize = 16
     trackTxt.TextColor3 = WHITE
     trackTxt.TextTruncate = Enum.TextTruncate.AtEnd
-    trackTxt.Parent = win
+    trackTxt.ZIndex = 3
+    trackTxt.Parent = panel
 
-    -- progress slider
+    -- slider builder (parented to the panel)
     local BLUEP = Color3.fromRGB(58, 108, 210)
-    local function makeSlider(y, w, h, onSet)
+    local function makeSlider(parent, x, y, w, h, onSet)
         local track = Instance.new("TextButton")
         track.Text = ""; track.AutoButtonColor = false
-        track.Position = UDim2.fromOffset(20, y)
+        track.Position = UDim2.fromOffset(x, y)
         track.Size = UDim2.fromOffset(w, h)
-        track.BackgroundColor3 = Color3.fromRGB(55, 56, 64)
+        track.BackgroundColor3 = Color3.fromRGB(52, 53, 62)
         track.BorderSizePixel = 0
-        track.Parent = win
+        track.ZIndex = 3
+        track.Parent = parent
         Util.corner(track, h / 2)
         local fill = Instance.new("Frame")
         fill.Size = UDim2.new(0, 0, 1, 0)
         fill.BackgroundColor3 = BLUEP
         fill.BorderSizePixel = 0
+        fill.ZIndex = 3
         fill.Parent = track
         Util.corner(fill, h / 2)
         local knob = Instance.new("Frame")
         knob.AnchorPoint = Vector2.new(0.5, 0.5)
         knob.Position = UDim2.fromScale(0, 0.5)
-        knob.Size = UDim2.fromOffset(h + 6, h + 6)
+        knob.Size = UDim2.fromOffset(h + 8, h + 8)
         knob.BackgroundColor3 = WHITE
         knob.BorderSizePixel = 0
-        knob.ZIndex = 3
+        knob.ZIndex = 4
         knob.Parent = track
-        Util.corner(knob, (h + 6) / 2)
+        Util.corner(knob, (h + 8) / 2)
         local function setFrac(f)
             f = math.clamp(f, 0, 1)
             fill.Size = UDim2.new(f, 0, 1, 0)
             knob.Position = UDim2.new(f, 0, 0.5, 0)
         end
         local dragging = false
-        local function fracFromX(px)
-            local rel = (px - track.AbsolutePosition.X) / math.max(1, track.AbsoluteSize.X)
-            return math.clamp(rel, 0, 1)
+        local function fracFromX(pxX)
+            return math.clamp((pxX - track.AbsolutePosition.X) / math.max(1, track.AbsoluteSize.X), 0, 1)
         end
         track.InputBegan:Connect(function(inp)
             if inp.UserInputType == Enum.UserInputType.MouseButton1 or inp.UserInputType == Enum.UserInputType.Touch then
@@ -245,59 +263,62 @@ function Music.openMP3()
     -- ---- audio state ----
     local sound
     local files, index = {}, 0
-    local seeking = false
-
     local function stopSound()
         if sound then pcall(function() sound:Stop(); sound:Destroy() end); sound = nil end
     end
 
-    local progSet, progDragging
     local timeCur = Instance.new("TextLabel")
-    timeCur.Position = UDim2.fromOffset(20, 292)
+    timeCur.Position = UDim2.fromOffset(20, 60)
     timeCur.Size = UDim2.fromOffset(50, 14)
     timeCur.BackgroundTransparency = 1
     timeCur.Font = Theme.fonts.caption
     timeCur.Text = "0:00"; timeCur.TextSize = 11; timeCur.TextColor3 = DIM
     timeCur.TextXAlignment = Enum.TextXAlignment.Left
-    timeCur.Parent = win
+    timeCur.ZIndex = 3
+    timeCur.Parent = panel
     local timeEnd = Instance.new("TextLabel")
     timeEnd.AnchorPoint = Vector2.new(1, 0)
-    timeEnd.Position = UDim2.fromOffset(W - 20, 292)
+    timeEnd.Position = UDim2.fromOffset(PW - 20, 60)
     timeEnd.Size = UDim2.fromOffset(50, 14)
     timeEnd.BackgroundTransparency = 1
     timeEnd.Font = Theme.fonts.caption
     timeEnd.Text = "0:00"; timeEnd.TextSize = 11; timeEnd.TextColor3 = DIM
     timeEnd.TextXAlignment = Enum.TextXAlignment.Right
-    timeEnd.Parent = win
+    timeEnd.ZIndex = 3
+    timeEnd.Parent = panel
 
-    progSet, progDragging = makeSlider(276, W - 40, 6, function(f)
+    local progSet, progDragging = makeSlider(panel, 20, 48, PW - 40, 6, function(f)
         if sound and sound.TimeLength > 0 then sound.TimePosition = f * sound.TimeLength end
     end)
 
-    -- controls
-    local playIc
+    -- controls (plain icons, play larger, no circle)
+    local playIco
     local function ctrl(cx, size, icon)
         local b = Instance.new("TextButton")
         b.AnchorPoint = Vector2.new(0.5, 0.5)
-        b.Position = UDim2.fromOffset(cx, 340)
-        b.Size = UDim2.fromOffset(size, size)
+        b.Position = UDim2.fromOffset(cx, 104)
+        b.Size = UDim2.fromOffset(size + 12, size + 12)
         b.BackgroundTransparency = 1
         b.AutoButtonColor = false
         b.Text = ""
-        b.Parent = win
+        b.ZIndex = 3
+        b.Parent = panel
         local ic = Instance.new("ImageLabel")
         ic.AnchorPoint = Vector2.new(0.5, 0.5)
         ic.Position = UDim2.fromScale(0.5, 0.5)
-        ic.Size = UDim2.fromOffset(math.floor(size * 0.6), math.floor(size * 0.6))
+        ic.Size = UDim2.fromOffset(size, size)
         ic.BackgroundTransparency = 1
-        ic.ImageColor3 = WHITE
+        ic.ImageColor3 = Color3.fromRGB(225, 225, 232)
+        ic.ZIndex = 4
         ic.Parent = b
-        loadIcon(ic, icon, WHITE)
+        loadIcon(ic, icon, Color3.fromRGB(225, 225, 232))
         return b, ic
     end
-    local prevBtn = ctrl(W / 2 - 66, 34, "skip-back")
-    local playBtn, playIco = ctrl(W / 2, 46, "play")
-    local nextBtn = ctrl(W / 2 + 66, 34, "skip-forward")
+    local cx = PW / 2
+    local prevBtn = ctrl(cx - 62, 26, "skip-back")
+    local playBtn, playIcoRef = ctrl(cx, 38, "play")
+    playIco = playIcoRef
+    local nextBtn = ctrl(cx + 62, 26, "skip-forward")
 
     local function fmt(s) s = math.max(0, math.floor(s or 0)); return ("%d:%02d"):format(math.floor(s / 60), s % 60) end
 
@@ -346,12 +367,13 @@ function Music.openMP3()
         else sound:Resume(); loadIcon(playIco, "pause", WHITE) end
     end)
 
-    -- volume slider + refresh
-    local volSet = makeSlider(H - 40, 96, 5, function(f) if sound then sound.Volume = f end end)
+    -- volume slider + refresh (bottom of the panel)
+    local PH = H - 300 - 16
+    local volSet = makeSlider(panel, 20, PH - 26, 96, 5, function(f) if sound then sound.Volume = f end end)
     volSet(0.6)
     local refresh = Instance.new("TextButton")
     refresh.AnchorPoint = Vector2.new(1, 0.5)
-    refresh.Position = UDim2.fromOffset(W - 20, H - 37)
+    refresh.Position = UDim2.fromOffset(PW - 18, PH - 24)
     refresh.Size = UDim2.fromOffset(70, 20)
     refresh.BackgroundTransparency = 1
     refresh.AutoButtonColor = false
@@ -360,7 +382,8 @@ function Music.openMP3()
     refresh.TextSize = 12
     refresh.TextColor3 = Color3.fromRGB(150, 150, 160)
     refresh.TextXAlignment = Enum.TextXAlignment.Right
-    refresh.Parent = win
+    refresh.ZIndex = 3
+    refresh.Parent = panel
     refresh.MouseEnter:Connect(function() refresh.TextColor3 = WHITE end)
     refresh.MouseLeave:Connect(function() refresh.TextColor3 = Color3.fromRGB(150, 150, 160) end)
     refresh.MouseButton1Click:Connect(scan)
