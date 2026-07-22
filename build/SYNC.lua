@@ -6603,271 +6603,222 @@ end
 Music._gui = nil
 
 -- ============================================================================
--- MP3 PLAYER: a separate compact window that plays local audio files dropped
--- into SYNC/songs. Roblox plays them via getcustomasset (custom audio assets).
+-- MP3 PLAYER (a tab): plays local audio dropped into SYNC/songs, via Sound +
+-- getcustomasset. Has a search box, a scrollable song list, and a player bar.
+-- buildMP3(parent, PW, PH, setSub) -> cleanup()
 -- ============================================================================
 local SND_DIR = "SYNC/songs"
 local AUDIO_EXT = { mp3 = true, ogg = true, wav = true }
+local BLUEP = Color3.fromRGB(58, 108, 210)
 
-function Music.openMP3()
-    local host = (gethui and gethui()) or game:GetService("CoreGui")
-    if host:FindFirstChild("SYNC_MP3") then return end
+-- a click+drag slider parented to `parent` at (x,y). Returns setFrac, isDragging.
+local function makeSlider(parent, x, y, w, h, onSet)
+    local track = Instance.new("TextButton")
+    track.Text = ""; track.AutoButtonColor = false
+    track.Position = UDim2.fromOffset(x, y); track.Size = UDim2.fromOffset(w, h)
+    track.BackgroundColor3 = Color3.fromRGB(52, 53, 62); track.BorderSizePixel = 0
+    track.ZIndex = 3; track.Parent = parent
+    Util.corner(track, h / 2)
+    local fill = Instance.new("Frame")
+    fill.Size = UDim2.new(0, 0, 1, 0); fill.BackgroundColor3 = BLUEP; fill.BorderSizePixel = 0
+    fill.ZIndex = 3; fill.Parent = track
+    Util.corner(fill, h / 2)
+    local knob = Instance.new("Frame")
+    knob.AnchorPoint = Vector2.new(0.5, 0.5); knob.Position = UDim2.fromScale(0, 0.5)
+    knob.Size = UDim2.fromOffset(h + 8, h + 8); knob.BackgroundColor3 = Color3.fromRGB(245, 245, 248)
+    knob.BorderSizePixel = 0; knob.ZIndex = 4; knob.Parent = track
+    Util.corner(knob, (h + 8) / 2)
+    local function setFrac(f)
+        f = math.clamp(f, 0, 1)
+        fill.Size = UDim2.new(f, 0, 1, 0); knob.Position = UDim2.new(f, 0, 0.5, 0)
+    end
+    local dragging = false
+    local function fx(px) return math.clamp((px - track.AbsolutePosition.X) / math.max(1, track.AbsoluteSize.X), 0, 1) end
+    track.InputBegan:Connect(function(inp)
+        if inp.UserInputType == Enum.UserInputType.MouseButton1 or inp.UserInputType == Enum.UserInputType.Touch then
+            dragging = true; local f = fx(inp.Position.X); setFrac(f); if onSet then onSet(f) end
+        end
+    end)
+    track.InputEnded:Connect(function(inp)
+        if inp.UserInputType == Enum.UserInputType.MouseButton1 or inp.UserInputType == Enum.UserInputType.Touch then dragging = false end
+    end)
+    game:GetService("UserInputService").InputChanged:Connect(function(inp)
+        if dragging and inp.UserInputType == Enum.UserInputType.MouseMovement then
+            local f = fx(inp.Position.X); setFrac(f); if onSet then onSet(f) end
+        end
+    end)
+    return setFrac, function() return dragging end
+end
+
+-- soft fade strip over a scroll edge (content dissolves into the window bg)
+local function scrollFade(parent, x, y, w, h, bottom, bg)
+    local f = Instance.new("Frame")
+    f.Position = UDim2.fromOffset(x, y); f.Size = UDim2.fromOffset(w, h)
+    f.BackgroundColor3 = bg or Color3.fromRGB(15, 15, 18)
+    f.BorderSizePixel = 0; f.Active = false; f.ZIndex = 8; f.Parent = parent
+    local g = Instance.new("UIGradient")
+    g.Rotation = 90
+    g.Transparency = bottom
+        and NumberSequence.new({ NumberSequenceKeypoint.new(0, 1), NumberSequenceKeypoint.new(1, 0) })
+        or NumberSequence.new({ NumberSequenceKeypoint.new(0, 0), NumberSequenceKeypoint.new(1, 1) })
+    g.Parent = f
+    return f
+end
+
+local function buildMP3(parent, PW, PH, setSub)
     pcall(function()
         if type(makefolder) == "function" then
             if not isfolder("SYNC") then makefolder("SYNC") end
             if not isfolder(SND_DIR) then makefolder(SND_DIR) end
         end
     end)
+    setSub("MP3 Player")
+    local alive, sound = true, nil
+    local function stopSound() if sound then pcall(function() sound:Stop(); sound:Destroy() end); sound = nil end end
 
-    local W, H = 440, 474
-    local gui = Instance.new("ScreenGui")
-    gui.Name = "SYNC_MP3"
-    Util.mount(gui)
+    -- search box
+    local sh = Instance.new("Frame")
+    sh.Position = UDim2.fromOffset(16, 6); sh.Size = UDim2.fromOffset(PW - 32, 34)
+    sh.BackgroundColor3 = FIELD; sh.BackgroundTransparency = 0.1; sh.BorderSizePixel = 0; sh.Parent = parent
+    Util.corner(sh, 9); local sst = Util.stroke(sh, Color3.fromRGB(70, 70, 80), 1, 0.6)
+    local sBox = Instance.new("TextBox")
+    sBox.Position = UDim2.fromOffset(14, 0); sBox.Size = UDim2.fromOffset(PW - 32 - 44, 34)
+    sBox.BackgroundTransparency = 1; sBox.Font = Theme.fonts.body
+    sBox.PlaceholderText = "Search your songs..."; sBox.PlaceholderColor3 = DIM
+    sBox.Text = ""; sBox.TextSize = 13; sBox.TextColor3 = WHITE; sBox.TextXAlignment = Enum.TextXAlignment.Left
+    sBox.ClearTextOnFocus = false; sBox.Parent = sh
+    local sIco = Instance.new("ImageLabel")
+    sIco.AnchorPoint = Vector2.new(1, 0.5); sIco.Position = UDim2.new(1, -12, 0.5, 0); sIco.Size = UDim2.fromOffset(15, 15)
+    sIco.BackgroundTransparency = 1; sIco.ImageColor3 = DIM; sIco.Parent = sh
+    loadIcon(sIco, "search", DIM)
+    sBox.Focused:Connect(function() Util.tween(sst, { Transparency = 0.1, Color = BLUEP }, 0.15) end)
+    sBox.FocusLost:Connect(function() Util.tween(sst, { Transparency = 0.6, Color = Color3.fromRGB(70, 70, 80) }, 0.15) end)
 
-    local closing = false
-    local win = Instance.new("Frame")
-    win.AnchorPoint = Vector2.new(0.5, 0.5)
-    win.Position = UDim2.fromScale(0.5, 0.44)
-    win.Size = UDim2.fromOffset(W, H)
-    win.BackgroundColor3 = Color3.fromRGB(13, 14, 18)
-    win.BorderSizePixel = 0
-    win.ClipsDescendants = true
-    win.Parent = gui
-    Util.corner(win, 18)
-    Util.stroke(win, WHITE, 1, 0.9)
-    Util.shadow(win, { blur = 55, spread = 0, transparency = 0.35, offset = UDim2.fromOffset(0, 22) })
-    local wg = Instance.new("UIGradient")
-    wg.Rotation = 118
-    wg.Color = ColorSequence.new(Color3.fromRGB(26, 30, 44), Color3.fromRGB(11, 11, 15))
-    wg.Parent = win
-    local sc = Instance.new("UIScale"); sc.Scale = 0.94; sc.Parent = win
-    win.BackgroundTransparency = 1
-    Util.tween(sc, { Scale = 1 }, 0.22, Enum.EasingStyle.Back)
-    Util.tween(win, { BackgroundTransparency = 0 }, 0.18)
+    -- song list
+    local listY = 48
+    local listH = PH - listY - 104
+    local scroll = Instance.new("ScrollingFrame")
+    scroll.Position = UDim2.fromOffset(12, listY); scroll.Size = UDim2.fromOffset(PW - 24, listH)
+    scroll.BackgroundTransparency = 1; scroll.BorderSizePixel = 0
+    scroll.ScrollBarThickness = 3; scroll.ScrollBarImageColor3 = Color3.fromRGB(80, 80, 90)
+    scroll.ScrollBarImageTransparency = 0.35; scroll.CanvasSize = UDim2.new(); scroll.ZIndex = 3; scroll.Parent = parent
+    local lpad = Instance.new("UIPadding")
+    lpad.PaddingLeft = UDim.new(0, 6); lpad.PaddingRight = UDim.new(0, 6); lpad.PaddingTop = UDim.new(0, 4); lpad.Parent = scroll
+    local ll = Instance.new("UIListLayout")
+    ll.Padding = UDim.new(0, 6); ll.SortOrder = Enum.SortOrder.LayoutOrder; ll.Parent = scroll
+    Util.autoCanvas(scroll, "Y")
+    scrollFade(parent, 12, listY, PW - 24, 16, false)
+    scrollFade(parent, 12, listY + listH - 16, PW - 24, 16, true)
+    local empty = Instance.new("TextLabel")
+    empty.AnchorPoint = Vector2.new(0.5, 0); empty.Position = UDim2.fromScale(0.5, 0.22)
+    empty.Size = UDim2.fromOffset(PW - 80, 40); empty.BackgroundTransparency = 1
+    empty.Font = Theme.fonts.caption; empty.Text = "Drop .mp3 files into SYNC/songs, then Refresh."
+    empty.TextSize = 13; empty.TextColor3 = SUB; empty.TextWrapped = true; empty.ZIndex = 3; empty.Parent = scroll
 
-    local function close()
-        if closing then return end
-        closing = true
-        Util.tween(sc, { Scale = 0.94 }, 0.14)
-        Util.tween(win, { BackgroundTransparency = 1 }, 0.14)
-        task.delay(0.16, function() gui:Destroy() end)
-    end
-    Util.closeOnEscape(gui, close)
-
-    local titleTxt = Instance.new("TextLabel")
-    titleTxt.Text = "MP3 PLAYER"
-    titleTxt.Position = UDim2.fromOffset(20, 16)
-    titleTxt.Size = UDim2.fromOffset(200, 18)
-    titleTxt.BackgroundTransparency = 1
-    titleTxt.Font = Theme.fonts.title
-    titleTxt.TextSize = 12
-    titleTxt.TextColor3 = Color3.fromRGB(175, 175, 186)
-    titleTxt.TextXAlignment = Enum.TextXAlignment.Left
-    titleTxt.Parent = win
-    local dragBar = Instance.new("Frame")
-    dragBar.Size = UDim2.new(1, 0, 0, 40)
-    dragBar.BackgroundTransparency = 1
-    dragBar.Parent = win
-    Util.draggable(win, dragBar)
-
-    local xBtn = Instance.new("TextButton")
-    xBtn.AnchorPoint = Vector2.new(1, 0)
-    xBtn.Position = UDim2.fromOffset(W - 16, 13)
-    xBtn.Size = UDim2.fromOffset(22, 22)
-    xBtn.BackgroundTransparency = 1
-    xBtn.AutoButtonColor = false
-    xBtn.Font = Theme.fonts.body
-    xBtn.Text = "\195\151"
-    xBtn.TextSize = 20
-    xBtn.TextColor3 = Color3.fromRGB(160, 160, 170)
-    xBtn.Parent = win
-    xBtn.MouseEnter:Connect(function() xBtn.TextColor3 = WHITE end)
-    xBtn.MouseLeave:Connect(function() xBtn.TextColor3 = Color3.fromRGB(160, 160, 170) end)
-    xBtn.MouseButton1Click:Connect(close)
-
-    -- large album / empty-state area (top)
-    local artArea = Instance.new("Frame")
-    artArea.Position = UDim2.fromOffset(16, 44)
-    artArea.Size = UDim2.fromOffset(W - 32, 246)
-    artArea.BackgroundColor3 = Color3.fromRGB(9, 10, 14)
-    artArea.BackgroundTransparency = 0.15
-    artArea.BorderSizePixel = 0
-    artArea.Parent = win
-    Util.corner(artArea, 14)
-    local ag = Instance.new("UIGradient")
-    ag.Rotation = 125
-    ag.Color = ColorSequence.new(Color3.fromRGB(20, 23, 34), Color3.fromRGB(8, 8, 11))
-    ag.Parent = artArea
-    local emptyTxt = Instance.new("TextLabel")
-    emptyTxt.AnchorPoint = Vector2.new(0.5, 0.5)
-    emptyTxt.Position = UDim2.fromScale(0.5, 0.5)
-    emptyTxt.Size = UDim2.fromOffset(W - 80, 44)
-    emptyTxt.BackgroundTransparency = 1
-    emptyTxt.Font = Theme.fonts.caption
-    emptyTxt.Text = "Drop .mp3 files into\nSYNC/songs folder"
-    emptyTxt.TextSize = 14
-    emptyTxt.TextColor3 = Color3.fromRGB(118, 118, 130)
-    emptyTxt.ZIndex = 3
-    emptyTxt.Parent = artArea
-
-    -- control panel (bottom, a distinct card)
-    local panel = Instance.new("Frame")
-    panel.Position = UDim2.fromOffset(16, 300)
-    panel.Size = UDim2.fromOffset(W - 32, H - 300 - 16)
-    panel.BackgroundColor3 = Color3.fromRGB(17, 18, 23)
-    panel.BackgroundTransparency = 0.1
-    panel.BorderSizePixel = 0
-    panel.Parent = win
-    Util.corner(panel, 14)
-    Util.stroke(panel, WHITE, 1, 0.92)
-    local PW = W - 32
-
+    -- player bar
+    local barY = PH - 96
     local trackTxt = Instance.new("TextLabel")
-    trackTxt.Position = UDim2.fromOffset(20, 12)
-    trackTxt.Size = UDim2.fromOffset(PW - 40, 24)
-    trackTxt.BackgroundTransparency = 1
-    trackTxt.Font = Theme.fonts.title
-    trackTxt.Text = "No Track"
-    trackTxt.TextSize = 16
-    trackTxt.TextColor3 = WHITE
-    trackTxt.TextTruncate = Enum.TextTruncate.AtEnd
-    trackTxt.ZIndex = 3
-    trackTxt.Parent = panel
-
-    -- slider builder (parented to the panel)
-    local BLUEP = Color3.fromRGB(58, 108, 210)
-    local function makeSlider(parent, x, y, w, h, onSet)
-        local track = Instance.new("TextButton")
-        track.Text = ""; track.AutoButtonColor = false
-        track.Position = UDim2.fromOffset(x, y)
-        track.Size = UDim2.fromOffset(w, h)
-        track.BackgroundColor3 = Color3.fromRGB(52, 53, 62)
-        track.BorderSizePixel = 0
-        track.ZIndex = 3
-        track.Parent = parent
-        Util.corner(track, h / 2)
-        local fill = Instance.new("Frame")
-        fill.Size = UDim2.new(0, 0, 1, 0)
-        fill.BackgroundColor3 = BLUEP
-        fill.BorderSizePixel = 0
-        fill.ZIndex = 3
-        fill.Parent = track
-        Util.corner(fill, h / 2)
-        local knob = Instance.new("Frame")
-        knob.AnchorPoint = Vector2.new(0.5, 0.5)
-        knob.Position = UDim2.fromScale(0, 0.5)
-        knob.Size = UDim2.fromOffset(h + 8, h + 8)
-        knob.BackgroundColor3 = WHITE
-        knob.BorderSizePixel = 0
-        knob.ZIndex = 4
-        knob.Parent = track
-        Util.corner(knob, (h + 8) / 2)
-        local function setFrac(f)
-            f = math.clamp(f, 0, 1)
-            fill.Size = UDim2.new(f, 0, 1, 0)
-            knob.Position = UDim2.new(f, 0, 0.5, 0)
-        end
-        local dragging = false
-        local function fracFromX(pxX)
-            return math.clamp((pxX - track.AbsolutePosition.X) / math.max(1, track.AbsoluteSize.X), 0, 1)
-        end
-        track.InputBegan:Connect(function(inp)
-            if inp.UserInputType == Enum.UserInputType.MouseButton1 or inp.UserInputType == Enum.UserInputType.Touch then
-                dragging = true
-                local f = fracFromX(inp.Position.X); setFrac(f); if onSet then onSet(f) end
-            end
-        end)
-        track.InputEnded:Connect(function(inp)
-            if inp.UserInputType == Enum.UserInputType.MouseButton1 or inp.UserInputType == Enum.UserInputType.Touch then dragging = false end
-        end)
-        game:GetService("UserInputService").InputChanged:Connect(function(inp)
-            if dragging and inp.UserInputType == Enum.UserInputType.MouseMovement then
-                local f = fracFromX(inp.Position.X); setFrac(f); if onSet then onSet(f) end
-            end
-        end)
-        return setFrac, function() return dragging end
-    end
-
-    -- ---- audio state ----
-    local sound
-    local files, index = {}, 0
-    local function stopSound()
-        if sound then pcall(function() sound:Stop(); sound:Destroy() end); sound = nil end
-    end
-
-    local timeCur = Instance.new("TextLabel")
-    timeCur.Position = UDim2.fromOffset(20, 60)
-    timeCur.Size = UDim2.fromOffset(50, 14)
-    timeCur.BackgroundTransparency = 1
-    timeCur.Font = Theme.fonts.caption
-    timeCur.Text = "0:00"; timeCur.TextSize = 11; timeCur.TextColor3 = DIM
-    timeCur.TextXAlignment = Enum.TextXAlignment.Left
-    timeCur.ZIndex = 3
-    timeCur.Parent = panel
-    local timeEnd = Instance.new("TextLabel")
-    timeEnd.AnchorPoint = Vector2.new(1, 0)
-    timeEnd.Position = UDim2.fromOffset(PW - 20, 60)
-    timeEnd.Size = UDim2.fromOffset(50, 14)
-    timeEnd.BackgroundTransparency = 1
-    timeEnd.Font = Theme.fonts.caption
-    timeEnd.Text = "0:00"; timeEnd.TextSize = 11; timeEnd.TextColor3 = DIM
-    timeEnd.TextXAlignment = Enum.TextXAlignment.Right
-    timeEnd.ZIndex = 3
-    timeEnd.Parent = panel
-
-    local progSet, progDragging = makeSlider(panel, 20, 48, PW - 40, 6, function(f)
+    trackTxt.Position = UDim2.fromOffset(16, barY); trackTxt.Size = UDim2.fromOffset(PW - 200, 20)
+    trackTxt.BackgroundTransparency = 1; trackTxt.Font = Theme.fonts.title; trackTxt.Text = "No Track"
+    trackTxt.TextSize = 15; trackTxt.TextColor3 = WHITE; trackTxt.TextXAlignment = Enum.TextXAlignment.Left
+    trackTxt.TextTruncate = Enum.TextTruncate.AtEnd; trackTxt.ZIndex = 3; trackTxt.Parent = parent
+    -- volume (top-right of the bar)
+    local volIco = Instance.new("ImageLabel")
+    volIco.Position = UDim2.fromOffset(PW - 150, barY + 2); volIco.Size = UDim2.fromOffset(15, 15)
+    volIco.BackgroundTransparency = 1; volIco.ImageColor3 = DIM; volIco.ZIndex = 3; volIco.Parent = parent
+    loadIcon(volIco, "volume-2", DIM)
+    local volSet = makeSlider(parent, PW - 128, barY + 5, 108, 4, function(f) if sound then sound.Volume = f end end)
+    volSet(0.6)
+    -- progress
+    local tCur = Instance.new("TextLabel")
+    tCur.Position = UDim2.fromOffset(16, barY + 30); tCur.Size = UDim2.fromOffset(44, 14)
+    tCur.BackgroundTransparency = 1; tCur.Font = Theme.fonts.caption; tCur.Text = "0:00"
+    tCur.TextSize = 11; tCur.TextColor3 = DIM; tCur.TextXAlignment = Enum.TextXAlignment.Left; tCur.ZIndex = 3; tCur.Parent = parent
+    local tEnd = Instance.new("TextLabel")
+    tEnd.AnchorPoint = Vector2.new(1, 0); tEnd.Position = UDim2.fromOffset(PW - 16, barY + 30); tEnd.Size = UDim2.fromOffset(44, 14)
+    tEnd.BackgroundTransparency = 1; tEnd.Font = Theme.fonts.caption; tEnd.Text = "0:00"
+    tEnd.TextSize = 11; tEnd.TextColor3 = DIM; tEnd.TextXAlignment = Enum.TextXAlignment.Right; tEnd.ZIndex = 3; tEnd.Parent = parent
+    local progSet, progDrag = makeSlider(parent, 64, barY + 33, PW - 128, 5, function(f)
         if sound and sound.TimeLength > 0 then sound.TimePosition = f * sound.TimeLength end
     end)
-
-    -- controls (plain icons, play larger, no circle)
+    -- controls
     local playIco
     local function ctrl(cx, size, icon)
         local b = Instance.new("TextButton")
-        b.AnchorPoint = Vector2.new(0.5, 0.5)
-        b.Position = UDim2.fromOffset(cx, 104)
-        b.Size = UDim2.fromOffset(size + 12, size + 12)
-        b.BackgroundTransparency = 1
-        b.AutoButtonColor = false
-        b.Text = ""
-        b.ZIndex = 3
-        b.Parent = panel
+        b.AnchorPoint = Vector2.new(0.5, 0.5); b.Position = UDim2.fromOffset(cx, barY + 74)
+        b.Size = UDim2.fromOffset(size + 12, size + 12); b.BackgroundTransparency = 1
+        b.AutoButtonColor = false; b.Text = ""; b.ZIndex = 3; b.Parent = parent
         local ic = Instance.new("ImageLabel")
-        ic.AnchorPoint = Vector2.new(0.5, 0.5)
-        ic.Position = UDim2.fromScale(0.5, 0.5)
-        ic.Size = UDim2.fromOffset(size, size)
-        ic.BackgroundTransparency = 1
-        ic.ImageColor3 = Color3.fromRGB(225, 225, 232)
-        ic.ZIndex = 4
-        ic.Parent = b
-        loadIcon(ic, icon, Color3.fromRGB(225, 225, 232))
+        ic.AnchorPoint = Vector2.new(0.5, 0.5); ic.Position = UDim2.fromScale(0.5, 0.5)
+        ic.Size = UDim2.fromOffset(size, size); ic.BackgroundTransparency = 1
+        ic.ImageColor3 = Color3.fromRGB(228, 228, 234); ic.ZIndex = 4; ic.Parent = b
+        loadIcon(ic, icon, Color3.fromRGB(228, 228, 234))
         return b, ic
     end
     local cx = PW / 2
-    local prevBtn = ctrl(cx - 62, 26, "skip-back")
-    local playBtn, playIcoRef = ctrl(cx, 38, "play")
-    playIco = playIcoRef
-    local nextBtn = ctrl(cx + 62, 26, "skip-forward")
+    local prevBtn = ctrl(cx - 54, 24, "skip-back")
+    local playBtn, playIcoRef = ctrl(cx, 34, "play"); playIco = playIcoRef
+    local nextBtn = ctrl(cx + 54, 24, "skip-forward")
+    local refresh = Instance.new("TextButton")
+    refresh.AnchorPoint = Vector2.new(1, 0.5); refresh.Position = UDim2.fromOffset(PW - 16, barY + 74)
+    refresh.Size = UDim2.fromOffset(64, 22); refresh.BackgroundTransparency = 1; refresh.AutoButtonColor = false
+    refresh.Font = Theme.fonts.caption; refresh.Text = "Refresh"; refresh.TextSize = 12
+    refresh.TextColor3 = Color3.fromRGB(150, 150, 160); refresh.TextXAlignment = Enum.TextXAlignment.Right
+    refresh.ZIndex = 3; refresh.Parent = parent
+    refresh.MouseEnter:Connect(function() refresh.TextColor3 = WHITE end)
+    refresh.MouseLeave:Connect(function() refresh.TextColor3 = Color3.fromRGB(150, 150, 160) end)
 
+    -- ---- data ----
+    local files, view, index, rows = {}, {}, 0, {}
     local function fmt(s) s = math.max(0, math.floor(s or 0)); return ("%d:%02d"):format(math.floor(s / 60), s % 60) end
+    local function nameOf(p) return ((p:match("([^/\\]+)$") or p):gsub("%.%w+$", "")) end
 
-    local function playIndex(i)
-        if #files == 0 then return end
-        index = ((i - 1) % #files) + 1
+    local function highlight()
+        for _, r in ipairs(rows) do
+            r.frame.BackgroundTransparency = (view[index] == r.path) and 0.05 or 0.55
+        end
+    end
+    local function playAt(i)
+        if #view == 0 then return end
+        index = ((i - 1) % #view) + 1
         stopSound()
-        local path = files[index]
+        local path = view[index]
         local ok, id = pcall(function() return getcustomasset(path) end)
         if not ok or not id then trackTxt.Text = "Could not load track"; return end
-        sound = Instance.new("Sound")
-        sound.SoundId = id
-        sound.Volume = 0.6
-        sound.Parent = game:GetService("SoundService")
-        sound:Play()
-        -- filename -> nice title
-        local name = path:match("([^/\\]+)$") or path
-        name = name:gsub("%.%w+$", "")
-        trackTxt.Text = name
-        loadIcon(playIco, "pause", WHITE)
-        sound.Ended:Connect(function() if sound and not closing then playIndex(index + 1) end end)
+        sound = Instance.new("Sound"); sound.SoundId = id; sound.Volume = 0.6
+        sound.Parent = game:GetService("SoundService"); sound:Play()
+        trackTxt.Text = nameOf(path); loadIcon(playIco, "pause", Color3.fromRGB(228, 228, 234))
+        highlight()
+        sound.Ended:Connect(function() if sound and alive then playAt(index + 1) end end)
+    end
+
+    local function render(q)
+        for _, r in ipairs(rows) do r.frame:Destroy() end
+        rows, view = {}, {}
+        q = (q or ""):lower()
+        for _, path in ipairs(files) do
+            local nm = nameOf(path)
+            if q == "" or nm:lower():find(q, 1, true) then
+                view[#view + 1] = path
+                local n = #view
+                local row = Instance.new("TextButton")
+                row.Size = UDim2.new(1, -4, 0, 34); row.BackgroundColor3 = CARD; row.BackgroundTransparency = 0.55
+                row.AutoButtonColor = false; row.Text = ""; row.BorderSizePixel = 0; row.LayoutOrder = n; row.ZIndex = 3; row.Parent = scroll
+                Util.corner(row, 8)
+                local ri = Instance.new("ImageLabel")
+                ri.Position = UDim2.fromOffset(12, 9); ri.Size = UDim2.fromOffset(16, 16); ri.BackgroundTransparency = 1
+                ri.ImageColor3 = SUB; ri.ZIndex = 4; ri.Parent = row
+                loadIcon(ri, "music", SUB)
+                local rt = Instance.new("TextLabel")
+                rt.Position = UDim2.fromOffset(38, 0); rt.Size = UDim2.fromOffset(PW - 90, 34); rt.BackgroundTransparency = 1
+                rt.Font = Theme.fonts.body; rt.Text = nm; rt.TextSize = 13; rt.TextColor3 = WHITE
+                rt.TextXAlignment = Enum.TextXAlignment.Left; rt.TextTruncate = Enum.TextTruncate.AtEnd; rt.ZIndex = 4; rt.Parent = row
+                row.MouseButton1Click:Connect(function() playAt(n) end)
+                rows[#rows + 1] = { frame = row, path = path }
+            end
+        end
+        empty.Visible = (#view == 0)
+        highlight()
     end
 
     local function scan()
@@ -6879,58 +6830,31 @@ function Music.openMP3()
                 if ext and AUDIO_EXT[ext:lower()] then files[#files + 1] = f end
             end
         end
-        if #files > 0 then
-            emptyTxt.Text = (#files == 1 and "1 track loaded") or (#files .. " tracks loaded")
-        else
-            emptyTxt.Text = "Drop .mp3 files into\nSYNC/songs folder"
-            trackTxt.Text = "No Track"
-        end
+        render(sBox.Text)
     end
 
-    prevBtn.MouseButton1Click:Connect(function() if #files > 0 then playIndex(index - 1) end end)
-    nextBtn.MouseButton1Click:Connect(function() if #files > 0 then playIndex(index + 1) end end)
+    sBox:GetPropertyChangedSignal("Text"):Connect(function() render(sBox.Text) end)
+    prevBtn.MouseButton1Click:Connect(function() if #view > 0 then playAt(index - 1) end end)
+    nextBtn.MouseButton1Click:Connect(function() if #view > 0 then playAt(index + 1) end end)
     playBtn.MouseButton1Click:Connect(function()
-        if not sound then if #files > 0 then playIndex(index == 0 and 1 or index) end return end
-        if sound.Playing then sound:Pause(); loadIcon(playIco, "play", WHITE)
-        else sound:Resume(); loadIcon(playIco, "pause", WHITE) end
+        if not sound then if #view > 0 then playAt(index == 0 and 1 or index) end return end
+        if sound.Playing then sound:Pause(); loadIcon(playIco, "play", Color3.fromRGB(228, 228, 234))
+        else sound:Resume(); loadIcon(playIco, "pause", Color3.fromRGB(228, 228, 234)) end
     end)
-
-    -- volume slider + refresh (bottom of the panel)
-    local PH = H - 300 - 16
-    local volSet = makeSlider(panel, 20, PH - 26, 96, 5, function(f) if sound then sound.Volume = f end end)
-    volSet(0.6)
-    local refresh = Instance.new("TextButton")
-    refresh.AnchorPoint = Vector2.new(1, 0.5)
-    refresh.Position = UDim2.fromOffset(PW - 18, PH - 24)
-    refresh.Size = UDim2.fromOffset(70, 20)
-    refresh.BackgroundTransparency = 1
-    refresh.AutoButtonColor = false
-    refresh.Font = Theme.fonts.caption
-    refresh.Text = "Refresh"
-    refresh.TextSize = 12
-    refresh.TextColor3 = Color3.fromRGB(150, 150, 160)
-    refresh.TextXAlignment = Enum.TextXAlignment.Right
-    refresh.ZIndex = 3
-    refresh.Parent = panel
-    refresh.MouseEnter:Connect(function() refresh.TextColor3 = WHITE end)
-    refresh.MouseLeave:Connect(function() refresh.TextColor3 = Color3.fromRGB(150, 150, 160) end)
     refresh.MouseButton1Click:Connect(scan)
 
-    -- progress update loop
     task.spawn(function()
-        while gui.Parent do
+        while alive do
             if sound and sound.TimeLength and sound.TimeLength > 0 then
-                timeCur.Text = fmt(sound.TimePosition)
-                timeEnd.Text = fmt(sound.TimeLength)
-                if not progDragging() then progSet(sound.TimePosition / sound.TimeLength) end
+                tCur.Text = fmt(sound.TimePosition); tEnd.Text = fmt(sound.TimeLength)
+                if not progDrag() then progSet(sound.TimePosition / sound.TimeLength) end
             end
             task.wait(0.3)
         end
-        stopSound()
     end)
 
     scan()
-    return { close = close }
+    return function() alive = false; stopSound() end
 end
 
 -- ============================================================================
@@ -6992,80 +6916,22 @@ local function safeName(s)
     return (tostring(s):gsub("[^%w%s%-_%.]", ""):gsub("%s+", " "):sub(1, 60))
 end
 
-function Music.openYT()
-    local host = (gethui and gethui()) or game:GetService("CoreGui")
-    if host:FindFirstChild("SYNC_YouTube") then return end
+local function buildYT(parent, PW, PH, setSub)
     pcall(function()
         if type(makefolder) == "function" then
             if not isfolder("SYNC") then makefolder("SYNC") end
             if not isfolder(SND_DIR) then makefolder(SND_DIR) end
         end
     end)
-
-    local W, H = 470, 524
-    local gui = Instance.new("ScreenGui")
-    gui.Name = "SYNC_YouTube"
-    Util.mount(gui)
-
-    local win = Instance.new("Frame")
-    win.AnchorPoint = Vector2.new(0.5, 0.5)
-    win.Position = UDim2.fromScale(0.5, 0.46)
-    win.Size = UDim2.fromOffset(W, H)
-    win.BackgroundColor3 = Color3.fromRGB(14, 14, 17)
-    win.BorderSizePixel = 0
-    win.ClipsDescendants = true
-    win.Parent = gui
-    Util.corner(win, 18)
-    Util.stroke(win, WHITE, 1, 0.9)
-    Util.shadow(win, { blur = 55, transparency = 0.35, offset = UDim2.fromOffset(0, 22) })
-    local sc = Instance.new("UIScale"); sc.Scale = 0.94; sc.Parent = win
-    win.BackgroundTransparency = 1
-    Util.tween(sc, { Scale = 1 }, 0.22, Enum.EasingStyle.Back)
-    Util.tween(win, { BackgroundTransparency = 0 }, 0.18)
-
-    local closing = false
-    local function close()
-        if closing then return end
-        closing = true
-        Util.tween(sc, { Scale = 0.94 }, 0.14)
-        Util.tween(win, { BackgroundTransparency = 1 }, 0.14)
-        task.delay(0.16, function() gui:Destroy() end)
-    end
-    Util.closeOnEscape(gui, close)
-
-    local ytIco = Instance.new("ImageLabel")
-    ytIco.Size = UDim2.fromOffset(20, 20); ytIco.Position = UDim2.fromOffset(20, 18)
-    ytIco.BackgroundTransparency = 1; ytIco.ImageColor3 = RED; ytIco.Parent = win
-    loadIcon(ytIco, "youtube", RED)
-    local hTitle = Instance.new("TextLabel")
-    hTitle.Text = "YouTube"; hTitle.Position = UDim2.fromOffset(48, 14)
-    hTitle.Size = UDim2.fromOffset(200, 22); hTitle.BackgroundTransparency = 1
-    hTitle.Font = Theme.fonts.title; hTitle.TextSize = 18; hTitle.TextColor3 = WHITE
-    hTitle.TextXAlignment = Enum.TextXAlignment.Left; hTitle.Parent = win
-    local hSub = Instance.new("TextLabel")
-    hSub.Text = "Search a song or paste a link"; hSub.Position = UDim2.fromOffset(48, 37)
-    hSub.Size = UDim2.fromOffset(300, 16); hSub.BackgroundTransparency = 1
-    hSub.Font = Theme.fonts.caption; hSub.TextSize = 12; hSub.TextColor3 = SUB
-    hSub.TextXAlignment = Enum.TextXAlignment.Left; hSub.Parent = win
-    local dragBar = Instance.new("Frame"); dragBar.Size = UDim2.new(1, 0, 0, 44)
-    dragBar.BackgroundTransparency = 1; dragBar.Parent = win
-    Util.draggable(win, dragBar)
-    local xBtn = Instance.new("TextButton")
-    xBtn.AnchorPoint = Vector2.new(1, 0); xBtn.Position = UDim2.fromOffset(W - 16, 14)
-    xBtn.Size = UDim2.fromOffset(22, 22); xBtn.BackgroundTransparency = 1; xBtn.AutoButtonColor = false
-    xBtn.Font = Theme.fonts.body; xBtn.Text = "\195\151"; xBtn.TextSize = 20
-    xBtn.TextColor3 = Color3.fromRGB(160, 160, 170); xBtn.Parent = win
-    xBtn.MouseEnter:Connect(function() xBtn.TextColor3 = WHITE end)
-    xBtn.MouseLeave:Connect(function() xBtn.TextColor3 = Color3.fromRGB(160, 160, 170) end)
-    xBtn.MouseButton1Click:Connect(close)
+    setSub("Search or paste a link")
 
     -- search bar
     local sh = Instance.new("Frame")
-    sh.Position = UDim2.fromOffset(16, 60); sh.Size = UDim2.fromOffset(W - 32, 42)
-    sh.BackgroundColor3 = Color3.fromRGB(24, 24, 28); sh.BorderSizePixel = 0; sh.Parent = win
+    sh.Position = UDim2.fromOffset(16, 6); sh.Size = UDim2.fromOffset(PW - 32, 40)
+    sh.BackgroundColor3 = Color3.fromRGB(24, 24, 28); sh.BorderSizePixel = 0; sh.Parent = parent
     Util.corner(sh, 10); local sst = Util.stroke(sh, Color3.fromRGB(70, 70, 80), 1, 0.55)
     local sBox = Instance.new("TextBox")
-    sBox.Position = UDim2.fromOffset(16, 0); sBox.Size = UDim2.fromOffset(W - 32 - 60, 42)
+    sBox.Position = UDim2.fromOffset(16, 0); sBox.Size = UDim2.fromOffset(PW - 32 - 56, 40)
     sBox.BackgroundTransparency = 1; sBox.Font = Theme.fonts.body
     sBox.PlaceholderText = "Search YouTube or paste a link..."; sBox.PlaceholderColor3 = DIM
     sBox.Text = ""; sBox.TextSize = 14; sBox.TextColor3 = WHITE
@@ -7073,8 +6939,8 @@ function Music.openYT()
     sBox.Focused:Connect(function() Util.tween(sst, { Transparency = 0.1, Color = RED }, 0.15) end)
     sBox.FocusLost:Connect(function() Util.tween(sst, { Transparency = 0.55, Color = Color3.fromRGB(70, 70, 80) }, 0.15) end)
     local sBtn = Instance.new("TextButton")
-    sBtn.AnchorPoint = Vector2.new(1, 0.5); sBtn.Position = UDim2.new(1, -8, 0.5, 0)
-    sBtn.Size = UDim2.fromOffset(40, 30); sBtn.BackgroundColor3 = RED; sBtn.AutoButtonColor = false
+    sBtn.AnchorPoint = Vector2.new(1, 0.5); sBtn.Position = UDim2.new(1, -6, 0.5, 0)
+    sBtn.Size = UDim2.fromOffset(38, 30); sBtn.BackgroundColor3 = RED; sBtn.AutoButtonColor = false
     sBtn.Text = ""; sBtn.BorderSizePixel = 0; sBtn.Parent = sh
     Util.corner(sBtn, 8)
     local sBtnIc = Instance.new("ImageLabel")
@@ -7083,37 +6949,44 @@ function Music.openYT()
     sBtnIc.ImageColor3 = WHITE; sBtnIc.Parent = sBtn
     loadIcon(sBtnIc, "search", WHITE)
 
-    -- results
+    -- results (padded so card strokes aren't clipped by the scroll edge)
+    local listY = 54
+    local listH = PH - listY - 10
     local scroll = Instance.new("ScrollingFrame")
-    scroll.Position = UDim2.fromOffset(12, 114); scroll.Size = UDim2.fromOffset(W - 24, H - 114 - 14)
+    scroll.Position = UDim2.fromOffset(12, listY); scroll.Size = UDim2.fromOffset(PW - 24, listH)
     scroll.BackgroundTransparency = 1; scroll.BorderSizePixel = 0
     scroll.ScrollBarThickness = 3; scroll.ScrollBarImageColor3 = Color3.fromRGB(80, 80, 90)
-    scroll.CanvasSize = UDim2.new(); scroll.Parent = win
+    scroll.ScrollBarImageTransparency = 0.35; scroll.CanvasSize = UDim2.new(); scroll.ZIndex = 3; scroll.Parent = parent
+    local spad = Instance.new("UIPadding")
+    spad.PaddingLeft = UDim.new(0, 6); spad.PaddingRight = UDim.new(0, 10); spad.PaddingTop = UDim.new(0, 4); spad.Parent = scroll
     local layout = Instance.new("UIListLayout")
     layout.Padding = UDim.new(0, 8); layout.SortOrder = Enum.SortOrder.LayoutOrder; layout.Parent = scroll
     Util.autoCanvas(scroll, "Y")
+    scrollFade(parent, 12, listY, PW - 24, 16, false)
+    scrollFade(parent, 12, listY + listH - 16, PW - 24, 16, true)
     local status = Instance.new("TextLabel")
-    status.AnchorPoint = Vector2.new(0.5, 0); status.Position = UDim2.fromScale(0.5, 0.25)
-    status.Size = UDim2.fromOffset(W - 60, 40); status.BackgroundTransparency = 1
+    status.AnchorPoint = Vector2.new(0.5, 0); status.Position = UDim2.fromScale(0.5, 0.22)
+    status.Size = UDim2.fromOffset(PW - 80, 40); status.BackgroundTransparency = 1
     status.Font = Theme.fonts.caption; status.Text = "Search for a song or paste a YouTube link."
     status.TextSize = 13; status.TextColor3 = SUB; status.TextWrapped = true
-    status.ZIndex = 2; status.Parent = scroll
+    status.ZIndex = 3; status.Parent = scroll
 
     local function clearResults()
         for _, c in ipairs(scroll:GetChildren()) do
-            if c ~= layout and c ~= status then c:Destroy() end
+            if c ~= layout and c ~= status and c ~= spad then c:Destroy() end
         end
     end
 
+    local cardW = PW - 24 - 16 -- scroll width minus padding
     local function resultCard(i, id, title, channel, dur)
         local c = Instance.new("Frame")
-        c.Size = UDim2.new(1, -6, 0, 64); c.BackgroundColor3 = CARD; c.BorderSizePixel = 0
-        c.LayoutOrder = i; c.Parent = scroll
+        c.Size = UDim2.new(1, 0, 0, 64); c.BackgroundColor3 = CARD; c.BorderSizePixel = 0
+        c.LayoutOrder = i; c.ZIndex = 3; c.Parent = scroll
         Util.corner(c, 10); Util.stroke(c, WHITE, 1, 0.93)
         local thumb = Instance.new("ImageLabel")
         thumb.Position = UDim2.fromOffset(8, 8); thumb.Size = UDim2.fromOffset(84, 48)
         thumb.BackgroundColor3 = Color3.fromRGB(30, 30, 36); thumb.BorderSizePixel = 0
-        thumb.ScaleType = Enum.ScaleType.Crop; thumb.ZIndex = 2; thumb.Parent = c
+        thumb.ScaleType = Enum.ScaleType.Crop; thumb.ZIndex = 4; thumb.Parent = c
         Util.corner(thumb, 7)
         task.spawn(function()
             local url = "https://images.weserv.nl/?url=" .. HttpService:UrlEncode("i.ytimg.com/vi/" .. id .. "/mqdefault.jpg")
@@ -7122,26 +6995,28 @@ function Music.openYT()
             if aid and thumb.Parent then thumb.Image = aid end
         end)
         local t = Instance.new("TextLabel")
-        t.Position = UDim2.fromOffset(102, 10); t.Size = UDim2.fromOffset(W - 24 - 102 - 44, 20)
+        t.Position = UDim2.fromOffset(102, 10); t.Size = UDim2.fromOffset(cardW - 102 - 48, 20)
         t.BackgroundTransparency = 1; t.Font = Theme.fonts.body; t.Text = title
         t.TextSize = 13; t.TextColor3 = WHITE; t.TextXAlignment = Enum.TextXAlignment.Left
-        t.TextTruncate = Enum.TextTruncate.AtEnd; t.ZIndex = 2; t.Parent = c
+        t.TextTruncate = Enum.TextTruncate.AtEnd; t.ZIndex = 4; t.Parent = c
         local sub = Instance.new("TextLabel")
-        sub.Position = UDim2.fromOffset(102, 32); sub.Size = UDim2.fromOffset(W - 24 - 102 - 44, 16)
+        sub.Position = UDim2.fromOffset(102, 32); sub.Size = UDim2.fromOffset(cardW - 102 - 48, 16)
         sub.BackgroundTransparency = 1; sub.Font = Theme.fonts.caption
         sub.Text = channel .. (dur and dur > 0 and ("  \195\151  " .. ("%d:%02d"):format(math.floor(dur / 60), dur % 60)) or "")
         sub.TextSize = 11; sub.TextColor3 = SUB; sub.TextXAlignment = Enum.TextXAlignment.Left
-        sub.TextTruncate = Enum.TextTruncate.AtEnd; sub.ZIndex = 2; sub.Parent = c
+        sub.TextTruncate = Enum.TextTruncate.AtEnd; sub.ZIndex = 4; sub.Parent = c
         local dl = Instance.new("TextButton")
         dl.AnchorPoint = Vector2.new(1, 0.5); dl.Position = UDim2.new(1, -12, 0.5, 0)
         dl.Size = UDim2.fromOffset(30, 30); dl.BackgroundColor3 = Color3.fromRGB(36, 36, 42)
-        dl.AutoButtonColor = false; dl.Text = ""; dl.BorderSizePixel = 0; dl.ZIndex = 2; dl.Parent = c
+        dl.AutoButtonColor = false; dl.Text = ""; dl.BorderSizePixel = 0; dl.ZIndex = 4; dl.Parent = c
         Util.corner(dl, 8)
         local dlIc = Instance.new("ImageLabel")
         dlIc.AnchorPoint = Vector2.new(0.5, 0.5); dlIc.Position = UDim2.fromScale(0.5, 0.5)
         dlIc.Size = UDim2.fromOffset(15, 15); dlIc.BackgroundTransparency = 1
-        dlIc.ImageColor3 = RED; dlIc.ZIndex = 3; dlIc.Parent = dl
+        dlIc.ImageColor3 = RED; dlIc.ZIndex = 5; dlIc.Parent = dl
         loadIcon(dlIc, "download", RED)
+        dl.MouseEnter:Connect(function() Util.tween(dl, { BackgroundColor3 = Color3.fromRGB(52, 40, 42) }, 0.12) end)
+        dl.MouseLeave:Connect(function() Util.tween(dl, { BackgroundColor3 = Color3.fromRGB(36, 36, 42) }, 0.12) end)
 
         local busy = false
         dl.MouseButton1Click:Connect(function()
@@ -7158,7 +7033,7 @@ function Music.openYT()
                 local ok, data = pcall(function() return game:HttpGet(mp3url, true) end)
                 if ok and data and #data > 2000 then
                     pcall(function() writefile(SND_DIR .. "/" .. safeName(title) .. ".mp3", data) end)
-                    sub.Text = "Downloaded to library"; sub.TextColor3 = Color3.fromRGB(120, 210, 150)
+                    sub.Text = "Downloaded - open the MP3 tab"; sub.TextColor3 = Color3.fromRGB(120, 210, 150)
                 else
                     sub.Text = "Download failed, try again"; sub.TextColor3 = Color3.fromRGB(240, 160, 90)
                 end
@@ -7173,22 +7048,18 @@ function Music.openYT()
         if q == "" or searching then return end
         searching = true
         clearResults()
-        status.Text = "Searching..."
-        status.Visible = true
+        status.Text = "Searching..."; status.Visible = true
         task.spawn(function()
-            -- a pasted link -> single result for that id
             local direct = ytId(q)
             if q:find("youtu") and direct then
                 status.Visible = false
                 resultCard(1, direct, "Video from link", "Paste  \195\151  tap download", 0)
-                searching = false
-                return
+                searching = false; return
             end
             local items = ytSearch(q)
             if not items then
                 status.Text = "Couldn't reach search. Try again in a moment."
-                searching = false
-                return
+                searching = false; return
             end
             status.Visible = false
             local n = 0
@@ -7207,14 +7078,14 @@ function Music.openYT()
     sBtn.MouseButton1Click:Connect(doSearch)
     sBox.FocusLost:Connect(function(enter) if enter then doSearch() end end)
 
-    return { close = close }
+    return function() end
 end
 
 function Music.open()
     local host = (gethui and gethui()) or game:GetService("CoreGui")
     if host:FindFirstChild("SYNC_Music") then return end
 
-    local cardW, cardH = 560, 440
+    local cardW, cardH = 588, 528
     local TB = 38
 
     local gui = Instance.new("ScreenGui")
@@ -7329,33 +7200,60 @@ function Music.open()
     hSub.ZIndex = 3
     hSub.Parent = win
 
-    local plus = Instance.new("TextButton")
-    plus.AnchorPoint = Vector2.new(1, 0)
-    plus.Position = UDim2.fromOffset(cardW - 20, TB + 14)
-    plus.Size = UDim2.fromOffset(32, 32)
-    plus.BackgroundColor3 = CARD
-    plus.BackgroundTransparency = 0.2
-    plus.AutoButtonColor = false
-    plus.Font = Theme.fonts.body
-    plus.Text = "+"
-    plus.TextSize = 22
-    plus.TextColor3 = Color3.fromRGB(180, 180, 188)
-    plus.BorderSizePixel = 0
-    plus.ZIndex = 3
-    plus.Parent = win
-    Util.corner(plus, 16)
-    Util.stroke(plus, WHITE, 1, 0.85)
-    plus.MouseEnter:Connect(function() plus.TextColor3 = WHITE end)
-    plus.MouseLeave:Connect(function() plus.TextColor3 = Color3.fromRGB(180, 180, 188) end)
+    local function setSub(t) hSub.Text = t end
 
-    -- body container (state screens build in here)
+    -- tab bar: Spotify / YouTube / MP3
+    local switchTab -- forward declared
+    local tabDefs = {
+        { key = "spotify", label = "Spotify", x = 48, w = 58 },
+        { key = "youtube", label = "YouTube", x = 122, w = 66 },
+        { key = "mp3",     label = "MP3",     x = 204, w = 34 },
+    }
+    local tabBtns = {}
+    local tabY = TB + 44
+    for _, td in ipairs(tabDefs) do
+        local tb = Instance.new("TextButton")
+        tb.Position = UDim2.fromOffset(td.x, tabY)
+        tb.Size = UDim2.fromOffset(td.w, 28)
+        tb.BackgroundTransparency = 1
+        tb.AutoButtonColor = false
+        tb.Font = Theme.fonts.title
+        tb.Text = td.label
+        tb.TextSize = 14
+        tb.TextColor3 = SUB
+        tb.ZIndex = 3
+        tb.Parent = win
+        local ul = Instance.new("Frame")
+        ul.AnchorPoint = Vector2.new(0.5, 1)
+        ul.Position = UDim2.new(0.5, 0, 1, 2)
+        ul.Size = UDim2.fromOffset(td.w, 2)
+        ul.BackgroundColor3 = WHITE
+        ul.BorderSizePixel = 0
+        ul.BackgroundTransparency = 1
+        ul.ZIndex = 3
+        ul.Parent = tb
+        Util.corner(ul, 1)
+        tabBtns[td.key] = { btn = tb, ul = ul }
+        tb.MouseButton1Click:Connect(function() switchTab(td.key) end)
+    end
+    -- hairline under the tab row
+    local tabLine = Instance.new("Frame")
+    tabLine.Position = UDim2.fromOffset(20, tabY + 30)
+    tabLine.Size = UDim2.new(1, -40, 0, 1)
+    tabLine.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+    tabLine.BackgroundTransparency = 0.55
+    tabLine.BorderSizePixel = 0
+    tabLine.ZIndex = 3
+    tabLine.Parent = win
+
+    -- body container (tab content builds in here)
     local body = Instance.new("Frame")
-    body.Position = UDim2.fromOffset(0, TB + 60)
-    body.Size = UDim2.fromOffset(cardW, cardH - TB - 60)
+    body.Position = UDim2.fromOffset(0, TB + 82)
+    body.Size = UDim2.fromOffset(cardW, cardH - TB - 82)
     body.BackgroundTransparency = 1
     body.ZIndex = 3
     body.Parent = win
-    local BW, BH = cardW, cardH - TB - 60
+    local BW, BH = cardW, cardH - TB - 82
 
     local function clearBody()
         for _, c in ipairs(body:GetChildren()) do c:Destroy() end
@@ -7755,61 +7653,41 @@ function Music.open()
         end)
     end
 
-    -- + button: pick a music source (Spotify is the main screen)
-    local menu = Instance.new("Frame")
-    menu.AnchorPoint = Vector2.new(1, 0)
-    menu.Position = UDim2.fromOffset(cardW - 20, TB + 50)
-    menu.Size = UDim2.fromOffset(196, 128)
-    menu.BackgroundColor3 = CARD
-    menu.BorderSizePixel = 0
-    menu.Visible = false
-    menu.ZIndex = 20
-    menu.Parent = win
-    Util.corner(menu, 10)
-    Util.stroke(menu, WHITE, 1, 0.85)
-    Util.shadow(menu, { blur = 30, transparency = 0.4, offset = UDim2.fromOffset(0, 8) })
-    local function menuItem(y, label, icon, cb)
-        local it = Instance.new("TextButton")
-        it.Position = UDim2.fromOffset(6, y)
-        it.Size = UDim2.fromOffset(184, 36)
-        it.BackgroundColor3 = Color3.fromRGB(44, 44, 52)
-        it.BackgroundTransparency = 1
-        it.AutoButtonColor = false
-        it.Text = ""
-        it.ZIndex = 21
-        it.Parent = menu
-        Util.corner(it, 7)
-        local ic = Instance.new("ImageLabel")
-        ic.Size = UDim2.fromOffset(16, 16); ic.Position = UDim2.fromOffset(12, 10)
-        ic.BackgroundTransparency = 1; ic.ImageColor3 = WHITE; ic.ZIndex = 22; ic.Parent = it
-        loadIcon(ic, icon, WHITE)
-        local t = Instance.new("TextLabel")
-        t.Position = UDim2.fromOffset(38, 0); t.Size = UDim2.fromOffset(140, 36)
-        t.BackgroundTransparency = 1; t.Font = Theme.fonts.body; t.Text = label
-        t.TextSize = 14; t.TextColor3 = WHITE; t.TextXAlignment = Enum.TextXAlignment.Left
-        t.ZIndex = 22; t.Parent = it
-        it.MouseEnter:Connect(function() Util.tween(it, { BackgroundTransparency = 0.4 }, 0.1) end)
-        it.MouseLeave:Connect(function() Util.tween(it, { BackgroundTransparency = 1 }, 0.1) end)
-        it.MouseButton1Click:Connect(function() menu.Visible = false; cb() end)
+    -- ===== tab switching =====
+    local currentTab, currentCleanup = nil, nil
+
+    local function setActiveTab(key)
+        for k, t in pairs(tabBtns) do
+            local active = (k == key)
+            Util.tween(t.btn, { TextColor3 = active and WHITE or SUB }, 0.15)
+            Util.tween(t.ul, { BackgroundTransparency = active and 0 or 1 }, 0.15)
+        end
     end
-    menuItem(6, "Spotify", "music", function() end)
-    menuItem(44, "MP3 Player", "disc-3", function() Music.openMP3() end)
-    menuItem(84, "YouTube", "youtube", function() Music.openYT() end)
 
-    plus.MouseButton1Click:Connect(function() menu.Visible = not menu.Visible end)
-    win.MouseButton1Click:Connect(function() if menu.Visible then menu.Visible = false end end)
-
-    -- open: reconnect with a saved token, else show connect
-    local saved = Util.load(TOKEN_KEY)
-    if saved and saved ~= "" then
-        showConnect() -- render immediately, then verify + swap to player
-        task.spawn(function()
-            local _, status = spotify("GET", "/me", saved)
-            if status == 200 and gui.Parent then showPlayer(saved) end
-        end)
-    else
+    local function showSpotify()
         showConnect()
+        local saved = Util.load(TOKEN_KEY)
+        if saved and saved ~= "" then
+            task.spawn(function()
+                local _, status = spotify("GET", "/me", saved)
+                if status == 200 and gui.Parent and currentTab == "spotify" then showPlayer(saved) end
+            end)
+        end
     end
+
+    switchTab = function(key)
+        if currentTab == key then return end
+        if currentCleanup then pcall(currentCleanup); currentCleanup = nil end
+        pollAlive = false
+        currentTab = key
+        clearBody()
+        setActiveTab(key)
+        if key == "spotify" then showSpotify()
+        elseif key == "youtube" then currentCleanup = buildYT(body, BW, BH, setSub)
+        elseif key == "mp3" then currentCleanup = buildMP3(body, BW, BH, setSub) end
+    end
+
+    switchTab("spotify")
 
     return { close = close }
 end
