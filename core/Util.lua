@@ -277,21 +277,13 @@ function Util.shadow(target, opts)
     return okP and s or nil
 end
 
--- Close a window when Escape is pressed. Ignores the keystroke while a TextBox
--- is focused (so typing Escape in search/chat doesn't nuke the window), and
--- disconnects itself once the gui is gone.
-function Util.closeOnEscape(gui, closeFn)
-    local UIS = game:GetService("UserInputService")
-    local conn
-    conn = UIS.InputBegan:Connect(function(input, processed)
-        if input.KeyCode == Enum.KeyCode.Escape and not UIS:GetFocusedTextBox() then
-            closeFn()
-        end
-    end)
-    gui.Destroying:Connect(function()
-        if conn then conn:Disconnect() end
-    end)
-    return conn
+-- Escape is Roblox's own key (it opens the in-game settings/menu). SYNC used to
+-- bind it to close the focused window, which stole the keystroke and slammed the
+-- app shut every time someone reached for the Roblox menu. Windows already close
+-- from the red traffic light, so we leave Escape alone now. Kept as a no-op so
+-- existing call sites don't need touching.
+function Util.closeOnEscape(_gui, _closeFn)
+    return nil
 end
 
 -- Remember a centered window's dragged position. Restores the saved pixel
