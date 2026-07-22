@@ -380,18 +380,26 @@ end
 local function ytDownload(id)
     if not backendReady() then return nil, "backend not set up yet" end
     local url = musicApiBase() .. "/audio?v=" .. id
-    -- prefer the executor request (raw binary body); fall back to HttpGet
-    if _req then
-        local ok, res = pcall(_req, { Url = url, Method = "GET" })
-        if ok and res then
-            local code = res.StatusCode or (res.Success and 200) or 0
-            if code == 200 and res.Body and #res.Body > 4000 then return res.Body end
-            if code ~= 0 and code ~= 200 then return nil, "server " .. tostring(code) end
+    -- Try up to a few times: YouTube intermittently 403s the backend, and a
+    -- Railway container waking from sleep can truncate the first response.
+    -- Use the executor request first (raw binary body) then HttpGet, and only
+    -- accept a body that is plausibly a whole track.
+    local MIN = 40000 -- ~2s of audio; below this it's a stub or an error blob
+    local lastErr = "no audio"
+    for attempt = 1, 3 do
+        if _req then
+            local ok, res = pcall(_req, { Url = url, Method = "GET" })
+            if ok and res then
+                local code = res.StatusCode or (res.Success and 200) or 0
+                if code == 200 and res.Body and #res.Body > MIN then return res.Body end
+                if code ~= 0 and code ~= 200 then lastErr = "server " .. tostring(code) end
+            end
         end
+        local ok2, data = pcall(function() return game:HttpGet(url, true) end)
+        if ok2 and data and #data > MIN then return data end
+        if attempt < 3 then task.wait(1.5) end
     end
-    local ok2, data = pcall(function() return game:HttpGet(url, true) end)
-    if ok2 and data and #data > 4000 then return data end
-    return nil, "no audio"
+    return nil, lastErr
 end
 
 local function safeName(s)
