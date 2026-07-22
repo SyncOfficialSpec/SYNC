@@ -30,6 +30,10 @@ local LINK   = Color3.fromRGB(74, 135, 225)
 
 local TOKEN_KEY = "SpotifyToken"
 local API = "https://api.spotify.com/v1"
+-- Our own audio backend (Railway). Public transcoders all died, so YouTube
+-- audio is fetched from here: GET /audio?v=<id> streams back an mp3.
+-- Override at runtime with Util.save("MusicApiUrl", "https://...") without a rebuild.
+local MUSIC_API = "https://REPLACE-WITH-RAILWAY-URL"
 
 -- lucide icon -> white png (renders black, negate whitens), then tint
 local function loadIcon(img, name, tint)
@@ -344,12 +348,15 @@ local PIPED = {
     "https://pipedapi.kavin.rocks",
     "https://pipedapi.reallyaweso.me",
 }
-local COBALT = {
-    "https://cobalt-backend.canine.tools",
-    "https://cobalt-api.kwiatekmiki.com",
-    "https://co.eepy.today",
-    "https://cobalt.255x.ru",
-}
+local function musicApiBase()
+    local saved = Util.load and Util.load("MusicApiUrl")
+    if saved and #tostring(saved) > 8 then return (tostring(saved):gsub("/+$", "")) end
+    return (MUSIC_API:gsub("/+$", ""))
+end
+
+local function backendReady()
+    return not musicApiBase():find("REPLACE")
+end
 
 local function ytId(url)
     url = tostring(url)
@@ -369,21 +376,22 @@ local function ytSearch(q)
     return nil
 end
 
--- ask a Cobalt instance for a direct mp3 url. Returns url or nil.
-local function ytAudioUrl(youtubeUrl)
-    for _, inst in ipairs(COBALT) do
-        -- newer API shape
-        local _, _, body = Util.httpPost(inst .. "/", { ["Accept"] = "application/json" },
-            HttpService:JSONEncode({ url = youtubeUrl, downloadMode = "audio", audioFormat = "mp3" }))
-        local ok, d = pcall(function() return HttpService:JSONDecode(body or "") end)
-        if ok and d and d.url then return d.url end
-        -- older API shape
-        local _, _, body2 = Util.httpPost(inst .. "/api/json", { ["Accept"] = "application/json" },
-            HttpService:JSONEncode({ url = youtubeUrl, isAudioOnly = true, aFormat = "mp3" }))
-        local ok2, d2 = pcall(function() return HttpService:JSONDecode(body2 or "") end)
-        if ok2 and d2 and d2.url then return d2.url end
+-- pull mp3 bytes for a youtube id from our backend. Returns bytes or nil, err.
+local function ytDownload(id)
+    if not backendReady() then return nil, "backend not set up yet" end
+    local url = musicApiBase() .. "/audio?v=" .. id
+    -- prefer the executor request (raw binary body); fall back to HttpGet
+    if _req then
+        local ok, res = pcall(_req, { Url = url, Method = "GET" })
+        if ok and res then
+            local code = res.StatusCode or (res.Success and 200) or 0
+            if code == 200 and res.Body and #res.Body > 4000 then return res.Body end
+            if code ~= 0 and code ~= 200 then return nil, "server " .. tostring(code) end
+        end
     end
-    return nil
+    local ok2, data = pcall(function() return game:HttpGet(url, true) end)
+    if ok2 and data and #data > 4000 then return data end
+    return nil, "no audio"
 end
 
 local function safeName(s)
@@ -498,18 +506,14 @@ local function buildYT(parent, PW, PH, setSub)
             busy = true
             sub.Text = "Downloading audio..."; sub.TextColor3 = RED
             task.spawn(function()
-                local yurl = "https://www.youtube.com/watch?v=" .. id
-                local mp3url = ytAudioUrl(yurl)
-                if not mp3url then
-                    sub.Text = "Audio service unavailable, try again"; sub.TextColor3 = Color3.fromRGB(240, 160, 90)
-                    busy = false; return
-                end
-                local ok, data = pcall(function() return game:HttpGet(mp3url, true) end)
-                if ok and data and #data > 2000 then
+                local data, err = ytDownload(id)
+                if data then
                     pcall(function() writefile(SND_DIR .. "/" .. safeName(title) .. ".mp3", data) end)
                     sub.Text = "Downloaded - open the MP3 tab"; sub.TextColor3 = Color3.fromRGB(120, 210, 150)
                 else
-                    sub.Text = "Download failed, try again"; sub.TextColor3 = Color3.fromRGB(240, 160, 90)
+                    sub.Text = (err == "backend not set up yet") and "Audio download not set up yet"
+                        or "Download failed, try again"
+                    sub.TextColor3 = Color3.fromRGB(240, 160, 90)
                 end
                 busy = false
             end)
