@@ -9,6 +9,7 @@ local MenuBar     = SYNC.import("os/MenuBar")
 local Home        = SYNC.import("apps/Home")
 local Scripts     = SYNC.import("apps/Scripts")
 local Joiner      = SYNC.import("apps/Joiner")
+local MusicApp    = SYNC.import("apps/Music")
 local DesktopMode = SYNC.import("os/DesktopMode")
 
 local Desktop = {}
@@ -46,6 +47,9 @@ function Desktop.start()
         elseif appName == "Joiner" then
             Joiner.open()
             raise("Joiner")
+        elseif appName == "Music" then
+            MusicApp.open()
+            raise("Music")
         elseif appName == "Settings" then
             Settings.open({
                 position = dock.getPosition(),
