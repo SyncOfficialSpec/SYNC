@@ -3083,7 +3083,7 @@ function Login.run(onDone)
     win.BorderSizePixel = 0
     win.ClipsDescendants = true
     win.Parent = gui
-    Util.corner(win, px(22))
+    Util.corner(win, px(20))
     Util.stroke(win, Color3.fromRGB(255, 255, 255), 1, 0.92)
     Util.shadow(win, { blur = 70, spread = 0, transparency = 0.4, offset = UDim2.fromOffset(0, px(26)) })
     local wScale = Instance.new("UIScale"); wScale.Scale = 0.95; wScale.Parent = win
@@ -3298,6 +3298,30 @@ function Login.run(onDone)
             if ov.Parent then ov:Destroy() end
             if cb then cb() end
         end)
+    end
+
+    -- small loading spinner inside the button (appears while it turns red)
+    local spinner = Instance.new("ImageLabel")
+    spinner.AnchorPoint = Vector2.new(0.5, 0.5)
+    spinner.Position = UDim2.fromOffset(px(70), px(29))
+    spinner.Size = UDim2.fromOffset(px(18), px(18))
+    spinner.BackgroundTransparency = 1
+    spinner.ImageColor3 = Color3.fromRGB(255, 255, 255)
+    spinner.ImageTransparency = 1
+    spinner.ZIndex = 5
+    spinner.Parent = loginBtn
+    loadIcon(spinner, "loader-circle", Color3.fromRGB(255, 255, 255))
+    local function setSpinner(on)
+        spinner.ImageTransparency = on and 0 or 1
+        spinner:SetAttribute("s", on)
+        if on then
+            task.spawn(function()
+                while spinner.Parent and spinner:GetAttribute("s") do
+                    Util.tween(spinner, { Rotation = spinner.Rotation + 180 }, 0.45, Enum.EasingStyle.Linear)
+                    task.wait(0.45)
+                end
+            end)
+        end
     end
 
     -- bottom links
@@ -3596,19 +3620,22 @@ function Login.run(onDone)
     local busy = false
     local function attempt()
         if busy then return end
-        ripple()
         if userBox.Text == USER and passGet() == PASS then
             busy = true
             btnLocked = true
-            -- correct: green wipes across the button, then the checks run
-            wipeTo(GREEN, 0.35)
-            task.delay(0.75, function() runChecks(showVerify) end)
+            -- smoothly morph violet -> red (passes through pink) + loading spinner
+            Util.tween(loginBtn, { BackgroundColor3 = RED }, 0.4, SINE)
+            setSpinner(true)
+            task.delay(1.35, function()
+                setSpinner(false)
+                runChecks(showVerify)
+            end)
         else
             btnLocked = true
-            -- wrong: red wipes in, holds, then wipes back to violet
-            wipeTo(RED, 0.28)
+            Util.tween(loginBtn, { BackgroundColor3 = RED }, 0.35, SINE)
             task.delay(1.1, function()
-                wipeTo(VIOLET, 0.4, function() btnLocked = false end)
+                Util.tween(loginBtn, { BackgroundColor3 = VIOLET }, 0.4, SINE)
+                task.delay(0.42, function() btnLocked = false end)
             end)
         end
     end
