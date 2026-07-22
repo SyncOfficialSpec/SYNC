@@ -1806,6 +1806,7 @@ local Scripts     = SYNC.import("apps/Scripts")
 local Joiner      = SYNC.import("apps/Joiner")
 local MusicApp    = SYNC.import("apps/Music")
 local DesktopMode = SYNC.import("os/DesktopMode")
+local WM          = SYNC.import("os/WindowManager")
 
 local Desktop = {}
 
@@ -1814,21 +1815,16 @@ function Desktop.start()
     local gui = Instance.new("ScreenGui")
     gui.Name = "SYNC_Desktop"
     Util.mount(gui)
+    gui.DisplayOrder = 5000000 -- dock/desktop always sits above app windows
 
     -- Menu bar hidden for now (module kept for later): local menubar = MenuBar.create(gui)
     local menubar = nil
 
-    -- Raise a window above the others so a dock click on an already-open app
-    -- brings it to the front (keeps the desktop/dock itself on top).
-    local topOrder = 1000000
+    -- Bring an app window to the front (window manager handles focus + dimming).
     local function raise(appName)
         local host = gui.Parent
         local w = host and host:FindFirstChild("SYNC_" .. appName)
-        if w and w:IsA("ScreenGui") then
-            topOrder += 1
-            w.DisplayOrder = topOrder
-            gui.DisplayOrder = topOrder + 1
-        end
+        if w then WM.focus(w) end
     end
 
     local dock
@@ -3908,6 +3904,7 @@ local Icons  = SYNC.import("core/Icons")
 local Switch = SYNC.import("ui/Switch")
 local Slider = SYNC.import("ui/Slider")
 local Select = SYNC.import("ui/Select")
+local WM     = SYNC.import("os/WindowManager")
 
 local Settings = {}
 
@@ -3948,15 +3945,6 @@ function Settings.open(opts)
         end
     end
 
-    -- Outside-click catcher
-    local catcher = Instance.new("TextButton")
-    catcher.Text = ""
-    catcher.AutoButtonColor = false
-    catcher.Size = UDim2.fromScale(1, 1)
-    catcher.BackgroundTransparency = 1
-    catcher.ZIndex = 1
-    catcher.Parent = gui
-    catcher.MouseButton1Click:Connect(close)
     Util.closeOnEscape(gui, close)
 
     -- Window (TextButton so clicks inside are absorbed)
@@ -3975,6 +3963,7 @@ function Settings.open(opts)
     Util.corner(win, 12)
     Util.stroke(win, WHITE, 1, 0.85)
     Util.shadow(win, { blur = 50, spread = -2, transparency = 0.4, offset = UDim2.fromOffset(0, 20) })
+    WM.register(gui, win, 12)
 
     -- Entrance: scale + fade in (matches Home / Scripts)
     local scaleFx = Instance.new("UIScale")
@@ -4275,6 +4264,81 @@ end
 return Settings
 end)
 
+SYNC.define("os/WindowManager", function()
+-- SYNC / os / WindowManager
+-- macOS-style window focus for app windows. Each app registers its window; the
+-- manager raises the clicked window above the others (DisplayOrder), and fades a
+-- dim overlay over every window that isn't focused, so the active one stands out.
+-- Windows never close from a background click - only the red light or Escape.
+--
+-- WM.register(gui, win, cornerRadius) -> adds the dim overlay + click-to-focus.
+-- WM.focus(gui) -> bring that window to the front.
+
+local Util = SYNC.import("core/Util")
+
+local WM = {}
+
+-- App windows live in this DisplayOrder band; the desktop/dock sits well above it
+-- so it is always on top.
+local BASE = 400000
+local top = 0
+local entries = {}
+
+function WM.focus(gui)
+    if not gui or not gui.Parent then return end
+    top = top + 2
+    for _, e in ipairs(entries) do
+        if e.gui == gui then
+            pcall(function() e.gui.DisplayOrder = BASE + top end)
+            Util.tween(e.dim, { BackgroundTransparency = 1 }, 0.16)
+        else
+            Util.tween(e.dim, { BackgroundTransparency = 0.4 }, 0.16)
+        end
+    end
+end
+
+function WM.register(gui, win, cornerRadius)
+    -- dim overlay (covers the whole window; non-interactive so clicks pass through)
+    local dim = Instance.new("Frame")
+    dim.Name = "WM_Dim"
+    dim.Size = UDim2.fromScale(1, 1)
+    dim.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+    dim.BackgroundTransparency = 1
+    dim.BorderSizePixel = 0
+    dim.Active = false
+    dim.ZIndex = 900
+    dim.Parent = win
+    local uic = Instance.new("UICorner")
+    uic.CornerRadius = UDim.new(0, cornerRadius or 14)
+    uic.Parent = dim
+
+    local entry = { gui = gui, win = win, dim = dim }
+    entries[#entries + 1] = entry
+
+    -- clicking anywhere on the window focuses it
+    win.InputBegan:Connect(function(inp)
+        if inp.UserInputType == Enum.UserInputType.MouseButton1
+            or inp.UserInputType == Enum.UserInputType.Touch then
+            WM.focus(gui)
+        end
+    end)
+
+    -- drop the entry when the window is destroyed
+    gui.AncestryChanged:Connect(function()
+        if not gui.Parent then
+            for i, e in ipairs(entries) do
+                if e.gui == gui then table.remove(entries, i) break end
+            end
+        end
+    end)
+
+    WM.focus(gui)
+    return dim
+end
+
+return WM
+end)
+
 SYNC.define("apps/Home", function()
 -- SYNC / apps / Home
 -- Orca-style home dashboard (look ported from github.com/richie0866/orca):
@@ -4296,6 +4360,7 @@ local HttpService        = game:GetService("HttpService")
 local Theme = SYNC.import("core/Theme")
 local Util  = SYNC.import("core/Util")
 local Icons = SYNC.import("core/Icons")
+local WM    = SYNC.import("os/WindowManager")
 
 local Home = {}
 
@@ -4367,15 +4432,6 @@ function Home.open()
         end
     end
 
-    -- Outside-click catcher
-    local catcher = Instance.new("TextButton")
-    catcher.Text = ""
-    catcher.AutoButtonColor = false
-    catcher.Size = UDim2.fromScale(1, 1)
-    catcher.BackgroundTransparency = 1
-    catcher.ZIndex = 1
-    catcher.Parent = gui
-    catcher.MouseButton1Click:Connect(close)
     Util.closeOnEscape(gui, close)
 
     -- Window
@@ -4393,6 +4449,7 @@ function Home.open()
     Util.corner(win, 16)
     Util.stroke(win, WHITE, 1, 0.88)
     Util.shadow(win, { blur = 50, spread = -2, transparency = 0.4, offset = UDim2.fromOffset(0, 20) })
+    WM.register(gui, win, 16)
 
     -- Entrance: quick scale + fade in
     local scaleFx = Instance.new("UIScale")
@@ -5976,6 +6033,7 @@ local HttpService     = game:GetService("HttpService")
 local Theme     = SYNC.import("core/Theme")
 local Util      = SYNC.import("core/Util")
 local SyncCodec = SYNC.import("core/SyncCodec")
+local WM        = SYNC.import("os/WindowManager")
 
 local Joiner = {}
 
@@ -6065,14 +6123,6 @@ function Joiner.open()
         end
     end
 
-    local catcher = Instance.new("TextButton")
-    catcher.Text = ""
-    catcher.AutoButtonColor = false
-    catcher.Size = UDim2.fromScale(1, 1)
-    catcher.BackgroundTransparency = 1
-    catcher.ZIndex = 1
-    catcher.Parent = gui
-    catcher.MouseButton1Click:Connect(close)
     Util.closeOnEscape(gui, close)
 
     local win = Instance.new("TextButton")
@@ -6090,6 +6140,7 @@ function Joiner.open()
     Util.corner(win, 12)
     Util.stroke(win, WHITE, 1, 0.85)
     Util.shadow(win, { blur = 50, spread = -2, transparency = 0.4, offset = UDim2.fromOffset(0, 20) })
+    WM.register(gui, win, 12)
 
     local scaleFx = Instance.new("UIScale")
     scaleFx.Scale = 0.94
@@ -6487,6 +6538,7 @@ local HttpService = game:GetService("HttpService")
 
 local Theme = SYNC.import("core/Theme")
 local Util  = SYNC.import("core/Util")
+local WM    = SYNC.import("os/WindowManager")
 
 local Music = {}
 
@@ -7184,13 +7236,6 @@ function Music.open()
         end
     end
 
-    local catcher = Instance.new("TextButton")
-    catcher.Text = ""; catcher.AutoButtonColor = false
-    catcher.Size = UDim2.fromScale(1, 1)
-    catcher.BackgroundTransparency = 1
-    catcher.ZIndex = 1
-    catcher.Parent = gui
-    catcher.MouseButton1Click:Connect(close)
     Util.closeOnEscape(gui, close)
 
     local win = Instance.new("TextButton")
@@ -7211,6 +7256,7 @@ function Music.open()
     winGrad.Rotation = 120
     winGrad.Color = ColorSequence.new(Color3.fromRGB(24, 26, 34), Color3.fromRGB(12, 12, 15))
     winGrad.Parent = win
+    WM.register(gui, win, 16)
 
     scaleRef = Instance.new("UIScale"); scaleRef.Scale = 0.94; scaleRef.Parent = win
     win.BackgroundTransparency = 1
@@ -7785,6 +7831,7 @@ local Theme    = SYNC.import("core/Theme")
 local Util     = SYNC.import("core/Util")
 local Icons    = SYNC.import("core/Icons")
 local Executor = SYNC.import("core/Executor")
+local WM       = SYNC.import("os/WindowManager")
 
 local Scripts = {}
 
@@ -7905,14 +7952,6 @@ function Scripts.open()
         end
     end
 
-    local catcher = Instance.new("TextButton")
-    catcher.Text = ""
-    catcher.AutoButtonColor = false
-    catcher.Size = UDim2.fromScale(1, 1)
-    catcher.BackgroundTransparency = 1
-    catcher.ZIndex = 1
-    catcher.Parent = gui
-    catcher.MouseButton1Click:Connect(close)
     -- forward-declared so Escape can close the detail view first (assigned below)
     local detailLayer, closeDetail
     Util.closeOnEscape(gui, function()
@@ -7933,6 +7972,7 @@ function Scripts.open()
     Util.corner(win, 16)
     Util.stroke(win, WHITE, 1, 0.88)
     Util.shadow(win, { blur = 50, spread = -2, transparency = 0.4, offset = UDim2.fromOffset(0, 20) })
+    WM.register(gui, win, 16)
 
     local scaleFx = Instance.new("UIScale")
     scaleFx.Scale = 0.94

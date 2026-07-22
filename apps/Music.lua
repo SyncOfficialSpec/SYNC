@@ -11,6 +11,7 @@ local HttpService = game:GetService("HttpService")
 
 local Theme = SYNC.import("core/Theme")
 local Util  = SYNC.import("core/Util")
+local WM    = SYNC.import("os/WindowManager")
 
 local Music = {}
 
@@ -708,13 +709,6 @@ function Music.open()
         end
     end
 
-    local catcher = Instance.new("TextButton")
-    catcher.Text = ""; catcher.AutoButtonColor = false
-    catcher.Size = UDim2.fromScale(1, 1)
-    catcher.BackgroundTransparency = 1
-    catcher.ZIndex = 1
-    catcher.Parent = gui
-    catcher.MouseButton1Click:Connect(close)
     Util.closeOnEscape(gui, close)
 
     local win = Instance.new("TextButton")
@@ -735,6 +729,7 @@ function Music.open()
     winGrad.Rotation = 120
     winGrad.Color = ColorSequence.new(Color3.fromRGB(24, 26, 34), Color3.fromRGB(12, 12, 15))
     winGrad.Parent = win
+    WM.register(gui, win, 16)
 
     scaleRef = Instance.new("UIScale"); scaleRef.Scale = 0.94; scaleRef.Parent = win
     win.BackgroundTransparency = 1

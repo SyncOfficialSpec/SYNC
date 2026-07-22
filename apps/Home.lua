@@ -18,6 +18,7 @@ local HttpService        = game:GetService("HttpService")
 local Theme = SYNC.import("core/Theme")
 local Util  = SYNC.import("core/Util")
 local Icons = SYNC.import("core/Icons")
+local WM    = SYNC.import("os/WindowManager")
 
 local Home = {}
 
@@ -89,15 +90,6 @@ function Home.open()
         end
     end
 
-    -- Outside-click catcher
-    local catcher = Instance.new("TextButton")
-    catcher.Text = ""
-    catcher.AutoButtonColor = false
-    catcher.Size = UDim2.fromScale(1, 1)
-    catcher.BackgroundTransparency = 1
-    catcher.ZIndex = 1
-    catcher.Parent = gui
-    catcher.MouseButton1Click:Connect(close)
     Util.closeOnEscape(gui, close)
 
     -- Window
@@ -115,6 +107,7 @@ function Home.open()
     Util.corner(win, 16)
     Util.stroke(win, WHITE, 1, 0.88)
     Util.shadow(win, { blur = 50, spread = -2, transparency = 0.4, offset = UDim2.fromOffset(0, 20) })
+    WM.register(gui, win, 16)
 
     -- Entrance: quick scale + fade in
     local scaleFx = Instance.new("UIScale")

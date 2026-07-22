@@ -11,6 +11,7 @@ local Theme    = SYNC.import("core/Theme")
 local Util     = SYNC.import("core/Util")
 local Icons    = SYNC.import("core/Icons")
 local Executor = SYNC.import("core/Executor")
+local WM       = SYNC.import("os/WindowManager")
 
 local Scripts = {}
 
@@ -131,14 +132,6 @@ function Scripts.open()
         end
     end
 
-    local catcher = Instance.new("TextButton")
-    catcher.Text = ""
-    catcher.AutoButtonColor = false
-    catcher.Size = UDim2.fromScale(1, 1)
-    catcher.BackgroundTransparency = 1
-    catcher.ZIndex = 1
-    catcher.Parent = gui
-    catcher.MouseButton1Click:Connect(close)
     -- forward-declared so Escape can close the detail view first (assigned below)
     local detailLayer, closeDetail
     Util.closeOnEscape(gui, function()
@@ -159,6 +152,7 @@ function Scripts.open()
     Util.corner(win, 16)
     Util.stroke(win, WHITE, 1, 0.88)
     Util.shadow(win, { blur = 50, spread = -2, transparency = 0.4, offset = UDim2.fromOffset(0, 20) })
+    WM.register(gui, win, 16)
 
     local scaleFx = Instance.new("UIScale")
     scaleFx.Scale = 0.94

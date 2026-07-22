@@ -11,6 +11,7 @@ local Scripts     = SYNC.import("apps/Scripts")
 local Joiner      = SYNC.import("apps/Joiner")
 local MusicApp    = SYNC.import("apps/Music")
 local DesktopMode = SYNC.import("os/DesktopMode")
+local WM          = SYNC.import("os/WindowManager")
 
 local Desktop = {}
 
@@ -19,21 +20,16 @@ function Desktop.start()
     local gui = Instance.new("ScreenGui")
     gui.Name = "SYNC_Desktop"
     Util.mount(gui)
+    gui.DisplayOrder = 5000000 -- dock/desktop always sits above app windows
 
     -- Menu bar hidden for now (module kept for later): local menubar = MenuBar.create(gui)
     local menubar = nil
 
-    -- Raise a window above the others so a dock click on an already-open app
-    -- brings it to the front (keeps the desktop/dock itself on top).
-    local topOrder = 1000000
+    -- Bring an app window to the front (window manager handles focus + dimming).
     local function raise(appName)
         local host = gui.Parent
         local w = host and host:FindFirstChild("SYNC_" .. appName)
-        if w and w:IsA("ScreenGui") then
-            topOrder += 1
-            w.DisplayOrder = topOrder
-            gui.DisplayOrder = topOrder + 1
-        end
+        if w then WM.focus(w) end
     end
 
     local dock

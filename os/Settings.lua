@@ -11,6 +11,7 @@ local Icons  = SYNC.import("core/Icons")
 local Switch = SYNC.import("ui/Switch")
 local Slider = SYNC.import("ui/Slider")
 local Select = SYNC.import("ui/Select")
+local WM     = SYNC.import("os/WindowManager")
 
 local Settings = {}
 
@@ -51,15 +52,6 @@ function Settings.open(opts)
         end
     end
 
-    -- Outside-click catcher
-    local catcher = Instance.new("TextButton")
-    catcher.Text = ""
-    catcher.AutoButtonColor = false
-    catcher.Size = UDim2.fromScale(1, 1)
-    catcher.BackgroundTransparency = 1
-    catcher.ZIndex = 1
-    catcher.Parent = gui
-    catcher.MouseButton1Click:Connect(close)
     Util.closeOnEscape(gui, close)
 
     -- Window (TextButton so clicks inside are absorbed)
@@ -78,6 +70,7 @@ function Settings.open(opts)
     Util.corner(win, 12)
     Util.stroke(win, WHITE, 1, 0.85)
     Util.shadow(win, { blur = 50, spread = -2, transparency = 0.4, offset = UDim2.fromOffset(0, 20) })
+    WM.register(gui, win, 12)
 
     -- Entrance: scale + fade in (matches Home / Scripts)
     local scaleFx = Instance.new("UIScale")
