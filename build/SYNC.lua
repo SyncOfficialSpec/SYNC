@@ -7207,6 +7207,10 @@ function Music.open()
     Util.corner(win, 16)
     Util.stroke(win, WHITE, 1, 0.9)
     Util.shadow(win, { blur = 55, spread = 0, transparency = 0.4, offset = UDim2.fromOffset(0, 22) })
+    local winGrad = Instance.new("UIGradient")
+    winGrad.Rotation = 120
+    winGrad.Color = ColorSequence.new(Color3.fromRGB(24, 26, 34), Color3.fromRGB(12, 12, 15))
+    winGrad.Parent = win
 
     scaleRef = Instance.new("UIScale"); scaleRef.Scale = 0.94; scaleRef.Parent = win
     win.BackgroundTransparency = 1
@@ -7320,10 +7324,26 @@ function Music.open()
         clearBody()
         hSub.Text = "Connect Spotify"
 
+        -- soft glow behind the mark
+        local glow = Instance.new("ImageLabel")
+        glow.AnchorPoint = Vector2.new(0.5, 0.5)
+        glow.Position = UDim2.fromOffset(BW / 2, 30)
+        glow.Size = UDim2.fromOffset(180, 180)
+        glow.BackgroundTransparency = 1
+        glow.ImageColor3 = LINK
+        glow.ImageTransparency = 1
+        glow.ZIndex = 3
+        glow.Parent = body
+        task.spawn(function()
+            local png = "https://images.weserv.nl/?url=" .. HttpService:UrlEncode(RAW .. "boot-halo.png") .. "&output=png&w=220&h=220"
+            local id = Util.remoteImage(png, "music_glow.png")
+            if id and glow.Parent then glow.Image = id; Util.tween(glow, { ImageTransparency = 0.5 }, 0.5) end
+        end)
+
         local note = Instance.new("ImageLabel")
         note.AnchorPoint = Vector2.new(0.5, 0)
-        note.Position = UDim2.fromOffset(BW / 2, 6)
-        note.Size = UDim2.fromOffset(46, 46)
+        note.Position = UDim2.fromOffset(BW / 2, 4)
+        note.Size = UDim2.fromOffset(50, 50)
         note.BackgroundTransparency = 1
         note.ImageColor3 = WHITE
         note.ZIndex = 4
@@ -7395,6 +7415,11 @@ function Music.open()
         btn.ZIndex = 4
         btn.Parent = body
         Util.corner(btn, 10)
+        local btnGrad = Instance.new("UIGradient")
+        btnGrad.Rotation = 90
+        btnGrad.Color = ColorSequence.new(Color3.fromRGB(72, 104, 165), BLUE)
+        btnGrad.Parent = btn
+        Util.shadow(btn, { blur = 24, transparency = 0.6, offset = UDim2.fromOffset(0, 6), color = Color3.fromRGB(30, 50, 90) })
         btn.MouseEnter:Connect(function() Util.tween(btn, { BackgroundColor3 = BLUEH }, 0.12) end)
         btn.MouseLeave:Connect(function() Util.tween(btn, { BackgroundColor3 = BLUE }, 0.12) end)
 
@@ -7452,6 +7477,39 @@ function Music.open()
     showPlayer = function(token)
         clearBody()
         hSub.Text = "Loading..."
+
+        -- faint blurred album-art backdrop (premium depth)
+        local backdrop = Instance.new("ImageLabel")
+        backdrop.Size = UDim2.fromScale(1, 1)
+        backdrop.BackgroundColor3 = Color3.fromRGB(16, 16, 20)
+        backdrop.BackgroundTransparency = 1
+        backdrop.BorderSizePixel = 0
+        backdrop.ScaleType = Enum.ScaleType.Crop
+        backdrop.ImageTransparency = 1
+        backdrop.ZIndex = 1
+        backdrop.Parent = body
+        local bkc = Instance.new("UICorner")
+        local okbk = pcall(function()
+            bkc.BottomLeftRadius = UDim.new(0, 16); bkc.BottomRightRadius = UDim.new(0, 16)
+            bkc.TopLeftRadius = UDim.new(0, 0); bkc.TopRightRadius = UDim.new(0, 0)
+        end)
+        if not okbk then bkc.CornerRadius = UDim.new(0, 16) end
+        bkc.Parent = backdrop
+        local backdropDim = Instance.new("Frame")
+        backdropDim.Size = UDim2.fromScale(1, 1)
+        backdropDim.BackgroundColor3 = Color3.fromRGB(10, 10, 13)
+        backdropDim.BackgroundTransparency = 0.12
+        backdropDim.BorderSizePixel = 0
+        backdropDim.ZIndex = 2
+        backdropDim.Parent = body
+        local ddg = Instance.new("UIGradient")
+        ddg.Rotation = 90
+        ddg.Transparency = NumberSequence.new({
+            NumberSequenceKeypoint.new(0, 0.45),
+            NumberSequenceKeypoint.new(1, 0.0),
+        })
+        ddg.Parent = backdropDim
+        local bkc2 = bkc:Clone(); bkc2.Parent = backdropDim
 
         -- album art
         local art = Instance.new("ImageLabel")
@@ -7565,6 +7623,7 @@ function Music.open()
         playWrap.ZIndex = 4
         playWrap.Parent = body
         Util.corner(playWrap, 29)
+        Util.shadow(playWrap, { blur = 26, transparency = 0.55, offset = UDim2.fromOffset(0, 5) })
         local playBtn = Instance.new("TextButton")
         playBtn.Size = UDim2.fromScale(1, 1)
         playBtn.BackgroundTransparency = 1
@@ -7628,6 +7687,12 @@ function Music.open()
                         if imgs and imgs[1] and it.id ~= curKey then
                             curKey = it.id
                             loadArt(art, imgs[1].url, it.id)
+                            task.spawn(function()
+                                local burl = "https://images.weserv.nl/?url=" .. HttpService:UrlEncode(imgs[1].url)
+                                    .. "&output=png&w=340&h=220&fit=cover&blur=45"
+                                local bid = Util.remoteImage(burl, "sp_bg_" .. it.id .. ".png")
+                                if bid and backdrop.Parent then backdrop.Image = bid; Util.tween(backdrop, { ImageTransparency = 0.62 }, 0.6) end
+                            end)
                         end
                     end
                 elseif status == 204 then
