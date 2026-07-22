@@ -3115,7 +3115,7 @@ function Login.run(onDone)
     closeBtn.Text = "\195\151"
     closeBtn.TextSize = px(24)
     closeBtn.TextColor3 = Color3.fromRGB(180, 180, 188)
-    closeBtn.ZIndex = 8
+    closeBtn.ZIndex = 10
     closeBtn.Parent = win
     closeBtn.MouseEnter:Connect(function() closeBtn.TextColor3 = WHITE end)
     closeBtn.MouseLeave:Connect(function() closeBtn.TextColor3 = Color3.fromRGB(180, 180, 188) end)
@@ -3358,6 +3358,7 @@ function Login.run(onDone)
     formDim.BorderSizePixel = 0
     formDim.ZIndex = 5
     formDim.Parent = win
+    Util.corner(formDim, px(28)) -- match window so corners stay curved
 
     -- ======================================================================
     -- Stage B: security checks (built hidden, fades in from the right)
@@ -3477,6 +3478,7 @@ function Login.run(onDone)
     verify.ZIndex = 8
     verify.Visible = false
     verify.Parent = win
+    Util.corner(verify, px(28)) -- match window so corners stay curved
 
     local av = Instance.new("ImageLabel")
     av.Position = UDim2.fromOffset(px(40), px(28))
@@ -3612,11 +3614,21 @@ function Login.run(onDone)
     end
 
     local function showVerify()
-        verify.Visible = true
         vName.Text = (userBox.Text ~= "" and userBox.Text) or "Past Owl"
         vUid.Text = "UID: " .. tostring(Players.LocalPlayer.UserId)
+        -- hand off cleanly: hide the checks + form, cover with an opaque verify
+        -- screen, then fade its content in (no messy overlap)
+        checks.Visible = false
+        form.Visible = false
+        formDim.Visible = false
         title.Visible = false
-        Util.tween(verify, { BackgroundTransparency = 0 }, 0.45, SINE)
+        verify.Visible = true
+        verify.BackgroundTransparency = 0
+        for _, o in ipairs(verify:GetDescendants()) do
+            if o:IsA("TextLabel") then o.TextTransparency = 1; Util.tween(o, { TextTransparency = 0 }, 0.5, SINE)
+            elseif o:IsA("ImageLabel") then o.ImageTransparency = 1; Util.tween(o, { ImageTransparency = 0 }, 0.5, SINE)
+            elseif o:IsA("Frame") then o.BackgroundTransparency = 1; Util.tween(o, { BackgroundTransparency = 0 }, 0.5, SINE) end
+        end
         -- animate the bars: a slow, smooth staggered up/down pulse (middle leads)
         task.spawn(function()
             while verify.Parent and verify.Visible do
@@ -3649,8 +3661,8 @@ function Login.run(onDone)
         if userBox.Text == USER and passGet() == PASS then
             busy = true
             btnLocked = true
-            -- smoothly morph violet -> red (passes through pink) + loading spinner
-            Util.tween(loginBtn, { BackgroundColor3 = RED }, 0.5, SINE)
+            -- correct: morph violet -> GREEN (success) + loading spinner, then checks
+            Util.tween(loginBtn, { BackgroundColor3 = GREEN }, 0.5, SINE)
             setSpinner(true)
             task.delay(2.1, function()
                 setSpinner(false)
